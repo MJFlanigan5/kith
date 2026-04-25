@@ -82,9 +82,14 @@ async function syncICSSource(source) {
   return events.length;
 }
 
+// ── Local date helper (avoids UTC-vs-local timezone flip) ─────────────────────
+function localDate(d = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
 // ── Chore status helper ───────────────────────────────────────────────────────
 function updateChoreStatuses() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDate();
   db.prepare("UPDATE chores SET status='overdue'  WHERE next_due < ? AND done=0").run(today);
   db.prepare("UPDATE chores SET status='due'      WHERE next_due = ? AND done=0").run(today);
   db.prepare("UPDATE chores SET status='upcoming' WHERE next_due > ?").run(today);
@@ -97,7 +102,7 @@ function computeNextDue(recurrence) {
   else if (recurrence.startsWith('Bi-w'))  d.setDate(d.getDate() + 14);
   else if (recurrence.startsWith('Month')) d.setMonth(d.getMonth() + 1);
   else                                     d.setDate(d.getDate() + 7); // Weekly
-  return d.toISOString().slice(0, 10);
+  return localDate(d);
 }
 
 // ── Push helper ───────────────────────────────────────────────────────────────
@@ -124,12 +129,13 @@ app.get('/api/events', (req, res) => {
 
 app.post('/api/events', (req, res) => {
   const { title, date, time, duration, calendar, color, notes } = req.body;
+  if (!title?.trim() || !date) return res.status(400).json({ error: 'title and date are required' });
   const calColors = { personal:'#007AFF', work:'#5856D6', family:'#32ADE6', hearth:'#34C759' };
   const col = color || calColors[calendar] || '#34C759';
   const r = db.prepare(
     'INSERT INTO events (title,date,time,duration,calendar,color,notes) VALUES (?,?,?,?,?,?,?)'
-  ).run(title, date, time||'All day', duration||'1h', calendar||'hearth', col, notes||'');
-  res.json({ id: r.lastInsertRowid, title, date, time: time||'All day', calendar: calendar||'hearth', color: col });
+  ).run(title.trim(), date, time||'All day', duration||'1h', calendar||'hearth', col, notes||'');
+  res.json({ id: r.lastInsertRowid, title: title.trim(), date, time: time||'All day', calendar: calendar||'hearth', color: col });
 });
 
 app.delete('/api/events/:id', (req, res) => {
@@ -145,20 +151,21 @@ app.get('/api/chores', (req, res) => {
 
 app.post('/api/chores', (req, res) => {
   const { name, recurrence, start } = req.body;
-  const today = new Date().toISOString().slice(0, 10);
+  if (!name?.trim() || !recurrence?.trim()) return res.status(400).json({ error: 'name and recurrence are required' });
+  const today = localDate();
   const nextDue = start || today;
   const status = nextDue <= today ? 'due' : 'upcoming';
   const r = db.prepare(
     'INSERT INTO chores (name,recurrence,next_due,status) VALUES (?,?,?,?)'
-  ).run(name, recurrence, nextDue, status);
-  res.json({ id: r.lastInsertRowid, name, recurrence, last_done: '', next_due: nextDue, status, done: 0 });
+  ).run(name.trim(), recurrence.trim(), nextDue, status);
+  res.json({ id: r.lastInsertRowid, name: name.trim(), recurrence: recurrence.trim(), last_done: '', next_due: nextDue, status, done: 0 });
 });
 
 app.put('/api/chores/:id/done', (req, res) => {
   const c = db.prepare('SELECT * FROM chores WHERE id=?').get(req.params.id);
   if (!c) return res.status(404).json({ error: 'Not found' });
   const done = c.done ? 0 : 1;
-  const todayISO = new Date().toISOString().slice(0, 10);
+  const todayISO = localDate();
   const todayDisplay = new Date().toLocaleDateString('en-US', { month:'short', day:'numeric' });
   // When marking done: advance next_due. When unmarking: restore to today so it shows as due again.
   const nextDue = done ? computeNextDue(c.recurrence) : todayISO;
@@ -324,7 +331,7 @@ cron.schedule('0 8 * * *', async () => {
 cron.schedule('*/15 * * * *', async () => {
   const now   = new Date();
   const soon  = new Date(now.getTime() + 30 * 60 * 1000);
-  const dateStr = soon.toISOString().slice(0, 10);
+  const dateStr = localDate(soon);
   const h = soon.getHours(), m = String(soon.getMinutes()).padStart(2, '0');
   const ampm = h >= 12 ? 'PM' : 'AM';
   const h12  = h > 12 ? h - 12 : h === 0 ? 12 : h;

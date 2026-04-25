@@ -48,6 +48,11 @@ const A={
 const DAYS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
 
+/* ── Local date helper — avoids UTC-vs-local timezone flip ───────────── */
+function localDate(d=new Date()){
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
 /* ── API helper ──────────────────────────────────────────────────────── */
 const api={
   get:(path)=>fetch(path).then(r=>r.json()),
@@ -222,18 +227,18 @@ function Card({children,style:s={}}){
 }
 
 /* ── Display Mode ────────────────────────────────────────────────────── */
-function DisplayMode({onManage,events,chores,setChores,meals}){
+function DisplayMode({onManage,events,chores,setChores,meals,grocery}){
   const now=useClock();
   const h12=now.getHours()%12||12;
   const min=String(now.getMinutes()).padStart(2,'0');
   const ampm=now.getHours()>=12?'PM':'AM';
   const dateStr=`${DAYS[now.getDay()]}, ${MONTHS[now.getMonth()]} ${now.getDate()}`;
 
-  const todayStr=new Date().toISOString().slice(0,10);
+  const todayStr=localDate();
   const agendaDays=[0,1,2,3].map(offset=>{
     const d=new Date(); d.setDate(d.getDate()+offset);
     const label=offset===0?'Today':offset===1?'Tomorrow':DAYS[d.getDay()];
-    return{label,date:d.toISOString().slice(0,10)};
+    return{label,date:localDate(d)};
   });
 
   const forecast=[
@@ -398,7 +403,7 @@ function DashboardScreen({events,chores,grocery}){
   const now=useClock();
   const h=now.getHours();
   const greeting=h<12?'Good morning':h<17?'Good afternoon':'Good evening';
-  const todayStr=new Date().toISOString().slice(0,10);
+  const todayStr=localDate();
   const todayEvs=events.filter(e=>e.date===todayStr);
   const dueChores=chores.filter(c=>(c.status==='due'||c.status==='overdue')&&!c.done);
   const groceryRemaining=(grocery||[]).filter(g=>!g.checked).length;
@@ -455,7 +460,7 @@ function DashboardScreen({events,chores,grocery}){
 /* ── Calendar ────────────────────────────────────────────────────────── */
 function CalendarScreen({events,setEvents,icsSources,toastAdd}){
   const [drawerOpen,setDrawerOpen]=useState(false);
-  const [form,setForm]=useState({title:'',date:new Date().toISOString().slice(0,10),time:'',duration:'1h',cal:'hearth',notes:''});
+  const [form,setForm]=useState({title:'',date:localDate(),time:'',duration:'1h',cal:'hearth',notes:''});
   const [calFilters,setCalFilters]=useState({personal:true,work:true,family:true,hearth:true});
 
   const knownCals={personal:A.blue,work:A.indigo,family:A.teal,hearth:A.green};
@@ -480,8 +485,8 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd}){
     return{
       label:DAYS[start.getDay()].slice(0,3),
       num:String(start.getDate()),
-      date:start.toISOString().slice(0,10),
-      today:start.toISOString().slice(0,10)===new Date().toISOString().slice(0,10),
+      date:localDate(start),
+      today:localDate(start)===localDate(),
     };
   });
   const times=['8 AM','9 AM','10 AM','11 AM','12 PM','1 PM','2 PM','3 PM','4 PM','5 PM','6 PM','7 PM'];
@@ -493,7 +498,7 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd}){
     setEvents(p=>[...p,newEv]);
     toastAdd('Event saved');
     setDrawerOpen(false);
-    setForm({title:'',date:new Date().toISOString().slice(0,10),time:'',duration:'1h',cal:'hearth',notes:''});
+    setForm({title:'',date:localDate(),time:'',duration:'1h',cal:'hearth',notes:''});
   };
 
   const firstDay=new Date(new Date().getFullYear(),new Date().getMonth(),1).getDay();
@@ -612,26 +617,29 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd}){
 }
 
 /* ── Inbox ───────────────────────────────────────────────────────────── */
-function InboxScreen({toastAdd,events,setEvents}){
+function InboxScreen({toastAdd,events,setEvents,setInboxCount}){
   const [pending,setPending]=useState([]);
   const [recent,setRecent]=useState([]);
 
   useEffect(()=>{
-    api.get('/api/inbox').then(d=>{setPending(d.pending);setRecent(d.recent);});
+    api.get('/api/inbox').then(d=>{
+      setPending(d.pending);
+      setRecent(d.recent);
+      setInboxCount(d.pending.length);
+    });
   },[]);
 
   const accept=async id=>{
     await api.post(`/api/inbox/${id}/accept`);
     const item=pending.find(i=>i.id===id);
-    setPending(p=>p.filter(i=>i.id!==id));
+    setPending(p=>{const next=p.filter(i=>i.id!==id);setInboxCount(next.length);return next;});
     setRecent(p=>[{event_name:item.event_name,event_date:item.event_date,source:'Email'},...p]);
-    // Refresh events
     api.get('/api/events').then(setEvents);
     toastAdd('Added to Hearth Calendar');
   };
   const discard=async id=>{
     await api.del(`/api/inbox/${id}`);
-    setPending(p=>p.filter(i=>i.id!==id));
+    setPending(p=>{const next=p.filter(i=>i.id!==id);setInboxCount(next.length);return next;});
     toastAdd('Discarded','blue');
   };
 
@@ -912,7 +920,7 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,toastAdd}){
 }
 
 /* ── Settings ────────────────────────────────────────────────────────── */
-function SettingsScreen({toastAdd,icsSources,setIcsSources}){
+function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay}){
   const [codeModal,setCodeModal]=useState(false);
   const [codeVal,setCodeVal]=useState(`<div style="font-family:sans-serif;padding:16px">
   <div style="color:#34C759;font-weight:700;font-size:18px">All Systems Clear</div>
@@ -1093,7 +1101,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources}){
           <SegControl value={temp} onChange={setTemp} options={['°F','°C']}/>
         </div>
         <div style={{padding:'12px 16px',borderTop:`1px solid ${A.sep}`}}>
-          <Btn>Open Display Mode ↗</Btn>
+          <Btn onClick={onDisplay}>Open Display Mode ↗</Btn>
         </div>
       </FormGroup>
 
@@ -1115,7 +1123,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources}){
 }
 
 /* ── Manage Shell ────────────────────────────────────────────────────── */
-function ManageMode({onDisplay,events,setEvents,chores,setChores,grocery,setGrocery,meals,setMeals,icsSources,setIcsSources}){
+function ManageMode({onDisplay,events,setEvents,chores,setChores,grocery,setGrocery,meals,setMeals,icsSources,setIcsSources,inboxCount,setInboxCount}){
   const [screen,setScreen]=useState('dashboard');
   const {toasts,add:toastAdd}=useToast();
 
@@ -1124,7 +1132,7 @@ function ManageMode({onDisplay,events,setEvents,chores,setChores,grocery,setGroc
     {id:'calendar',label:'Calendar',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="1.5" y="3.5" width="14" height="12" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M1.5 7h14" stroke="currentColor" strokeWidth="1.5"/><path d="M5.5 1.5v3M11.5 1.5v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
     {id:'chores',label:'Chores',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="2" y="1.5" width="13" height="14" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M5.5 7l2 2 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M5.5 11h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
     {id:'grocery',label:'Grocery',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><path d="M2 4h13l-1.5 8H3.5L2 4z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><path d="M6 4l.5-2.5h4L11 4" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>},
-    {id:'inbox',label:'Inbox',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="1.5" y="3.5" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M1.5 6.5l7 4 7-4" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>,badge:3},
+    {id:'inbox',label:'Inbox',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="1.5" y="3.5" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M1.5 6.5l7 4 7-4" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>,badge:inboxCount},
     {id:'settings',label:'Settings',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><circle cx="8.5" cy="8.5" r="2.5" stroke="currentColor" strokeWidth="1.5"/><path d="M8.5 1v2M8.5 14v2M1 8.5h2M14 8.5h2M3.05 3.05l1.42 1.42M12.53 12.53l1.42 1.42M12.53 3.05l-1.42 1.42M4.47 12.53l-1.42 1.42" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
   ];
 
@@ -1133,8 +1141,8 @@ function ManageMode({onDisplay,events,setEvents,chores,setChores,grocery,setGroc
     calendar: <CalendarScreen events={events} setEvents={setEvents} icsSources={icsSources} toastAdd={toastAdd}/>,
     chores:   <ChoresScreen chores={chores} setChores={setChores} toastAdd={toastAdd}/>,
     grocery:  <GroceryScreen grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} toastAdd={toastAdd}/>,
-    inbox:    <InboxScreen toastAdd={toastAdd} events={events} setEvents={setEvents}/>,
-    settings: <SettingsScreen toastAdd={toastAdd} icsSources={icsSources} setIcsSources={setIcsSources}/>,
+    inbox:    <InboxScreen toastAdd={toastAdd} events={events} setEvents={setEvents} setInboxCount={setInboxCount}/>,
+    settings: <SettingsScreen toastAdd={toastAdd} icsSources={icsSources} setIcsSources={setIcsSources} onDisplay={onDisplay}/>,
   };
 
   return(
@@ -1202,6 +1210,7 @@ function App(){
   const [grocery,setGrocery]=useState([]);
   const [meals,setMeals]=useState([]);
   const [icsSources,setIcsSources]=useState([]);
+  const [inboxCount,setInboxCount]=useState(0);
   const [loading,setLoading]=useState(true);
 
   useEffect(()=>{
@@ -1216,12 +1225,14 @@ function App(){
       api.get('/api/grocery'),
       api.get('/api/meals'),
       api.get('/api/ics/sources'),
-    ]).then(([ev,ch,gr,ml,ics])=>{
+      api.get('/api/inbox'),
+    ]).then(([ev,ch,gr,ml,ics,inb])=>{
       setEvents(ev);
       setChores(ch);
       setGrocery(gr);
       setMeals(ml);
       setIcsSources(ics);
+      setInboxCount(inb.pending.length);
       setLoading(false);
     }).catch(()=>setLoading(false));
   },[]);
@@ -1234,8 +1245,8 @@ function App(){
   );
 
   return mode==='display'
-    ?<DisplayMode onManage={()=>setMode('manage')} events={events} chores={chores} setChores={setChores} meals={meals}/>
-    :<ManageMode onDisplay={()=>setMode('display')} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources}/>;
+    ?<DisplayMode onManage={()=>setMode('manage')} events={events} chores={chores} setChores={setChores} meals={meals} grocery={grocery}/>
+    :<ManageMode onDisplay={()=>setMode('display')} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources} inboxCount={inboxCount} setInboxCount={setInboxCount}/>;
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);

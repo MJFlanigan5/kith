@@ -94,7 +94,8 @@ CREATE TABLE IF NOT EXISTS settings (
 
 // ── Seed data (only on first run) ────────────────────────────────────────────
 
-const today = new Date().toISOString().slice(0, 10);
+const _d = new Date();
+const today = `${_d.getFullYear()}-${String(_d.getMonth()+1).padStart(2,'0')}-${String(_d.getDate()).padStart(2,'0')}`;
 
 if (!db.prepare('SELECT COUNT(*) as c FROM events').get().c) {
   const ins = db.prepare('INSERT INTO events (title,date,time,calendar,color,source) VALUES (?,?,?,?,?,?)');

@@ -1,10 +1,28 @@
 # Hearth
 
-Self-hosted family dashboard. Runs in Docker. Replaces Skylight Calendar + Donetick.
+Self-hosted family dashboard. Replaces Skylight Calendar + Donetick.
 
 **Features:** Calendar (Google + ICS/webcal), chores with recurrence, grocery list, meal planner, email inbox for event parsing, TV display mode, browser push notifications.
 
-## Install on Proxmox (or any Docker host)
+## Install on Proxmox — LXC (recommended)
+
+Run this on your Proxmox host. Creates a Debian 13 LXC with 1 CPU / 512 MB RAM / 2 GB disk.
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/MJFlanigan5/hearth/main/ct/hearth.sh)
+```
+
+Open `http://<lxc-ip>:7400`
+
+### Update (LXC)
+
+From the Proxmox host, run the same script and choose **Update** when prompted, or exec into the container and run:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/MJFlanigan5/hearth/main/ct/hearth.sh)
+```
+
+## Install with Docker
 
 ```bash
 git clone https://github.com/MJFlanigan5/hearth.git
@@ -12,17 +30,7 @@ cd hearth
 docker compose up -d
 ```
 
-Open `http://<your-server-ip>:7400`
-
-## Update
-
-```bash
-cd hearth
-git pull
-docker compose up -d --build
-```
-
-## One-liner (no clone)
+### One-liner
 
 ```bash
 docker run -d \
@@ -33,12 +41,24 @@ docker run -d \
   ghcr.io/mjflanigan5/hearth:latest
 ```
 
-*(Push to GHCR first — see below if you want to build and push the image.)*
+### Update (Docker)
+
+```bash
+cd hearth && git pull && docker compose up -d --build
+```
 
 ## Data
 
-All data is stored in a SQLite database in the `/data` volume. Back it up with:
+All data is stored in a SQLite database at `/data/hearth.db`.
 
+**LXC backup:**
+```bash
+# From the Proxmox host
+pct exec <vmid> -- sqlite3 /data/hearth.db ".backup /tmp/hearth-backup.db"
+pct pull <vmid> /tmp/hearth-backup.db ./hearth-backup.db
+```
+
+**Docker backup:**
 ```bash
 docker cp hearth:/data/hearth.db ./hearth-backup.db
 ```

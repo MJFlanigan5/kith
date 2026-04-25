@@ -1,0 +1,1244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Hearth</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800;1,14..32,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body,#root{height:100%}
+body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#F2F2F7;color:#1C1C1E;-webkit-font-smoothing:antialiased}
+input,select,textarea,button{font-family:inherit}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(0,0,0,.12);border-radius:10px}
+::-webkit-scrollbar-thumb:hover{background:rgba(0,0,0,.2)}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes slideUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+@keyframes checkPop{0%{transform:scale(.7)}55%{transform:scale(1.18)}100%{transform:scale(1)}}
+@keyframes toastIn{from{opacity:0;transform:translateY(10px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+.screen{animation:slideUp .22s cubic-bezier(.4,0,.2,1) both}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect,useRef,useCallback,useMemo}=React;
+
+/* ── Design tokens ───────────────────────────────────────────────────── */
+const A={
+  systemBg:'#F2F2F7',cardBg:'#FFFFFF',sidebarBg:'rgba(242,242,247,0.92)',inputBg:'rgba(118,118,128,0.12)',
+  label1:'#1C1C1E',label2:'#3C3C43',label3:'#636366',label4:'#8E8E93',label5:'#AEAEB2',
+  blue:'#007AFF',green:'#34C759',amber:'#FF9500',red:'#FF3B30',indigo:'#5856D6',teal:'#32ADE6',purple:'#AF52DE',
+  blueFill:'rgba(0,122,255,0.10)',greenFill:'rgba(52,199,89,0.10)',amberFill:'rgba(255,149,0,0.10)',redFill:'rgba(255,59,48,0.10)',
+  sep:'rgba(60,60,67,0.1)',sepOpaque:'#C6C6C8',
+  shadowSm:'0 1px 2px rgba(0,0,0,.04),0 2px 8px rgba(0,0,0,.05)',
+  shadowMd:'0 1px 3px rgba(0,0,0,.06),0 4px 16px rgba(0,0,0,.07)',
+  shadowLg:'0 8px 40px rgba(0,0,0,.14),0 2px 6px rgba(0,0,0,.06)',
+  r:'13px',rSm:'9px',rXs:'7px',rPill:'999px',
+};
+
+const DAYS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+/* ── API helper ──────────────────────────────────────────────────────── */
+const api={
+  get:(path)=>fetch(path).then(r=>r.json()),
+  post:(path,data)=>fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}).then(r=>r.json()),
+  put:(path,data)=>fetch(path,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}).then(r=>r.json()),
+  del:(path)=>fetch(path,{method:'DELETE'}).then(r=>r.json()),
+};
+
+/* ── Calendar color mapping ──────────────────────────────────────────── */
+const CAL_COLORS={personal:A.blue,work:A.indigo,family:A.teal,hearth:A.green};
+function calColor(cal,events){
+  if(CAL_COLORS[cal]) return CAL_COLORS[cal];
+  // Find color from first event with this calendar
+  const ev=events.find(e=>e.calendar===cal);
+  return ev?.color||A.blue;
+}
+
+/* ── Hooks ───────────────────────────────────────────────────────────── */
+function useClock(){
+  const [t,setT]=useState(new Date());
+  useEffect(()=>{const id=setInterval(()=>setT(new Date()),1000);return()=>clearInterval(id);},[]);
+  return t;
+}
+function useToast(){
+  const [toasts,setToasts]=useState([]);
+  const add=useCallback((msg,type='green')=>{
+    const id=Date.now();
+    setToasts(p=>[...p,{id,msg,type}]);
+    setTimeout(()=>setToasts(p=>p.filter(t=>t.id!==id)),3000);
+  },[]);
+  return{toasts,add};
+}
+
+/* ── Push notifications ──────────────────────────────────────────────── */
+function urlBase64ToUint8Array(base64String){
+  const padding='='.repeat((4-base64String.length%4)%4);
+  const base64=(base64String+padding).replace(/-/g,'+').replace(/_/g,'/');
+  const raw=window.atob(base64);
+  return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)));
+}
+
+async function subscribePush(){
+  if(!('serviceWorker' in navigator)||!('PushManager' in window)) throw new Error('Push not supported in this browser');
+  const reg=await navigator.serviceWorker.ready;
+  const permission=await Notification.requestPermission();
+  if(permission!=='granted') throw new Error('Notification permission denied');
+  const{publicKey}=await api.get('/api/push/vapid-key');
+  const sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlBase64ToUint8Array(publicKey)});
+  await api.post('/api/push/subscribe',sub.toJSON());
+  return sub;
+}
+
+/* ── Base UI components ──────────────────────────────────────────────── */
+function ToastStack({toasts}){
+  const tint={green:A.green,blue:A.blue,red:A.red,amber:A.amber};
+  return(
+    <div style={{position:'fixed',bottom:28,right:28,zIndex:9999,display:'flex',flexDirection:'column',gap:8,pointerEvents:'none'}}>
+      {toasts.map(t=>(
+        <div key={t.id} style={{background:'rgba(28,28,30,0.88)',backdropFilter:'blur(20px)',color:'#fff',padding:'12px 18px',borderRadius:13,fontSize:14,fontWeight:500,boxShadow:A.shadowLg,animation:'toastIn .22s cubic-bezier(.4,0,.2,1)',display:'flex',alignItems:'center',gap:10,minWidth:200}}>
+          <div style={{width:8,height:8,borderRadius:'50%',background:tint[t.type]||A.green,flexShrink:0}}/>
+          {t.msg}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Drawer({open,onClose,title,children,width=440}){
+  return(
+    <>
+      {open&&<div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.18)',zIndex:100,backdropFilter:'blur(2px)',animation:'fadeIn .15s'}}/>}
+      <div style={{position:'fixed',top:0,right:0,height:'100%',width,background:A.cardBg,zIndex:101,transform:open?'translateX(0)':`translateX(${width+20}px)`,transition:'transform .3s cubic-bezier(.4,0,.2,1)',display:'flex',flexDirection:'column',boxShadow:open?'-4px 0 60px rgba(0,0,0,0.12)':'none'}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'20px 24px 16px',borderBottom:`1px solid ${A.sep}`}}>
+          <span style={{fontSize:17,fontWeight:600,letterSpacing:'-.01em'}}>{title}</span>
+          <button onClick={onClose} style={{width:28,height:28,borderRadius:'50%',background:A.inputBg,border:'none',cursor:'pointer',fontSize:16,color:A.label3,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
+        </div>
+        <div style={{flex:1,overflowY:'auto',padding:'20px 24px'}}>{children}</div>
+      </div>
+    </>
+  );
+}
+
+function Modal({open,onClose,title,children,width=660}){
+  if(!open) return null;
+  return(
+    <>
+      <div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.2)',zIndex:200,backdropFilter:'blur(8px)',animation:'fadeIn .15s'}}/>
+      <div style={{position:'fixed',top:'50%',left:'50%',transform:'translate(-50%,-50%)',background:A.cardBg,borderRadius:16,zIndex:201,width,maxWidth:'94vw',maxHeight:'88vh',display:'flex',flexDirection:'column',boxShadow:A.shadowLg,animation:'slideUp .2s cubic-bezier(.4,0,.2,1)'}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'20px 24px 16px',borderBottom:`1px solid ${A.sep}`}}>
+          <span style={{fontSize:17,fontWeight:600}}>{title}</span>
+          <button onClick={onClose} style={{width:28,height:28,borderRadius:'50%',background:A.inputBg,border:'none',cursor:'pointer',fontSize:16,color:A.label3,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
+        </div>
+        <div style={{flex:1,overflow:'auto',padding:'20px 24px'}}>{children}</div>
+      </div>
+    </>
+  );
+}
+
+function FormGroup({children,label,footer}){
+  return(
+    <div style={{marginBottom:22}}>
+      {label&&<div style={{fontSize:12,fontWeight:500,color:A.label4,marginBottom:6,paddingLeft:6,textTransform:'uppercase',letterSpacing:'.04em'}}>{label}</div>}
+      <div style={{background:A.cardBg,borderRadius:A.r,overflow:'hidden',boxShadow:A.shadowSm}}>
+        {React.Children.map(children,(child,i)=>(
+          <div key={i} style={{borderTop:i>0?`1px solid ${A.sep}`:'none'}}>{child}</div>
+        ))}
+      </div>
+      {footer&&<div style={{fontSize:13,color:A.label4,marginTop:6,paddingLeft:6}}>{footer}</div>}
+    </div>
+  );
+}
+
+function FormRow({label,children}){
+  return(
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px',gap:12}}>
+      {label&&<span style={{fontSize:15,color:A.label1,flexShrink:0}}>{label}</span>}
+      <div style={{flex:1,display:'flex',justifyContent:'flex-end'}}>{children}</div>
+    </div>
+  );
+}
+
+function Inp({value,onChange,placeholder,type='text',onKeyDown,inputRef,style:s={}}){
+  const [focus,setFocus]=useState(false);
+  return(
+    <input ref={inputRef} type={type} value={value} onChange={onChange} placeholder={placeholder} onKeyDown={onKeyDown}
+      onFocus={()=>setFocus(true)} onBlur={()=>setFocus(false)}
+      style={{width:'100%',background:focus?A.cardBg:A.inputBg,border:`1.5px solid ${focus?A.blue:'transparent'}`,borderRadius:A.rXs,color:A.label1,padding:'9px 12px',fontSize:15,outline:'none',transition:'background .15s,border-color .15s',...s}}/>
+  );
+}
+
+function Sel({value,onChange,children}){
+  return(
+    <select value={value} onChange={onChange} style={{background:A.inputBg,border:'none',borderRadius:A.rXs,color:A.label1,padding:'9px 12px',fontSize:15,outline:'none',cursor:'pointer',width:'100%'}}>{children}</select>
+  );
+}
+
+function Btn({children,onClick,variant='blue',sm,full,style:s={}}){
+  const v={
+    blue:{background:A.blue,color:'#fff',border:'none'},
+    green:{background:A.green,color:'#fff',border:'none'},
+    ghost:{background:A.inputBg,color:A.label2,border:'none'},
+    red:{background:A.redFill,color:A.red,border:'none'},
+    text:{background:'none',color:A.blue,border:'none',padding:0,fontWeight:500},
+  };
+  return(
+    <button onClick={onClick} style={{padding:sm?'7px 14px':'10px 20px',borderRadius:A.rPill,fontSize:sm?13:15,fontWeight:600,cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',gap:6,width:full?'100%':undefined,transition:'opacity .12s,transform .1s',letterSpacing:'-.01em',...v[variant],...s}}
+      onMouseEnter={e=>{e.currentTarget.style.opacity='.82';e.currentTarget.style.transform='scale(.975)';}}
+      onMouseLeave={e=>{e.currentTarget.style.opacity='1';e.currentTarget.style.transform='scale(1)';}}
+    >{children}</button>
+  );
+}
+
+function Toggle({checked,onChange,label}){
+  return(
+    <label style={{display:'flex',alignItems:'center',gap:10,cursor:'pointer'}}>
+      <div onClick={()=>onChange(!checked)} style={{width:51,height:31,borderRadius:16,background:checked?A.green:'rgba(120,120,128,0.24)',position:'relative',cursor:'pointer',transition:'background .22s cubic-bezier(.4,0,.2,1)',flexShrink:0}}>
+        <div style={{position:'absolute',top:2,left:checked?22:2,width:27,height:27,borderRadius:'50%',background:'#fff',boxShadow:'0 2px 6px rgba(0,0,0,0.18)',transition:'left .22s cubic-bezier(.4,0,.2,1)'}}/>
+      </div>
+      {label&&<span style={{fontSize:15,color:A.label1}}>{label}</span>}
+    </label>
+  );
+}
+
+function Badge({children,color=A.blue,bg}){
+  return(
+    <span style={{background:bg||color+'1A',color,fontSize:12,fontWeight:700,padding:'3px 9px',borderRadius:A.rPill,letterSpacing:'-.01em',display:'inline-flex',alignItems:'center',gap:4}}>{children}</span>
+  );
+}
+
+function Card({children,style:s={}}){
+  return <div style={{background:A.cardBg,borderRadius:A.r,boxShadow:A.shadowSm,...s}}>{children}</div>;
+}
+
+/* ── Display Mode ────────────────────────────────────────────────────── */
+function DisplayMode({onManage,events,chores,setChores,meals}){
+  const now=useClock();
+  const h12=now.getHours()%12||12;
+  const min=String(now.getMinutes()).padStart(2,'0');
+  const ampm=now.getHours()>=12?'PM':'AM';
+  const dateStr=`${DAYS[now.getDay()]}, ${MONTHS[now.getMonth()]} ${now.getDate()}`;
+
+  const todayStr=new Date().toISOString().slice(0,10);
+  const agendaDays=[0,1,2,3].map(offset=>{
+    const d=new Date(); d.setDate(d.getDate()+offset);
+    const label=offset===0?'Today':offset===1?'Tomorrow':DAYS[d.getDay()];
+    return{label,date:d.toISOString().slice(0,10)};
+  });
+
+  const forecast=[
+    {day:'Fri',icon:'☀️',hi:72,lo:58},{day:'Sat',icon:'⛅',hi:68,lo:55},
+    {day:'Sun',icon:'🌧',hi:63,lo:52},{day:'Mon',icon:'⛅',hi:70,lo:56},{day:'Tue',icon:'☀️',hi:75,lo:60},
+  ];
+
+  const toggleChore=async id=>{
+    const result=await api.put(`/api/chores/${id}/done`);
+    setChores(p=>p.map(c=>c.id===id?{...c,done:result.done,next_due:result.next_due}:c));
+  };
+
+  const todayDinner=()=>{
+    const dayName=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date().getDay()];
+    return meals.find(m=>m.day===dayName)?.meal||'—';
+  };
+
+  const Widget=({children,style:s={}})=>(
+    <div style={{background:A.cardBg,borderRadius:20,boxShadow:A.shadowMd,padding:'18px 20px',overflow:'hidden',...s}}>{children}</div>
+  );
+  const WLabel=({children})=>(
+    <div style={{fontSize:12,fontWeight:700,color:A.label4,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:10}}>{children}</div>
+  );
+
+  return(
+    <div style={{width:'100vw',height:'100vh',background:A.systemBg,overflow:'hidden',padding:28,display:'flex',flexDirection:'column',gap:16}}>
+      <div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-between',flexShrink:0}}>
+        <div style={{display:'flex',alignItems:'baseline',gap:10}}>
+          <span style={{fontSize:86,fontWeight:700,color:A.label1,lineHeight:1,letterSpacing:'-0.04em',fontVariantNumeric:'tabular-nums'}}>{h12}:{min}</span>
+          <span style={{fontSize:30,color:A.label4,fontWeight:300,marginBottom:6}}>{ampm}</span>
+        </div>
+        <div style={{textAlign:'right'}}>
+          <div style={{fontSize:22,color:A.label3,fontWeight:400,letterSpacing:'-.01em'}}>{dateStr}</div>
+          <div style={{fontSize:13,color:A.label5,marginTop:4,display:'flex',alignItems:'center',gap:5,justifyContent:'flex-end'}}>
+            <div style={{width:6,height:6,borderRadius:'50%',background:A.green}}/>Synced · 192.168.1.42
+          </div>
+        </div>
+      </div>
+
+      <div style={{flex:1,display:'grid',gridTemplateColumns:'1fr 1.6fr 1fr',gridTemplateRows:'1fr 1fr',gap:14,minHeight:0}}>
+        {/* Calendar — left, full height */}
+        <Widget style={{gridRow:'1/3',display:'flex',flexDirection:'column',overflow:'hidden'}}>
+          <WLabel>Upcoming</WLabel>
+          <div style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:16}}>
+            {agendaDays.map(({label,date})=>{
+              const evs=events.filter(e=>e.date===date);
+              return(
+                <div key={date}>
+                  <div style={{fontSize:12,fontWeight:600,color:A.label4,marginBottom:6,textTransform:'uppercase',letterSpacing:'.05em'}}>{label}</div>
+                  {evs.length===0&&<div style={{fontSize:13,color:A.label5,fontStyle:'italic'}}>Free</div>}
+                  {evs.map(ev=>(
+                    <div key={ev.id} style={{background:ev.color+'12',borderRadius:10,padding:'9px 12px',marginBottom:5,borderLeft:`3px solid ${ev.color}`}}>
+                      <div style={{fontSize:14,color:A.label1,fontWeight:600}}>{ev.title}</div>
+                      <div style={{fontSize:12,color:A.label4,fontFamily:'JetBrains Mono,monospace',marginTop:1}}>{ev.time}</div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        </Widget>
+
+        {/* Chores — top center */}
+        <Widget style={{display:'flex',flexDirection:'column',overflow:'hidden'}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+            <WLabel>Chores</WLabel>
+            <Badge color={A.amber}>{chores.filter(c=>(c.status==='due'||c.status==='overdue')&&!c.done).length} due</Badge>
+          </div>
+          <div style={{flex:1,overflowY:'auto'}}>
+            {chores.map(c=>(
+              <div key={c.id} onClick={()=>toggleChore(c.id)} style={{display:'flex',alignItems:'center',gap:12,padding:'9px 0',borderBottom:`1px solid ${A.sep}`,cursor:'pointer',opacity:c.done?.38:1,transition:'opacity .2s'}}>
+                <div style={{width:24,height:24,borderRadius:'50%',flexShrink:0,background:c.done?A.green:'transparent',border:`2px solid ${c.done?A.green:A.sepOpaque}`,display:'flex',alignItems:'center',justifyContent:'center',transition:'all .2s',animation:c.done?'checkPop .3s ease':undefined}}>
+                  {c.done&&<svg width="12" height="9" viewBox="0 0 12 9" fill="none"><path d="M1 4.5L4.5 8L11 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                </div>
+                <span style={{flex:1,fontSize:15,color:A.label1,textDecoration:c.done?'line-through':undefined,fontWeight:500}}>{c.name}</span>
+                {(c.status==='due'||c.status==='overdue')&&!c.done&&<span style={{fontSize:12,color:c.status==='overdue'?A.red:A.amber,fontWeight:700}}>{c.status==='overdue'?'Overdue':'Today'}</span>}
+              </div>
+            ))}
+          </div>
+        </Widget>
+
+        {/* Meals — bottom center */}
+        <Widget>
+          <WLabel>Dinner tonight</WLabel>
+          <div style={{fontSize:28,fontWeight:700,color:A.label1,letterSpacing:'-.02em',marginBottom:16}}>{todayDinner()||'—'}</div>
+          <div style={{display:'flex',flexDirection:'column',gap:3}}>
+            {meals.map(m=>{
+              const dayName=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date().getDay()];
+              const isToday=m.day===dayName;
+              return(
+                <div key={m.day} style={{display:'flex',gap:12,alignItems:'center'}}>
+                  <span style={{fontSize:12,width:26,color:isToday?A.blue:A.label5,fontWeight:isToday?700:400}}>{m.day}</span>
+                  <span style={{fontSize:13,color:isToday?A.label1:A.label4,fontWeight:isToday?600:400}}>{m.meal||'—'}</span>
+                  {isToday&&<div style={{width:6,height:6,borderRadius:'50%',background:A.blue}}/>}
+                </div>
+              );
+            })}
+          </div>
+        </Widget>
+
+        {/* Weather — top right */}
+        <Widget style={{background:'linear-gradient(145deg,#E8F0FE 0%,#EEF6FF 100%)'}}>
+          <WLabel>Weather</WLabel>
+          <div style={{display:'flex',alignItems:'flex-end',gap:8,marginBottom:2}}>
+            <span style={{fontSize:52,fontWeight:700,color:A.label1,lineHeight:1,letterSpacing:'-.03em'}}>72°</span>
+            <span style={{fontSize:15,color:A.label3,marginBottom:8}}>Partly Cloudy</span>
+          </div>
+          <div style={{fontSize:13,color:A.label4,marginBottom:14}}>H: 76° · L: 58°</div>
+          <div style={{display:'flex',gap:0}}>
+            {forecast.map(f=>(
+              <div key={f.day} style={{flex:1,textAlign:'center'}}>
+                <div style={{fontSize:11,color:A.label4,fontWeight:600,marginBottom:3}}>{f.day}</div>
+                <div style={{fontSize:20,marginBottom:2}}>{f.icon}</div>
+                <div style={{fontSize:13,color:A.label1,fontWeight:600}}>{f.hi}°</div>
+                <div style={{fontSize:11,color:A.label5}}>{f.lo}°</div>
+              </div>
+            ))}
+          </div>
+        </Widget>
+
+        {/* Grocery + HA status — bottom right */}
+        <div style={{display:'flex',flexDirection:'column',gap:14}}>
+          <Widget style={{flex:1}}>
+            <WLabel>Grocery</WLabel>
+            {(grocery||[]).filter(g=>!g.checked).slice(0,5).map(item=>(
+              <div key={item.id} style={{display:'flex',alignItems:'center',gap:9,padding:'5px 0',borderBottom:`1px solid ${A.sep}`}}>
+                <div style={{width:7,height:7,borderRadius:'50%',background:A.green,flexShrink:0}}/>
+                <span style={{fontSize:13,color:A.label1}}>{item.name}</span>
+              </div>
+            ))}
+            {(grocery||[]).filter(g=>!g.checked).length===0&&<div style={{fontSize:13,color:A.label5,fontStyle:'italic'}}>Nothing on the list</div>}
+          </Widget>
+          <Widget style={{background:'linear-gradient(145deg,#F0FFF4,#E8FFF0)'}}>
+            <div style={{display:'flex',alignItems:'center',gap:10}}>
+              <div style={{width:12,height:12,borderRadius:'50%',background:A.green,boxShadow:`0 0 10px ${A.green}60`}}/>
+              <div>
+                <div style={{fontSize:15,color:A.label1,fontWeight:700}}>Home — All Clear</div>
+                <div style={{fontSize:12,color:A.label4}}>12 devices · 0 alerts</div>
+              </div>
+            </div>
+          </Widget>
+        </div>
+      </div>
+
+      <div style={{flexShrink:0,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+        <div style={{display:'flex',gap:20}}>
+          {['Last sync: 2m ago','Uptime: 14d 6h','v0.1.0'].map(s=>(
+            <span key={s} style={{fontSize:11,color:A.label5,fontFamily:'JetBrains Mono,monospace'}}>{s}</span>
+          ))}
+        </div>
+        <button onClick={onManage} style={{background:A.blue,color:'#fff',border:'none',borderRadius:A.rPill,padding:'10px 22px',fontSize:14,fontWeight:600,cursor:'pointer',boxShadow:`0 4px 18px ${A.blue}44`,transition:'opacity .15s,transform .12s',letterSpacing:'-.01em'}}
+          onMouseEnter={e=>{e.currentTarget.style.opacity='.85';e.currentTarget.style.transform='scale(.97)';}}
+          onMouseLeave={e=>{e.currentTarget.style.opacity='1';e.currentTarget.style.transform='scale(1)';}}
+        >Manage →</button>
+      </div>
+    </div>
+  );
+}
+
+/* ── Dashboard ───────────────────────────────────────────────────────── */
+function DashboardScreen({events,chores,grocery}){
+  const now=useClock();
+  const h=now.getHours();
+  const greeting=h<12?'Good morning':h<17?'Good afternoon':'Good evening';
+  const todayStr=new Date().toISOString().slice(0,10);
+  const todayEvs=events.filter(e=>e.date===todayStr);
+  const dueChores=chores.filter(c=>(c.status==='due'||c.status==='overdue')&&!c.done);
+  const groceryRemaining=(grocery||[]).filter(g=>!g.checked).length;
+
+  return(
+    <div>
+      <div style={{marginBottom:28}}>
+        <h1 style={{fontSize:28,fontWeight:700,letterSpacing:'-.02em'}}>{greeting}, Mike</h1>
+        <p style={{color:A.label4,fontSize:15,marginTop:4}}>{DAYS[now.getDay()]}, {MONTHS[now.getMonth()]} {now.getDate()} · {now.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}</p>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:12,marginBottom:20}}>
+        {[
+          {n:todayEvs.length,label:'Events today',sub:'on your calendars',color:A.blue,bg:A.blueFill},
+          {n:dueChores.length,label:'Chores due',sub:'need attention',color:A.amber,bg:A.amberFill},
+          {n:groceryRemaining,label:'Grocery items',sub:'on the list',color:A.green,bg:A.greenFill},
+        ].map(s=>(
+          <Card key={s.label} style={{padding:'18px 20px'}}>
+            <div style={{fontSize:38,fontWeight:700,color:s.color,letterSpacing:'-.03em',marginBottom:4}}>{s.n}</div>
+            <div style={{fontSize:15,fontWeight:600,color:A.label1}}>{s.label}</div>
+            <div style={{fontSize:13,color:A.label4,marginTop:2}}>{s.sub}</div>
+          </Card>
+        ))}
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+        <Card>
+          <div style={{padding:'14px 16px',borderBottom:`1px solid ${A.sep}`,fontSize:15,fontWeight:600}}>Today's Events</div>
+          {todayEvs.map((ev,i)=>(
+            <div key={ev.id} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 16px',borderTop:i>0?`1px solid ${A.sep}`:'none'}}>
+              <div style={{width:4,height:40,borderRadius:2,background:ev.color,flexShrink:0}}/>
+              <div>
+                <div style={{fontSize:14,fontWeight:600,color:A.label1}}>{ev.title}</div>
+                <div style={{fontSize:12,color:A.label4,fontFamily:'JetBrains Mono,monospace'}}>{ev.time}</div>
+              </div>
+            </div>
+          ))}
+          {todayEvs.length===0&&<div style={{padding:'16px',fontSize:14,color:A.label4,fontStyle:'italic'}}>No events today</div>}
+        </Card>
+        <Card>
+          <div style={{padding:'14px 16px',borderBottom:`1px solid ${A.sep}`,fontSize:15,fontWeight:600}}>Due Today</div>
+          {dueChores.map((c,i)=>(
+            <div key={c.id} style={{display:'flex',alignItems:'center',gap:10,padding:'12px 16px',borderTop:i>0?`1px solid ${A.sep}`:'none'}}>
+              <div style={{width:8,height:8,borderRadius:'50%',background:c.status==='overdue'?A.red:A.amber,flexShrink:0}}/>
+              <span style={{fontSize:14,color:A.label1,fontWeight:500,flex:1}}>{c.name}</span>
+              <span style={{fontSize:12,color:A.label4,fontFamily:'monospace'}}>{c.recurrence.split(' ')[0]}</span>
+            </div>
+          ))}
+          {dueChores.length===0&&<div style={{padding:'16px',fontSize:14,color:A.label4,fontStyle:'italic'}}>All caught up!</div>}
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+/* ── Calendar ────────────────────────────────────────────────────────── */
+function CalendarScreen({events,setEvents,icsSources,toastAdd}){
+  const [drawerOpen,setDrawerOpen]=useState(false);
+  const [form,setForm]=useState({title:'',date:new Date().toISOString().slice(0,10),time:'',duration:'1h',cal:'hearth',notes:''});
+  const [calFilters,setCalFilters]=useState({personal:true,work:true,family:true,hearth:true});
+
+  const knownCals={personal:A.blue,work:A.indigo,family:A.teal,hearth:A.green};
+  // Build dynamic calendar list from events + ICS sources
+  const calMap={...knownCals};
+  icsSources.forEach(s=>{calMap[`ics:${s.name}`]=s.color;});
+
+  useEffect(()=>{
+    setCalFilters(prev=>{
+      const next={...prev};
+      Object.keys(calMap).forEach(k=>{if(!(k in next))next[k]=true;});
+      return next;
+    });
+  },[icsSources]);
+
+  const calLabels={personal:'Personal',work:'Work',family:'Family',hearth:'Hearth'};
+  icsSources.forEach(s=>{calLabels[`ics:${s.name}`]=s.name;});
+
+  const weekDays=Array.from({length:7},(_,i)=>{
+    const d=new Date();
+    const start=new Date(d); start.setDate(d.getDate()-d.getDay()+i);
+    return{
+      label:DAYS[start.getDay()].slice(0,3),
+      num:String(start.getDate()),
+      date:start.toISOString().slice(0,10),
+      today:start.toISOString().slice(0,10)===new Date().toISOString().slice(0,10),
+    };
+  });
+  const times=['8 AM','9 AM','10 AM','11 AM','12 PM','1 PM','2 PM','3 PM','4 PM','5 PM','6 PM','7 PM'];
+
+  const saveEvent=async()=>{
+    if(!form.title.trim()) return;
+    const color=calMap[form.cal]||A.green;
+    const newEv=await api.post('/api/events',{...form,calendar:form.cal,color});
+    setEvents(p=>[...p,newEv]);
+    toastAdd('Event saved');
+    setDrawerOpen(false);
+    setForm({title:'',date:new Date().toISOString().slice(0,10),time:'',duration:'1h',cal:'hearth',notes:''});
+  };
+
+  const firstDay=new Date(new Date().getFullYear(),new Date().getMonth(),1).getDay();
+  const daysInMonth=new Date(new Date().getFullYear(),new Date().getMonth()+1,0).getDate();
+  const miniCal=[...Array(firstDay).fill(null),...Array.from({length:daysInMonth},(_,i)=>i+1)];
+
+  return(
+    <div style={{display:'flex',gap:0,height:'100%'}}>
+      {/* Left panel */}
+      <div style={{width:256,borderRight:`1px solid ${A.sep}`,padding:'16px 14px',flexShrink:0,overflowY:'auto'}}>
+        <div style={{marginBottom:20}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
+            <span style={{fontSize:15,fontWeight:600,letterSpacing:'-.01em'}}>{MONTHS[new Date().getMonth()]} {new Date().getFullYear()}</span>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:1,textAlign:'center'}}>
+            {['S','M','T','W','T','F','S'].map((d,i)=>(
+              <div key={i} style={{fontSize:11,color:A.label4,fontWeight:600,padding:'3px 0'}}>{d}</div>
+            ))}
+            {miniCal.map((d,i)=>{
+              const isToday=d===new Date().getDate();
+              const hasEv=d&&events.some(e=>e.date===`${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`);
+              return(
+                <div key={i} style={{position:'relative',padding:'4px 0'}}>
+                  <div style={{width:28,height:28,borderRadius:'50%',margin:'0 auto',display:'flex',alignItems:'center',justifyContent:'center',background:isToday?A.blue:'transparent',fontSize:13,color:isToday?'#fff':d?A.label1:'transparent',fontWeight:isToday?600:400}}>{d||''}</div>
+                  {hasEv&&!isToday&&<div style={{position:'absolute',bottom:1,left:'50%',transform:'translateX(-50%)',width:4,height:4,borderRadius:'50%',background:A.blue}}/>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <div style={{fontSize:12,fontWeight:600,color:A.label4,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:10}}>Calendars</div>
+        <div style={{background:A.cardBg,borderRadius:A.r,overflow:'hidden',boxShadow:A.shadowSm}}>
+          {Object.entries(calLabels).map(([key,label],i)=>(
+            <div key={key} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'11px 14px',borderTop:i>0?`1px solid ${A.sep}`:'none'}}>
+              <div style={{display:'flex',alignItems:'center',gap:8}}>
+                <div style={{width:10,height:10,borderRadius:3,background:calMap[key]||A.blue}}/>
+                <span style={{fontSize:14}}>{label}</span>
+              </div>
+              <Toggle checked={calFilters[key]!==false} onChange={v=>setCalFilters(p=>({...p,[key]:v}))}/>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Week view */}
+      <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+        <div style={{padding:'14px 20px',borderBottom:`1px solid ${A.sep}`,display:'flex',alignItems:'center',justifyContent:'space-between',background:A.cardBg,flexShrink:0}}>
+          <span style={{fontSize:15,fontWeight:600,letterSpacing:'-.01em'}}>This Week</span>
+          <Btn onClick={()=>setDrawerOpen(true)}>+ New Event</Btn>
+        </div>
+        <div style={{flex:1,overflowY:'auto',overflowX:'hidden'}}>
+          <div style={{display:'grid',gridTemplateColumns:'52px repeat(7,1fr)',position:'sticky',top:0,background:A.cardBg,borderBottom:`1px solid ${A.sep}`,zIndex:10}}>
+            <div/>
+            {weekDays.map(d=>(
+              <div key={d.date} style={{padding:'10px 4px',textAlign:'center',background:d.today?A.blueFill:'transparent'}}>
+                <div style={{fontSize:11,color:d.today?A.blue:A.label4,fontWeight:700,textTransform:'uppercase',letterSpacing:'.05em'}}>{d.label}</div>
+                <div style={{width:32,height:32,borderRadius:'50%',margin:'3px auto 0',display:'flex',alignItems:'center',justifyContent:'center',background:d.today?A.blue:'transparent',fontSize:18,fontWeight:600,color:d.today?'#fff':A.label1}}>{d.num}</div>
+              </div>
+            ))}
+          </div>
+          {times.map(t=>(
+            <div key={t} style={{display:'grid',gridTemplateColumns:'52px repeat(7,1fr)',borderBottom:`1px solid ${A.sep}`}}>
+              <div style={{padding:'0 8px',paddingTop:6,textAlign:'right'}}>
+                <span style={{fontSize:11,color:A.label5,fontFamily:'JetBrains Mono,monospace'}}>{t}</span>
+              </div>
+              {weekDays.map(d=>{
+                const slotH=parseInt(t)+(t.includes('PM')&&!t.startsWith('12')?12:0);
+                const evs=events.filter(e=>{
+                  if(e.date!==d.date||calFilters[e.calendar]===false) return false;
+                  const eh=parseInt(e.time),epm=e.time.includes('PM')&&!e.time.startsWith('12');
+                  return(eh+(epm?12:0))===slotH;
+                });
+                return(
+                  <div key={d.date} style={{minHeight:54,padding:'3px 4px',background:d.today?'rgba(0,122,255,0.02)':'transparent',borderLeft:`1px solid ${A.sep}`}}>
+                    {evs.map(ev=>(
+                      <div key={ev.id} style={{background:ev.color+'18',borderLeft:`2.5px solid ${ev.color}`,borderRadius:'0 7px 7px 0',padding:'5px 8px',fontSize:12,color:ev.color,fontWeight:600,cursor:'pointer'}}>
+                        {ev.title}
+                        <div style={{fontSize:10,opacity:.7,fontFamily:'monospace',fontWeight:400}}>{ev.time}</div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <Drawer open={drawerOpen} onClose={()=>setDrawerOpen(false)} title="New Event">
+        <FormGroup label="Event Details">
+          <div style={{padding:'12px 16px'}}><Inp value={form.title} onChange={e=>setForm(p=>({...p,title:e.target.value}))} placeholder="Title"/></div>
+          <div style={{padding:'12px 16px',borderTop:`1px solid ${A.sep}`}}><Inp type="date" value={form.date} onChange={e=>setForm(p=>({...p,date:e.target.value}))}/></div>
+          <div style={{padding:'12px 16px',borderTop:`1px solid ${A.sep}`}}><Inp value={form.time} onChange={e=>setForm(p=>({...p,time:e.target.value}))} placeholder="Time (e.g. 3:00 PM)"/></div>
+        </FormGroup>
+        <FormGroup label="Calendar">
+          <div style={{padding:'12px 16px'}}>
+            <Sel value={form.cal} onChange={e=>setForm(p=>({...p,cal:e.target.value}))}>
+              <option value="hearth">Hearth</option>
+              <option value="personal">Personal</option>
+              <option value="work">Work</option>
+              <option value="family">Family</option>
+              {icsSources.map(s=><option key={s.id} value={`ics:${s.name}`}>{s.name}</option>)}
+            </Sel>
+          </div>
+        </FormGroup>
+        <FormGroup label="Notes">
+          <div style={{padding:'12px 16px'}}><textarea value={form.notes} onChange={e=>setForm(p=>({...p,notes:e.target.value}))} placeholder="Optional notes..." rows={3} style={{width:'100%',background:'transparent',border:'none',outline:'none',resize:'vertical',fontSize:15,color:A.label1,fontFamily:'Inter,sans-serif'}}/></div>
+        </FormGroup>
+        <div style={{display:'flex',gap:8}}>
+          <Btn onClick={saveEvent} full>Save Event</Btn>
+          <Btn variant="ghost" onClick={()=>setDrawerOpen(false)} full>Cancel</Btn>
+        </div>
+      </Drawer>
+    </div>
+  );
+}
+
+/* ── Inbox ───────────────────────────────────────────────────────────── */
+function InboxScreen({toastAdd,events,setEvents}){
+  const [pending,setPending]=useState([]);
+  const [recent,setRecent]=useState([]);
+
+  useEffect(()=>{
+    api.get('/api/inbox').then(d=>{setPending(d.pending);setRecent(d.recent);});
+  },[]);
+
+  const accept=async id=>{
+    await api.post(`/api/inbox/${id}/accept`);
+    const item=pending.find(i=>i.id===id);
+    setPending(p=>p.filter(i=>i.id!==id));
+    setRecent(p=>[{event_name:item.event_name,event_date:item.event_date,source:'Email'},...p]);
+    // Refresh events
+    api.get('/api/events').then(setEvents);
+    toastAdd('Added to Hearth Calendar');
+  };
+  const discard=async id=>{
+    await api.del(`/api/inbox/${id}`);
+    setPending(p=>p.filter(i=>i.id!==id));
+    toastAdd('Discarded','blue');
+  };
+
+  return(
+    <div style={{maxWidth:720,margin:'0 auto'}}>
+      <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:24}}>
+        <div>
+          <h1 style={{fontSize:28,fontWeight:700,letterSpacing:'-.02em'}}>Inbox</h1>
+          <p style={{color:A.label4,fontSize:15,marginTop:4}}>Parsed events from forwarded emails</p>
+        </div>
+        {pending.length>0&&<Badge color={A.blue}>{pending.length} pending</Badge>}
+      </div>
+
+      {pending.length===0&&(
+        <Card style={{padding:'48px 24px',textAlign:'center',marginBottom:24}}>
+          <div style={{fontSize:17,fontWeight:600,marginBottom:6}}>All clear</div>
+          <div style={{color:A.label4,fontSize:15}}>No events waiting for review.</div>
+        </Card>
+      )}
+
+      <div style={{display:'flex',flexDirection:'column',gap:12,marginBottom:28}}>
+        {pending.map(item=>{
+          const hi=item.confidence==='high';
+          const confColor=hi?A.green:A.amber;
+          return(
+            <Card key={item.id} style={{overflow:'hidden',animation:'slideUp .2s ease'}}>
+              <div style={{padding:'16px 18px 0'}}>
+                <div style={{fontSize:11,color:A.label4,fontFamily:'JetBrains Mono,monospace',marginBottom:6}}>Forwarded email</div>
+                <div style={{fontSize:16,fontWeight:600,color:A.label1,marginBottom:14}}>{item.subject}</div>
+                <div style={{background:A.systemBg,borderRadius:A.rSm,padding:'14px 16px',marginBottom:14}}>
+                  <div style={{fontSize:17,fontWeight:700,color:A.label1,marginBottom:6,letterSpacing:'-.01em'}}>{item.event_name}</div>
+                  <div style={{display:'flex',gap:16,flexWrap:'wrap'}}>
+                    {[`${item.event_date}`,`${item.event_time}`,`${item.recurrence}`].map(s=>(
+                      <span key={s} style={{fontSize:13,color:A.label3}}>{s}</span>
+                    ))}
+                  </div>
+                </div>
+                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:16}}>
+                  <span style={{fontSize:12,color:A.label4}}>Confidence</span>
+                  <div style={{height:4,borderRadius:2,background:'rgba(0,0,0,0.06)',flex:1,maxWidth:100}}>
+                    <div style={{height:'100%',borderRadius:2,background:confColor,width:hi?'100%':'58%'}}/>
+                  </div>
+                  <span style={{fontSize:12,fontWeight:700,color:confColor}}>{item.confidence}</span>
+                </div>
+              </div>
+              <div style={{borderTop:`1px solid ${A.sep}`,padding:'12px 18px',display:'flex',gap:8,background:'rgba(0,0,0,0.01)'}}>
+                <Btn variant="green" sm onClick={()=>accept(item.id)}>Add to Hearth Calendar</Btn>
+                <Btn variant="ghost" sm onClick={()=>discard(item.id)}>Discard</Btn>
+              </div>
+            </Card>
+          );
+        })}
+      </div>
+
+      <Card style={{padding:'16px 18px',marginBottom:24}}>
+        <div style={{fontSize:14,color:A.label3,marginBottom:10}}>Forward any email with dates to this address:</div>
+        <div style={{background:'#1C1C1E',borderRadius:A.rSm,padding:'12px 16px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+          <span style={{fontFamily:'JetBrains Mono,monospace',fontSize:15,color:'#30D158'}}>hearth@local.home</span>
+          <button onClick={()=>{navigator.clipboard.writeText('hearth@local.home');toastAdd('Copied','blue');}} style={{background:'rgba(255,255,255,0.1)',border:'none',color:'rgba(255,255,255,0.7)',borderRadius:6,padding:'5px 12px',fontSize:12,cursor:'pointer'}}>Copy</button>
+        </div>
+      </Card>
+
+      <div style={{fontSize:12,fontWeight:600,color:A.label4,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:8}}>Recently Added</div>
+      <Card>
+        {recent.map((r,i)=>(
+          <div key={i} style={{display:'flex',alignItems:'center',gap:0,padding:'12px 16px',borderTop:i>0?`1px solid ${A.sep}`:'none'}}>
+            <div style={{flex:1,fontSize:14,fontWeight:500,color:A.label1}}>{r.event_name}</div>
+            <div style={{fontSize:13,color:A.label4,minWidth:60}}>{r.event_date}</div>
+            <div style={{fontSize:13,color:A.label5,minWidth:60,fontFamily:'monospace',textAlign:'center'}}>{r.source}</div>
+            <div style={{display:'flex',alignItems:'center',gap:4,color:A.green,fontSize:13,fontWeight:600,minWidth:80,justifyContent:'flex-end'}}>
+              <svg width="12" height="10" viewBox="0 0 12 10" fill="none"><path d="M1 5L4.5 8.5L11 1.5" stroke={A.green} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              Added
+            </div>
+          </div>
+        ))}
+        {recent.length===0&&<div style={{padding:'14px 16px',fontSize:14,color:A.label4,fontStyle:'italic'}}>None yet</div>}
+      </Card>
+    </div>
+  );
+}
+
+/* ── Chores ──────────────────────────────────────────────────────────── */
+function ChoresScreen({chores,setChores,toastAdd}){
+  const [drawerOpen,setDrawerOpen]=useState(false);
+  const [form,setForm]=useState({name:'',recur:'Weekly',day:'Monday',start:'',notes:''});
+
+  const saveChore=async()=>{
+    if(!form.name.trim()) return;
+    const recurrence=form.recur==='Weekly'?`Weekly (${form.day.slice(0,3)})`:form.recur;
+    const newChore=await api.post('/api/chores',{name:form.name,recurrence,start:form.start});
+    setChores(p=>[...p,newChore]);
+    toastAdd('Chore added');
+    setDrawerOpen(false);
+    setForm({name:'',recur:'Weekly',day:'Monday',start:'',notes:''});
+  };
+
+  const deleteChore=async id=>{
+    await api.del(`/api/chores/${id}`);
+    setChores(p=>p.filter(c=>c.id!==id));
+    toastAdd('Deleted','blue');
+  };
+
+  const statePill=s=>{
+    if(s==='due')     return{color:A.amber,bg:A.amberFill,label:'Due today'};
+    if(s==='overdue') return{color:A.red,  bg:A.redFill,  label:'Overdue'};
+    return                  {color:A.green,bg:A.greenFill,label:'Upcoming'};
+  };
+
+  return(
+    <div>
+      <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:24}}>
+        <div>
+          <h1 style={{fontSize:28,fontWeight:700,letterSpacing:'-.02em'}}>Chores</h1>
+          <p style={{color:A.label4,fontSize:15,marginTop:4}}>{chores.filter(c=>c.status==='due'||c.status==='overdue').length} due today · {chores.length} total</p>
+        </div>
+        <Btn onClick={()=>setDrawerOpen(true)}>+ Add Chore</Btn>
+      </div>
+      <Card>
+        <div style={{display:'grid',gridTemplateColumns:'2fr 1.2fr 1fr 1fr 120px 100px',padding:'10px 16px',borderBottom:`1px solid ${A.sep}`}}>
+          {['Chore','Recurrence','Last Done','Next Due','Status',''].map((h,i)=>(
+            <div key={i} style={{fontSize:12,fontWeight:700,color:A.label4,textTransform:'uppercase',letterSpacing:'.05em'}}>{h}</div>
+          ))}
+        </div>
+        {chores.map((c,i)=>{
+          const p=statePill(c.status);
+          return(
+            <div key={c.id} style={{display:'grid',gridTemplateColumns:'2fr 1.2fr 1fr 1fr 120px 100px',padding:'14px 16px',borderTop:`1px solid ${A.sep}`,borderLeft:`3px solid ${c.status==='due'?A.amber:c.status==='overdue'?A.red:'transparent'}`,background:c.status==='due'?`${A.amber}06`:c.status==='overdue'?`${A.red}06`:'transparent',alignItems:'center'}}>
+              <div style={{fontSize:15,fontWeight:500}}>{c.name}</div>
+              <div style={{fontSize:13,color:A.label4,fontFamily:'JetBrains Mono,monospace'}}>{c.recurrence}</div>
+              <div style={{fontSize:13,color:A.label4}}>{c.last_done||'Never'}</div>
+              <div style={{fontSize:13,color:A.label4}}>{c.next_due||'—'}</div>
+              <Badge color={p.color} bg={p.bg}>{p.label}</Badge>
+              <div style={{display:'flex',gap:10}}>
+                <button onClick={()=>deleteChore(c.id)} style={{background:'none',border:'none',color:A.red,fontSize:13,cursor:'pointer',fontWeight:500}}>Delete</button>
+              </div>
+            </div>
+          );
+        })}
+      </Card>
+      <Drawer open={drawerOpen} onClose={()=>setDrawerOpen(false)} title="Add Chore">
+        <FormGroup label="Details">
+          <div style={{padding:'12px 16px'}}><Inp value={form.name} onChange={e=>setForm(p=>({...p,name:e.target.value}))} placeholder="Chore name"/></div>
+          <div style={{padding:'12px 16px',borderTop:`1px solid ${A.sep}`}}>
+            <Sel value={form.recur} onChange={e=>setForm(p=>({...p,recur:e.target.value}))}>
+              {['Daily','Weekly','Bi-weekly','Monthly','Custom'].map(o=><option key={o}>{o}</option>)}
+            </Sel>
+          </div>
+          {form.recur==='Weekly'&&(
+            <div style={{padding:'12px 16px',borderTop:`1px solid ${A.sep}`}}>
+              <Sel value={form.day} onChange={e=>setForm(p=>({...p,day:e.target.value}))}>
+                {['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'].map(d=><option key={d}>{d}</option>)}
+              </Sel>
+            </div>
+          )}
+          <div style={{padding:'12px 16px',borderTop:`1px solid ${A.sep}`}}>
+            <Inp type="date" value={form.start} onChange={e=>setForm(p=>({...p,start:e.target.value}))}/>
+          </div>
+        </FormGroup>
+        <div style={{display:'flex',gap:8,marginTop:4}}>
+          <Btn onClick={saveChore} full>Save Chore</Btn>
+          <Btn variant="ghost" onClick={()=>setDrawerOpen(false)} full>Cancel</Btn>
+        </div>
+      </Drawer>
+    </div>
+  );
+}
+
+/* ── Grocery ─────────────────────────────────────────────────────────── */
+function GroceryScreen({grocery,setGrocery,meals,setMeals,toastAdd}){
+  const [input,setInput]=useState('');
+  const [editingDay,setEditingDay]=useState(null);
+  const [mealInput,setMealInput]=useState('');
+  const inputRef=useRef();
+
+  const addItem=async()=>{
+    if(!input.trim()) return;
+    const newItem=await api.post('/api/grocery',{name:input.trim()});
+    setGrocery(p=>[...p,newItem]);
+    setInput('');
+    inputRef.current?.focus();
+  };
+  const toggle=async id=>{
+    const result=await api.put(`/api/grocery/${id}/toggle`);
+    setGrocery(p=>p.map(i=>i.id===id?{...i,checked:result.checked}:i));
+  };
+  const clearChecked=async()=>{
+    await api.del('/api/grocery/checked');
+    setGrocery(p=>p.filter(i=>!i.checked));
+  };
+  const saveMeal=async day=>{
+    await api.put(`/api/meals/${day}`,{meal:mealInput});
+    setMeals(p=>p.map(m=>m.day===day?{...m,meal:mealInput}:m));
+    setEditingDay(null); setMealInput('');
+  };
+
+  const unchecked=(grocery||[]).filter(i=>!i.checked);
+  const checked=(grocery||[]).filter(i=>i.checked);
+  const cats=[...new Set(unchecked.map(i=>i.category))];
+
+  return(
+    <div style={{display:'grid',gridTemplateColumns:'1fr 340px',gap:20,alignItems:'start'}}>
+      <div>
+        <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',marginBottom:20}}>
+          <div>
+            <h1 style={{fontSize:28,fontWeight:700,letterSpacing:'-.02em'}}>Grocery</h1>
+            <p style={{color:A.label4,fontSize:15,marginTop:4}}>{unchecked.length} items remaining</p>
+          </div>
+          {checked.length>0&&<button onClick={clearChecked} style={{background:'none',border:'none',color:A.label4,fontSize:14,cursor:'pointer'}}>Clear checked</button>}
+        </div>
+        <div style={{display:'flex',gap:10,marginBottom:16}}>
+          <Inp value={input} onChange={e=>setInput(e.target.value)} placeholder="Add item..." onKeyDown={e=>e.key==='Enter'&&addItem()} inputRef={inputRef}/>
+          <Btn onClick={addItem} style={{flexShrink:0}}>Add</Btn>
+        </div>
+        {cats.map(cat=>(
+          <div key={cat} style={{marginBottom:16}}>
+            <div style={{fontSize:12,fontWeight:700,color:A.label4,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:6,paddingLeft:4}}>{cat}</div>
+            <Card>
+              {unchecked.filter(i=>i.category===cat).map((item,idx)=>(
+                <div key={item.id} onClick={()=>toggle(item.id)} style={{display:'flex',alignItems:'center',gap:14,padding:'13px 16px',borderTop:idx>0?`1px solid ${A.sep}`:'none',cursor:'pointer'}}
+                  onMouseEnter={e=>e.currentTarget.style.background=A.systemBg}
+                  onMouseLeave={e=>e.currentTarget.style.background='transparent'}
+                >
+                  <div style={{width:24,height:24,borderRadius:'50%',border:`2px solid ${A.sepOpaque}`,flexShrink:0}}/>
+                  <span style={{fontSize:15,color:A.label1}}>{item.name}</span>
+                </div>
+              ))}
+            </Card>
+          </div>
+        ))}
+        {checked.length>0&&(
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:12,fontWeight:700,color:A.label5,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:6,paddingLeft:4}}>Checked ({checked.length})</div>
+            <Card>
+              {checked.map((item,idx)=>(
+                <div key={item.id} onClick={()=>toggle(item.id)} style={{display:'flex',alignItems:'center',gap:14,padding:'13px 16px',borderTop:idx>0?`1px solid ${A.sep}`:'none',cursor:'pointer',opacity:.45}}>
+                  <div style={{width:24,height:24,borderRadius:'50%',background:A.green,border:`2px solid ${A.green}`,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                    <svg width="12" height="9" viewBox="0 0 12 9" fill="none"><path d="M1 4.5L4.5 8L11 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  </div>
+                  <span style={{fontSize:15,color:A.label4,textDecoration:'line-through'}}>{item.name}</span>
+                </div>
+              ))}
+            </Card>
+          </div>
+        )}
+      </div>
+
+      <div>
+        <h2 style={{fontSize:18,fontWeight:700,letterSpacing:'-.01em',marginBottom:4}}>Meal Plan</h2>
+        <p style={{color:A.label4,fontSize:14,marginBottom:14}}>This week</p>
+        <Card>
+          {(meals||[]).map((m,i)=>{
+            const dayName=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date().getDay()];
+            const isToday=m.day===dayName;
+            const isEditing=editingDay===m.day;
+            return(
+              <div key={m.day} style={{padding:'13px 16px',borderTop:i>0?`1px solid ${A.sep}`:'none',background:isToday?A.blueFill:'transparent'}}>
+                <div style={{display:'flex',alignItems:'center',gap:10}}>
+                  <span style={{fontSize:13,fontWeight:isToday?700:500,color:isToday?A.blue:A.label4,width:30,flexShrink:0}}>{m.day}</span>
+                  {isEditing?(
+                    <div style={{flex:1,display:'flex',gap:6}}>
+                      <Inp value={mealInput} onChange={e=>setMealInput(e.target.value)} placeholder="Meal..." onKeyDown={e=>e.key==='Enter'&&saveMeal(m.day)} style={{fontSize:14}}/>
+                      <Btn sm onClick={()=>saveMeal(m.day)}>OK</Btn>
+                    </div>
+                  ):(
+                    <>
+                      <span style={{flex:1,fontSize:15,color:m.meal?A.label1:A.label5,fontStyle:m.meal?'normal':'italic',fontWeight:isToday?500:400}}>{m.meal||'Not planned'}</span>
+                      <button onClick={()=>{setEditingDay(m.day);setMealInput(m.meal);}} style={{background:'none',border:'none',color:A.blue,fontSize:13,cursor:'pointer',fontWeight:500,flexShrink:0}}>{m.meal?'Edit':'Add'}</button>
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+/* ── Settings ────────────────────────────────────────────────────────── */
+function SettingsScreen({toastAdd,icsSources,setIcsSources}){
+  const [codeModal,setCodeModal]=useState(false);
+  const [codeVal,setCodeVal]=useState(`<div style="font-family:sans-serif;padding:16px">
+  <div style="color:#34C759;font-weight:700;font-size:18px">All Systems Clear</div>
+  <div style="color:#636366;margin-top:8px;font-size:14px">12 devices online · 0 alerts</div>
+</div>`);
+  const [widgets,setWidgets]=useState({Calendar:true,Chores:true,Weather:true,Grocery:true,Meals:true,'Custom HTML':true});
+  const [clock,setClock]=useState('12h');
+  const [temp,setTemp]=useState('°F');
+  const [refresh,setRefresh]=useState('1min');
+  const [pushStatus,setPushStatus]=useState('idle'); // idle | requesting | subscribed | error
+  const [icsForm,setIcsForm]=useState({name:'',url:'',color:'#3B82F6'});
+  const [icsLoading,setIcsLoading]=useState(false);
+
+  const addIcsSource=async()=>{
+    if(!icsForm.name.trim()||!icsForm.url.trim()) return;
+    setIcsLoading(true);
+    try{
+      const result=await api.post('/api/ics/sources',icsForm);
+      if(result.error) throw new Error(result.error);
+      setIcsSources(p=>[...p,result]);
+      setIcsForm({name:'',url:'',color:'#3B82F6'});
+      toastAdd(`Imported ${result.events_imported} events from ${result.name}`);
+    }catch(e){
+      toastAdd(`Failed: ${e.message}`,'red');
+    }finally{setIcsLoading(false);}
+  };
+
+  const removeIcsSource=async id=>{
+    await api.del(`/api/ics/sources/${id}`);
+    setIcsSources(p=>p.filter(s=>s.id!==id));
+    toastAdd('Calendar removed','blue');
+  };
+
+  const syncICS=async()=>{
+    const r=await api.post('/api/ics/sync');
+    toastAdd(`Synced ${r.total_events} events`);
+  };
+
+  const enablePush=async()=>{
+    setPushStatus('requesting');
+    try{
+      await subscribePush();
+      setPushStatus('subscribed');
+      toastAdd('Push notifications enabled');
+    }catch(e){
+      setPushStatus('error');
+      toastAdd(e.message,'red');
+    }
+  };
+
+  const testPush=async()=>{
+    await api.post('/api/push/test');
+    toastAdd('Test notification sent');
+  };
+
+  const SegControl=({value,onChange,options})=>(
+    <div style={{display:'flex',background:A.inputBg,borderRadius:A.rXs,padding:2,gap:1}}>
+      {options.map(o=>(
+        <button key={o} onClick={()=>onChange(o)} style={{padding:'6px 14px',border:'none',borderRadius:7,background:value===o?A.cardBg:'transparent',color:value===o?A.label1:A.label3,fontSize:13,fontWeight:value===o?600:400,cursor:'pointer',boxShadow:value===o?A.shadowSm:'none',transition:'all .15s',fontFamily:'Inter,sans-serif'}}>{o}</button>
+      ))}
+    </div>
+  );
+
+  return(
+    <div style={{maxWidth:620}}>
+      <h1 style={{fontSize:28,fontWeight:700,letterSpacing:'-.02em',marginBottom:24}}>Settings</h1>
+
+      <FormGroup label="Google Calendar">
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px'}}>
+          <div>
+            <div style={{fontSize:15,color:A.label1}}>Connected account</div>
+            <div style={{fontSize:13,color:A.label4,marginTop:2}}>mike@gmail.com</div>
+          </div>
+          <div style={{display:'flex',alignItems:'center',gap:5}}><div style={{width:8,height:8,borderRadius:'50%',background:A.green}}/><span style={{fontSize:13,color:A.green,fontWeight:600}}>Connected</span></div>
+        </div>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px',borderTop:`1px solid ${A.sep}`}}>
+          <span style={{fontSize:15,color:A.label1}}>Synced calendars</span>
+          <div style={{display:'flex',gap:6}}>
+            <Btn sm variant="ghost" onClick={()=>{toastAdd('Syncing...','blue');setTimeout(()=>toastAdd('Synced'),1400);}}>Sync now</Btn>
+          </div>
+        </div>
+      </FormGroup>
+
+      <FormGroup label="ICS Calendars">
+        {icsSources.length>0&&(
+          <>
+            {icsSources.map((s,i)=>(
+              <div key={s.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px',borderTop:i>0?`1px solid ${A.sep}`:'none'}}>
+                <div style={{display:'flex',alignItems:'center',gap:10}}>
+                  <div style={{width:10,height:10,borderRadius:3,background:s.color,flexShrink:0}}/>
+                  <div>
+                    <div style={{fontSize:15,color:A.label1,fontWeight:500}}>{s.name}</div>
+                    <div style={{fontSize:12,color:A.label5,fontFamily:'JetBrains Mono,monospace',maxWidth:280,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.url}</div>
+                  </div>
+                </div>
+                <button onClick={()=>removeIcsSource(s.id)} style={{background:'none',border:'none',color:A.red,fontSize:13,cursor:'pointer',fontWeight:500,flexShrink:0}}>Remove</button>
+              </div>
+            ))}
+            <div style={{padding:'12px 16px',borderTop:`1px solid ${A.sep}`}}>
+              <Btn sm variant="ghost" onClick={syncICS}>Sync all now</Btn>
+            </div>
+          </>
+        )}
+        <div style={{padding:'14px 16px',borderTop:icsSources.length>0?`1px solid ${A.sep}`:'none'}}>
+          <div style={{fontSize:13,color:A.label3,marginBottom:10}}>Add a calendar via webcal:// or https:// URL (.ics)</div>
+          <div style={{display:'flex',flexDirection:'column',gap:8}}>
+            <Inp value={icsForm.name} onChange={e=>setIcsForm(p=>({...p,name:e.target.value}))} placeholder="Calendar name (e.g. Work)"/>
+            <Inp value={icsForm.url} onChange={e=>setIcsForm(p=>({...p,url:e.target.value}))} placeholder="https://calendar.example.com/feed.ics"/>
+            <div style={{display:'flex',gap:8,alignItems:'center'}}>
+              <input type="color" value={icsForm.color} onChange={e=>setIcsForm(p=>({...p,color:e.target.value}))} style={{width:36,height:36,border:'none',borderRadius:6,cursor:'pointer',background:'transparent'}}/>
+              <Btn onClick={addIcsSource} sm style={{flex:1}} variant={icsLoading?'ghost':'blue'} disabled={icsLoading}>{icsLoading?'Importing…':'Add Calendar'}</Btn>
+            </div>
+          </div>
+        </div>
+      </FormGroup>
+
+      <FormGroup label="Push Notifications">
+        <div style={{padding:'14px 16px'}}>
+          <div style={{fontSize:14,color:A.label3,marginBottom:12}}>Get reminders for due chores and upcoming events. Requires HTTPS for non-localhost access.</div>
+          {pushStatus==='subscribed'?(
+            <div style={{display:'flex',gap:8}}>
+              <div style={{display:'flex',alignItems:'center',gap:6,fontSize:14,color:A.green,fontWeight:600}}><div style={{width:8,height:8,borderRadius:'50%',background:A.green}}/>Notifications enabled</div>
+              <Btn sm variant="ghost" onClick={testPush}>Send test</Btn>
+            </div>
+          ):(
+            <Btn onClick={enablePush} sm variant={pushStatus==='error'?'ghost':'blue'} style={{minWidth:180}}>
+              {pushStatus==='requesting'?'Requesting…':pushStatus==='error'?'Retry':'Enable Notifications'}
+            </Btn>
+          )}
+        </div>
+      </FormGroup>
+
+      <FormGroup label="Email Forwarding">
+        <div style={{padding:'14px 16px'}}>
+          <div style={{fontSize:14,color:A.label3,marginBottom:10}}>Forward emails with dates here. They'll appear in your Inbox for review.</div>
+          <div style={{background:'#1C1C1E',borderRadius:A.rSm,padding:'11px 14px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+            <span style={{fontFamily:'JetBrains Mono,monospace',fontSize:14,color:'#30D158'}}>hearth@local.home</span>
+            <button onClick={()=>{navigator.clipboard.writeText('hearth@local.home');toastAdd('Copied','blue');}} style={{background:'rgba(255,255,255,0.1)',border:'none',color:'rgba(255,255,255,0.7)',borderRadius:6,padding:'4px 10px',fontSize:12,cursor:'pointer'}}>Copy</button>
+          </div>
+        </div>
+        <details style={{padding:'0 16px 14px'}}>
+          <summary style={{fontSize:14,color:A.label4,cursor:'pointer',fontWeight:500,borderTop:`1px solid ${A.sep}`,paddingTop:12,paddingBottom:2,listStyle:'none',display:'flex',alignItems:'center',gap:6}}>
+            <span style={{fontSize:12}}>›</span>SMTP Settings
+          </summary>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginTop:12}}>
+            {[['Host','smtp.example.com'],['Port','587'],['Username','user@example.com'],['Password','']].map(([l,ph])=>(
+              <div key={l}><label style={{fontSize:12,color:A.label4,display:'block',marginBottom:4}}>{l}</label><Inp value="" onChange={()=>{}} placeholder={ph}/></div>
+            ))}
+          </div>
+        </details>
+      </FormGroup>
+
+      <FormGroup label="Widgets">
+        {Object.entries(widgets).map(([name,on],i)=>(
+          <div key={name} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px',borderTop:i>0?`1px solid ${A.sep}`:'none'}}>
+            <span style={{fontSize:15,color:A.label1}}>{name}</span>
+            <Toggle checked={on} onChange={v=>setWidgets(p=>({...p,[name]:v}))}/>
+          </div>
+        ))}
+        <div style={{padding:'12px 16px',borderTop:`1px solid ${A.sep}`}}>
+          <Btn variant="ghost" sm onClick={()=>setCodeModal(true)}>Edit Custom HTML Widget</Btn>
+        </div>
+      </FormGroup>
+
+      <FormGroup label="Display">
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px'}}>
+          <span style={{fontSize:15,color:A.label1}}>Refresh interval</span>
+          <select value={refresh} onChange={e=>setRefresh(e.target.value)} style={{background:A.inputBg,border:'none',borderRadius:A.rXs,padding:'6px 10px',fontSize:14,color:A.label1,cursor:'pointer'}}>
+            <option value="30s">30 seconds</option><option value="1min">1 minute</option><option value="5min">5 minutes</option>
+          </select>
+        </div>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px',borderTop:`1px solid ${A.sep}`}}>
+          <span style={{fontSize:15,color:A.label1}}>Clock</span>
+          <SegControl value={clock} onChange={setClock} options={['12h','24h']}/>
+        </div>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px',borderTop:`1px solid ${A.sep}`}}>
+          <span style={{fontSize:15,color:A.label1}}>Temperature</span>
+          <SegControl value={temp} onChange={setTemp} options={['°F','°C']}/>
+        </div>
+        <div style={{padding:'12px 16px',borderTop:`1px solid ${A.sep}`}}>
+          <Btn>Open Display Mode ↗</Btn>
+        </div>
+      </FormGroup>
+
+      <Modal open={codeModal} onClose={()=>setCodeModal(false)} title="Custom HTML Widget" width={640}>
+        <div style={{background:'#1C1C1E',borderRadius:A.r,overflow:'hidden',marginBottom:16}}>
+          <div style={{background:'#2C2C2E',padding:'10px 16px',display:'flex',gap:6,alignItems:'center'}}>
+            {['#FF5F57','#FEBC2E','#28C840'].map(c=><div key={c} style={{width:12,height:12,borderRadius:'50%',background:c}}/>)}
+            <span style={{marginLeft:8,fontSize:12,color:'rgba(255,255,255,0.25)',fontFamily:'monospace'}}>custom-widget.html</span>
+          </div>
+          <textarea value={codeVal} onChange={e=>setCodeVal(e.target.value)} rows={10} style={{width:'100%',background:'transparent',border:'none',outline:'none',color:'#98C379',fontFamily:'JetBrains Mono,monospace',fontSize:13,padding:'16px 20px',resize:'vertical',lineHeight:1.7}}/>
+        </div>
+        <div style={{display:'flex',gap:8}}>
+          <Btn onClick={()=>{setCodeModal(false);toastAdd('Widget saved');}}>Save</Btn>
+          <Btn variant="ghost" onClick={()=>setCodeModal(false)}>Cancel</Btn>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+/* ── Manage Shell ────────────────────────────────────────────────────── */
+function ManageMode({onDisplay,events,setEvents,chores,setChores,grocery,setGrocery,meals,setMeals,icsSources,setIcsSources}){
+  const [screen,setScreen]=useState('dashboard');
+  const {toasts,add:toastAdd}=useToast();
+
+  const nav=[
+    {id:'dashboard',label:'Dashboard',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="1" y="1" width="6" height="6" rx="2" fill="currentColor" opacity=".9"/><rect x="10" y="1" width="6" height="6" rx="2" fill="currentColor" opacity=".9"/><rect x="1" y="10" width="6" height="6" rx="2" fill="currentColor" opacity=".9"/><rect x="10" y="10" width="6" height="6" rx="2" fill="currentColor" opacity=".9"/></svg>},
+    {id:'calendar',label:'Calendar',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="1.5" y="3.5" width="14" height="12" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M1.5 7h14" stroke="currentColor" strokeWidth="1.5"/><path d="M5.5 1.5v3M11.5 1.5v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
+    {id:'chores',label:'Chores',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="2" y="1.5" width="13" height="14" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M5.5 7l2 2 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M5.5 11h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
+    {id:'grocery',label:'Grocery',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><path d="M2 4h13l-1.5 8H3.5L2 4z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><path d="M6 4l.5-2.5h4L11 4" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>},
+    {id:'inbox',label:'Inbox',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="1.5" y="3.5" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M1.5 6.5l7 4 7-4" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>,badge:3},
+    {id:'settings',label:'Settings',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><circle cx="8.5" cy="8.5" r="2.5" stroke="currentColor" strokeWidth="1.5"/><path d="M8.5 1v2M8.5 14v2M1 8.5h2M14 8.5h2M3.05 3.05l1.42 1.42M12.53 12.53l1.42 1.42M12.53 3.05l-1.42 1.42M4.47 12.53l-1.42 1.42" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
+  ];
+
+  const screens={
+    dashboard:<DashboardScreen events={events} chores={chores} grocery={grocery}/>,
+    calendar: <CalendarScreen events={events} setEvents={setEvents} icsSources={icsSources} toastAdd={toastAdd}/>,
+    chores:   <ChoresScreen chores={chores} setChores={setChores} toastAdd={toastAdd}/>,
+    grocery:  <GroceryScreen grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} toastAdd={toastAdd}/>,
+    inbox:    <InboxScreen toastAdd={toastAdd} events={events} setEvents={setEvents}/>,
+    settings: <SettingsScreen toastAdd={toastAdd} icsSources={icsSources} setIcsSources={setIcsSources}/>,
+  };
+
+  return(
+    <div style={{display:'flex',height:'100vh',overflow:'hidden',background:A.systemBg}}>
+      <div style={{width:236,flexShrink:0,background:'rgba(255,255,255,0.85)',backdropFilter:'blur(20px)',WebkitBackdropFilter:'blur(20px)',borderRight:`1px solid ${A.sep}`,display:'flex',flexDirection:'column'}}>
+        <div style={{padding:'20px 18px 16px'}}>
+          <div style={{fontSize:20,fontWeight:700,letterSpacing:'-.03em',color:A.label1}}>Hearth</div>
+          <div style={{fontSize:12,color:A.label5,marginTop:2}}>Family Dashboard</div>
+        </div>
+        <div style={{flex:1,padding:'4px 10px',overflowY:'auto'}}>
+          {nav.map(item=>{
+            const active=screen===item.id;
+            return(
+              <button key={item.id} onClick={()=>setScreen(item.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderRadius:A.rSm,border:'none',cursor:'pointer',width:'100%',background:active?A.blueFill:'transparent',color:active?A.blue:A.label3,fontSize:14,fontWeight:active?600:400,textAlign:'left',marginBottom:2,transition:'background .12s,color .12s',fontFamily:'Inter,sans-serif'}}
+                onMouseEnter={e=>{if(!active)e.currentTarget.style.background='rgba(0,0,0,0.04)';}}
+                onMouseLeave={e=>{if(!active)e.currentTarget.style.background='transparent';}}
+              >
+                <span style={{flexShrink:0,opacity:active?1:.7}}>{item.icon}</span>
+                <span style={{flex:1}}>{item.label}</span>
+                {item.badge&&!active&&<span style={{background:A.red,color:'#fff',fontSize:11,fontWeight:700,padding:'1px 6px',borderRadius:A.rPill}}>{item.badge}</span>}
+              </button>
+            );
+          })}
+        </div>
+        <div style={{padding:'12px 10px 16px',borderTop:`1px solid ${A.sep}`}}>
+          <button onClick={onDisplay} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',borderRadius:A.rSm,border:'none',cursor:'pointer',width:'100%',background:A.blueFill,color:A.blue,fontSize:13,fontWeight:600,textAlign:'left',marginBottom:10,fontFamily:'Inter,sans-serif',transition:'opacity .12s'}}
+            onMouseEnter={e=>e.currentTarget.style.opacity='.75'}
+            onMouseLeave={e=>e.currentTarget.style.opacity='1'}
+          >
+            <svg width="15" height="12" viewBox="0 0 15 12" fill="none"><rect x=".75" y=".75" width="13.5" height="9" rx="2" stroke={A.blue} strokeWidth="1.5"/><path d="M4 11.25h7" stroke={A.blue} strokeWidth="1.5" strokeLinecap="round"/><path d="M7.5 9.75v1.5" stroke={A.blue} strokeWidth="1.5" strokeLinecap="round"/></svg>
+            Display Mode
+          </button>
+          <div style={{fontSize:11,color:A.label5,fontFamily:'JetBrains Mono,monospace',lineHeight:1.8,paddingLeft:2}}>
+            <div>uptime: —</div><div>v0.1.0</div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+        <div style={{height:52,background:'rgba(255,255,255,0.85)',backdropFilter:'blur(20px)',WebkitBackdropFilter:'blur(20px)',borderBottom:`1px solid ${A.sep}`,display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 24px',flexShrink:0}}>
+          <span style={{fontSize:15,fontWeight:600,letterSpacing:'-.01em',color:A.label1}}>{nav.find(n=>n.id===screen)?.label}</span>
+          <div style={{display:'flex',alignItems:'center',gap:14}}>
+            <div style={{display:'flex',alignItems:'center',gap:6,fontSize:13,color:A.label4}}>
+              <div style={{width:7,height:7,borderRadius:'50%',background:A.green}}/>Google Calendar synced
+            </div>
+            <button onClick={()=>setScreen('settings')} style={{width:30,height:30,borderRadius:'50%',background:A.inputBg,border:'none',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',color:A.label3}}>
+              <svg width="15" height="15" viewBox="0 0 17 17" fill="none"><circle cx="8.5" cy="8.5" r="2.5" stroke="currentColor" strokeWidth="1.5"/><path d="M8.5 1v2M8.5 14v2M1 8.5h2M14 8.5h2M3.05 3.05l1.42 1.42M12.53 12.53l1.42 1.42M12.53 3.05l-1.42 1.42M4.47 12.53l-1.42 1.42" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+            </button>
+          </div>
+        </div>
+        <div key={screen} className="screen" style={{flex:1,overflowY:'auto',padding:screen==='calendar'?0:'28px 32px'}}>
+          {screens[screen]}
+        </div>
+      </div>
+      <ToastStack toasts={toasts}/>
+    </div>
+  );
+}
+
+/* ── App Root ─────────────────────────────────────────────────────────── */
+function App(){
+  const [mode,setMode]=useState('manage');
+  const [events,setEvents]=useState([]);
+  const [chores,setChores]=useState([]);
+  const [grocery,setGrocery]=useState([]);
+  const [meals,setMeals]=useState([]);
+  const [icsSources,setIcsSources]=useState([]);
+  const [loading,setLoading]=useState(true);
+
+  useEffect(()=>{
+    // Register service worker for push notifications
+    if('serviceWorker' in navigator){
+      navigator.serviceWorker.register('/sw.js').catch(()=>{});
+    }
+    // Load all data
+    Promise.all([
+      api.get('/api/events'),
+      api.get('/api/chores'),
+      api.get('/api/grocery'),
+      api.get('/api/meals'),
+      api.get('/api/ics/sources'),
+    ]).then(([ev,ch,gr,ml,ics])=>{
+      setEvents(ev);
+      setChores(ch);
+      setGrocery(gr);
+      setMeals(ml);
+      setIcsSources(ics);
+      setLoading(false);
+    }).catch(()=>setLoading(false));
+  },[]);
+
+  if(loading) return(
+    <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',background:A.systemBg,flexDirection:'column',gap:16}}>
+      <div style={{width:36,height:36,border:`3px solid ${A.sep}`,borderTop:`3px solid ${A.blue}`,borderRadius:'50%',animation:'spin 0.8s linear infinite'}}/>
+      <div style={{fontSize:15,color:A.label4,fontWeight:500}}>Loading Hearth…</div>
+    </div>
+  );
+
+  return mode==='display'
+    ?<DisplayMode onManage={()=>setMode('manage')} events={events} chores={chores} setChores={setChores} meals={meals}/>
+    :<ManageMode onDisplay={()=>setMode('display')} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources}/>;
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

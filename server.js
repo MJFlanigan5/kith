@@ -1,12 +1,17 @@
 'use strict';
 const express = require('express');
 const path    = require('path');
+const fs      = require('fs');
 const cron    = require('node-cron');
 const webpush = require('web-push');
 const db      = require('./db');
 
 const app  = express();
 const PORT = process.env.PORT || 7400;
+
+const PHOTOS_DIR = path.join(process.env.DATA_DIR || path.join(__dirname, 'data'), 'photos');
+fs.mkdirSync(PHOTOS_DIR, { recursive: true });
+app.use('/photos', express.static(PHOTOS_DIR));
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
@@ -128,14 +133,14 @@ app.get('/api/events', (req, res) => {
 });
 
 app.post('/api/events', (req, res) => {
-  const { title, date, time, duration, calendar, color, notes } = req.body;
+  const { title, date, time, duration, calendar, color, notes, member_id } = req.body;
   if (!title?.trim() || !date) return res.status(400).json({ error: 'title and date are required' });
   const calColors = { personal:'#007AFF', work:'#5856D6', family:'#32ADE6', hearth:'#34C759' };
   const col = color || calColors[calendar] || '#34C759';
   const r = db.prepare(
-    'INSERT INTO events (title,date,time,duration,calendar,color,notes) VALUES (?,?,?,?,?,?,?)'
-  ).run(title.trim(), date, time||'All day', duration||'1h', calendar||'hearth', col, notes||'');
-  res.json({ id: r.lastInsertRowid, title: title.trim(), date, time: time||'All day', calendar: calendar||'hearth', color: col });
+    'INSERT INTO events (title,date,time,duration,calendar,color,notes,member_id) VALUES (?,?,?,?,?,?,?,?)'
+  ).run(title.trim(), date, time||'All day', duration||'1h', calendar||'hearth', col, notes||'', member_id||null);
+  res.json({ id: r.lastInsertRowid, title: title.trim(), date, time: time||'All day', calendar: calendar||'hearth', color: col, member_id: member_id||null });
 });
 
 app.delete('/api/events/:id', (req, res) => {
@@ -349,6 +354,69 @@ cron.schedule('0 */6 * * *', async () => {
   for (const src of sources) {
     try { await syncICSSource(src); } catch (e) { /* skip */ }
   }
+});
+
+// ── Routes: Countdowns ───────────────────────────────────────────────────────
+app.get('/api/countdowns', (req, res) => {
+  res.json(db.prepare('SELECT * FROM countdowns ORDER BY date').all());
+});
+
+app.post('/api/countdowns', (req, res) => {
+  const { label, date, emoji = '🎉' } = req.body;
+  if (!label?.trim() || !date) return res.status(400).json({ error: 'label and date are required' });
+  const r = db.prepare('INSERT INTO countdowns (label,date,emoji) VALUES (?,?,?)').run(label.trim(), date, emoji);
+  res.json({ id: r.lastInsertRowid, label: label.trim(), date, emoji });
+});
+
+app.delete('/api/countdowns/:id', (req, res) => {
+  db.prepare('DELETE FROM countdowns WHERE id=?').run(Number(req.params.id));
+  res.json({ ok: true });
+});
+
+// ── Routes: Family Members ────────────────────────────────────────────────────
+app.get('/api/members', (req, res) => {
+  res.json(db.prepare('SELECT * FROM family_members ORDER BY created_at').all());
+});
+
+app.post('/api/members', (req, res) => {
+  const { name, color = '#007AFF', initials } = req.body;
+  if (!name?.trim()) return res.status(400).json({ error: 'name is required' });
+  const init = initials || name.trim().split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+  const r = db.prepare('INSERT INTO family_members (name,color,initials) VALUES (?,?,?)').run(name.trim(), color, init);
+  res.json({ id: r.lastInsertRowid, name: name.trim(), color, initials: init });
+});
+
+app.delete('/api/members/:id', (req, res) => {
+  db.prepare('DELETE FROM family_members WHERE id=?').run(Number(req.params.id));
+  res.json({ ok: true });
+});
+
+// ── Routes: Photos (screensaver) ──────────────────────────────────────────────
+app.get('/api/photos', (req, res) => {
+  res.json(db.prepare('SELECT * FROM photos ORDER BY created_at DESC').all());
+});
+
+app.post('/api/photos', (req, res) => {
+  const { filename, data } = req.body;
+  if (!filename || !data?.startsWith('data:image/')) return res.status(400).json({ error: 'filename and image data required' });
+  const ext = (filename.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z]/g, '') || 'jpg';
+  const safe = `${Date.now()}.${ext}`;
+  try {
+    fs.writeFileSync(path.join(PHOTOS_DIR, safe), Buffer.from(data.split(',')[1], 'base64'));
+    const r = db.prepare('INSERT INTO photos (filename) VALUES (?)').run(safe);
+    res.json({ id: r.lastInsertRowid, filename: safe });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/photos/:id', (req, res) => {
+  const p = db.prepare('SELECT * FROM photos WHERE id=?').get(Number(req.params.id));
+  if (p) {
+    try { fs.unlinkSync(path.join(PHOTOS_DIR, p.filename)); } catch {}
+    db.prepare('DELETE FROM photos WHERE id=?').run(Number(req.params.id));
+  }
+  res.json({ ok: true });
 });
 
 // ── SPA fallback ──────────────────────────────────────────────────────────────

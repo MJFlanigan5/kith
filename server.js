@@ -142,17 +142,19 @@ app.post('/api/events', (req, res) => {
   ).run(title.trim(), date, time||'All day', end_time||'', duration||'1h', calendar||'hearth', col, notes||'', member_id||null, recurring_rule||'');
   const seriesId = r.lastInsertRowid;
 
-  // Generate recurring occurrences for next 365 days
+  // Generate recurring occurrences
   const rule = recurring_rule || '';
-  if (rule && rule !== 'Does not repeat' && rule !== 'Annually') {
+  if (rule && rule !== 'Does not repeat') {
     const ins2 = db.prepare('INSERT INTO events (title,date,time,end_time,duration,calendar,color,notes,member_id,recurring_rule,source,external_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
     const cur = new Date(date + 'T12:00:00');
-    const limit = new Date(cur.getTime() + 365 * 86400000);
+    // Annual events get 5 years; all others get 365 days
+    const limit = new Date(cur.getTime() + (rule === 'Annually' ? 5 * 365 : 365) * 86400000);
     while (true) {
-      if (rule === 'Daily')        cur.setDate(cur.getDate() + 1);
-      else if (rule === 'Weekly')  cur.setDate(cur.getDate() + 7);
+      if (rule === 'Daily')          cur.setDate(cur.getDate() + 1);
+      else if (rule === 'Weekly')    cur.setDate(cur.getDate() + 7);
       else if (rule === 'Bi-weekly') cur.setDate(cur.getDate() + 14);
-      else if (rule === 'Monthly') cur.setMonth(cur.getMonth() + 1);
+      else if (rule === 'Monthly')   cur.setMonth(cur.getMonth() + 1);
+      else if (rule === 'Annually')  cur.setFullYear(cur.getFullYear() + 1);
       else if (rule === 'Weekdays') {
         cur.setDate(cur.getDate() + 1);
         while (cur.getDay() === 0 || cur.getDay() === 6) cur.setDate(cur.getDate() + 1);

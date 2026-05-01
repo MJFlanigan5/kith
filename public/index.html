@@ -71,6 +71,18 @@ const api={
   del:(path)=>fetch(path,{method:'DELETE'}).then(r=>r.json()),
 };
 
+/* ── Time formatting helper ─────────────────────────────────────────── */
+function fmtTime(t, fmt='12h'){
+  if(!t||t==='All day') return t;
+  if(fmt==='12h') return t; // stored as 12h already
+  const m=t.match(/^(\d+):(\d+)\s*(AM|PM)$/i);
+  if(!m) return t;
+  let [,h,min,ap]=m; h=parseInt(h);
+  if(ap.toUpperCase()==='PM'&&h!==12) h+=12;
+  if(ap.toUpperCase()==='AM'&&h===12) h=0;
+  return `${String(h).padStart(2,'0')}:${min}`;
+}
+
 /* ── Calendar color mapping ──────────────────────────────────────────── */
 const CAL_COLORS={personal:A.blue,work:A.indigo,family:A.teal,hearth:A.green};
 function calColor(cal,events){
@@ -450,7 +462,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                   {evs.map(ev=>(
                     <div key={ev.id} style={{background:ev.color+'12',borderRadius:10,padding:'9px 12px',marginBottom:5,borderLeft:`3px solid ${ev.color}`}}>
                       <div style={{fontSize:14,color:A.label1,fontWeight:600}}>{ev.title}</div>
-                      <div style={{fontSize:12,color:A.label4,fontVariantNumeric:'tabular-nums',marginTop:1}}>{ev.time}</div>
+                      <div style={{fontSize:12,color:A.label4,fontVariantNumeric:'tabular-nums',marginTop:1}}>{fmtTime(ev.time,clockFormat)}</div>
                     </div>
                   ))}
                 </div>
@@ -562,7 +574,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
 }
 
 /* ── Dashboard ───────────────────────────────────────────────────────── */
-function DashboardScreen({events,chores,grocery,countdowns}){
+function DashboardScreen({events,chores,grocery,countdowns,clockFormat='12h'}){
   const now=useClock();
   const h=now.getHours();
   const greeting=h<12?'Good morning':h<17?'Good afternoon':'Good evening';
@@ -570,12 +582,13 @@ function DashboardScreen({events,chores,grocery,countdowns}){
   const todayEvs=events.filter(e=>e.date===todayStr);
   const dueChores=chores.filter(c=>(c.status==='due'||c.status==='overdue')&&!c.done);
   const groceryRemaining=(grocery||[]).filter(g=>!g.checked).length;
+  const clockOpts=clockFormat==='24h'?{hour:'2-digit',minute:'2-digit',hour12:false}:{hour:'numeric',minute:'2-digit'};
 
   return(
     <div>
       <div style={{marginBottom:28}}>
         <h1 style={{fontSize:30,fontWeight:700,letterSpacing:'-.04em',color:A.label1}}>{greeting}, Mike</h1>
-        <p style={{color:A.label4,fontSize:15,marginTop:5,letterSpacing:'-.01em'}}>{DAYS[now.getDay()]}, {MONTHS[now.getMonth()]} {now.getDate()} · {now.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}</p>
+        <p style={{color:A.label4,fontSize:15,marginTop:5,letterSpacing:'-.01em'}}>{DAYS[now.getDay()]}, {MONTHS[now.getMonth()]} {now.getDate()} · {now.toLocaleTimeString('en-US',clockOpts)}</p>
       </div>
       <Card style={{marginBottom:20,padding:0,overflow:'hidden'}}>
         <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)'}}>
@@ -614,7 +627,7 @@ function DashboardScreen({events,chores,grocery,countdowns}){
               <div style={{width:4,height:40,borderRadius:2,background:ev.color,flexShrink:0}}/>
               <div>
                 <div style={{fontSize:14,fontWeight:600,color:A.label1}}>{ev.title}</div>
-                <div style={{fontSize:12,color:A.label4,fontVariantNumeric:'tabular-nums'}}>{ev.time}</div>
+                <div style={{fontSize:12,color:A.label4,fontVariantNumeric:'tabular-nums'}}>{fmtTime(ev.time,clockFormat)}</div>
               </div>
             </div>
           ))}
@@ -637,7 +650,7 @@ function DashboardScreen({events,chores,grocery,countdowns}){
 }
 
 /* ── Calendar ────────────────────────────────────────────────────────── */
-function CalendarScreen({events,setEvents,icsSources,toastAdd,members}){
+function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockFormat='12h'}){
   const [drawerOpen,setDrawerOpen]=useState(false);
   const [editEvent,setEditEvent]=useState(null);
   const [form,setForm]=useState({title:'',date:localDate(),time:'',endTime:'',duration:'1h',cal:'hearth',notes:'',memberId:'',recurring:''});
@@ -772,7 +785,7 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members}){
                     {evs.map(ev=>(
                       <div key={ev.id} onClick={()=>setSelectedEvent(ev)} style={{background:ev.color+'18',borderLeft:`2.5px solid ${ev.color}`,borderRadius:'0 7px 7px 0',padding:'5px 8px',fontSize:12,color:ev.color,fontWeight:600,cursor:'pointer',marginBottom:2}}>
                         {ev.title}
-                        <div style={{fontSize:10,opacity:.7,fontVariantNumeric:'tabular-nums'}}>{ev.time}{ev.end_time?` – ${ev.end_time}`:''}</div>
+                        <div style={{fontSize:10,opacity:.7,fontVariantNumeric:'tabular-nums'}}>{fmtTime(ev.time,clockFormat)}{ev.end_time?` – ${fmtTime(ev.end_time,clockFormat)}`:''}</div>
                       </div>
                     ))}
                   </div>
@@ -836,7 +849,7 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members}){
                   >
                     <div style={{flex:1}}>
                       <div style={{fontSize:14,fontWeight:600,color:A.label1}}>{ev.title}</div>
-                      <div style={{fontSize:12,color:A.label4,fontVariantNumeric:'tabular-nums',marginTop:2}}>{ev.time==='All day'?'All day':`${ev.time}${ev.end_time?` – ${ev.end_time}`:''}`}</div>
+                      <div style={{fontSize:12,color:A.label4,fontVariantNumeric:'tabular-nums',marginTop:2}}>{ev.time==='All day'?'All day':`${fmtTime(ev.time,clockFormat)}${ev.end_time?` – ${fmtTime(ev.end_time,clockFormat)}`:''}`}</div>
                       {ev.recurring_rule&&<div style={{fontSize:11,color:A.purple,marginTop:2}}>↻ {ev.recurring_rule}</div>}
                     </div>
                     <div style={{width:10,height:10,borderRadius:3,background:ev.color,flexShrink:0}}/>
@@ -907,7 +920,7 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members}){
             <div style={{fontSize:19,fontWeight:700,color:A.label1,marginBottom:10,letterSpacing:'-.01em'}}>{selectedEvent.title}</div>
             <div style={{fontSize:14,color:A.label3,marginBottom:4}}>{selectedEvent.date}</div>
             <div style={{fontSize:14,color:A.label3,fontVariantNumeric:'tabular-nums',marginBottom:selectedEvent.recurring_rule||selectedEvent.notes?12:0}}>
-              {selectedEvent.time==='All day'?'All day':`${selectedEvent.time}${selectedEvent.end_time?` – ${selectedEvent.end_time}`:''}`}
+              {selectedEvent.time==='All day'?'All day':`${fmtTime(selectedEvent.time,clockFormat)}${selectedEvent.end_time?` – ${fmtTime(selectedEvent.end_time,clockFormat)}`:''}`}
             </div>
             {selectedEvent.recurring_rule&&<div style={{fontSize:13,color:A.purple,marginBottom:8,fontWeight:500}}>↻ {selectedEvent.recurring_rule}</div>}
             {selectedEvent.notes&&<div style={{fontSize:14,color:A.label2,background:A.systemBg,borderRadius:A.rXs,padding:'10px 12px',marginBottom:4}}>{selectedEvent.notes}</div>}
@@ -1310,16 +1323,17 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,toastAdd}){
 }
 
 /* ── Settings ────────────────────────────────────────────────────────── */
-function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setPhotos}){
+function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setPhotos,clockFormat,setClockFormat}){
   const [codeModal,setCodeModal]=useState(false);
   const [codeVal,setCodeVal]=useState(`<div style="font-family:sans-serif;padding:16px">
   <div style="color:#34C759;font-weight:700;font-size:18px">All Systems Clear</div>
   <div style="color:#636366;margin-top:8px;font-size:14px">12 devices online · 0 alerts</div>
 </div>`);
   const [widgets,setWidgets]=useState({Calendar:true,Chores:true,Weather:true,Grocery:true,Meals:true,'Custom HTML':true});
-  const [clock,setClock]=useState('12h');
   const [temp,setTemp]=useState('°F');
   const [refresh,setRefresh]=useState('1min');
+
+  const saveSetting=(key,value)=>api.put('/api/settings',{[key]:value});
   const [pushStatus,setPushStatus]=useState('idle'); // idle | requesting | subscribed | error
   const [icsForm,setIcsForm]=useState({name:'',url:'',color:'#3B82F6'});
   const [icsLoading,setIcsLoading]=useState(false);
@@ -1484,7 +1498,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
         </div>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px',borderTop:`1px solid ${A.sep}`}}>
           <span style={{fontSize:15,color:A.label1}}>Clock</span>
-          <SegControl value={clock} onChange={setClock} options={['12h','24h']}/>
+          <SegControl value={clockFormat} onChange={v=>{setClockFormat(v);saveSetting('clock_format',v);}} options={['12h','24h']}/>
         </div>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px',borderTop:`1px solid ${A.sep}`}}>
           <span style={{fontSize:15,color:A.label1}}>Temperature</span>
@@ -1545,7 +1559,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
 }
 
 /* ── Manage Shell ────────────────────────────────────────────────────── */
-function ManageMode({onDisplay,events,setEvents,chores,setChores,grocery,setGrocery,meals,setMeals,icsSources,setIcsSources,inboxCount,setInboxCount,countdowns,setCountdowns,members,setMembers,photos,setPhotos}){
+function ManageMode({onDisplay,events,setEvents,chores,setChores,grocery,setGrocery,meals,setMeals,icsSources,setIcsSources,inboxCount,setInboxCount,countdowns,setCountdowns,members,setMembers,photos,setPhotos,clockFormat,setClockFormat}){
   const [screen,setScreen]=useState('dashboard');
   const {toasts,add:toastAdd}=useToast();
 
@@ -1561,14 +1575,14 @@ function ManageMode({onDisplay,events,setEvents,chores,setChores,grocery,setGroc
   ];
 
   const screens={
-    dashboard:  <DashboardScreen events={events} chores={chores} grocery={grocery} countdowns={countdowns}/>,
-    calendar:   <CalendarScreen events={events} setEvents={setEvents} icsSources={icsSources} toastAdd={toastAdd} members={members}/>,
+    dashboard:  <DashboardScreen events={events} chores={chores} grocery={grocery} countdowns={countdowns} clockFormat={clockFormat}/>,
+    calendar:   <CalendarScreen events={events} setEvents={setEvents} icsSources={icsSources} toastAdd={toastAdd} members={members} clockFormat={clockFormat}/>,
     chores:     <ChoresScreen chores={chores} setChores={setChores} toastAdd={toastAdd}/>,
     grocery:    <GroceryScreen grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} toastAdd={toastAdd}/>,
     countdowns: <CountdownsScreen countdowns={countdowns} setCountdowns={setCountdowns} toastAdd={toastAdd}/>,
     family:     <FamilyScreen members={members} setMembers={setMembers} toastAdd={toastAdd}/>,
     inbox:      <InboxScreen toastAdd={toastAdd} events={events} setEvents={setEvents} setInboxCount={setInboxCount}/>,
-    settings:   <SettingsScreen toastAdd={toastAdd} icsSources={icsSources} setIcsSources={setIcsSources} onDisplay={onDisplay} photos={photos} setPhotos={setPhotos}/>,
+    settings:   <SettingsScreen toastAdd={toastAdd} icsSources={icsSources} setIcsSources={setIcsSources} onDisplay={onDisplay} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat}/>,
   };
 
   return(
@@ -1642,6 +1656,7 @@ function App(){
   const [countdowns,setCountdowns]=useState([]);
   const [members,setMembers]=useState([]);
   const [photos,setPhotos]=useState([]);
+  const [clockFormat,setClockFormat]=useState('12h');
   const [loading,setLoading]=useState(true);
 
   useEffect(()=>{
@@ -1658,7 +1673,8 @@ function App(){
       api.get('/api/countdowns'),
       api.get('/api/members'),
       api.get('/api/photos'),
-    ]).then(([ev,ch,gr,ml,ics,inb,cd,mb,ph])=>{
+      api.get('/api/settings'),
+    ]).then(([ev,ch,gr,ml,ics,inb,cd,mb,ph,st])=>{
       setEvents(ev);
       setChores(ch);
       setGrocery(gr);
@@ -1668,6 +1684,7 @@ function App(){
       setCountdowns(cd);
       setMembers(mb);
       setPhotos(ph);
+      if(st.clock_format) setClockFormat(st.clock_format);
       setLoading(false);
     }).catch(()=>setLoading(false));
   },[]);
@@ -1680,8 +1697,8 @@ function App(){
   );
 
   return mode==='display'
-    ?<DisplayMode onManage={()=>setMode('manage')} events={events} chores={chores} setChores={setChores} meals={meals} grocery={grocery} countdowns={countdowns} photos={photos}/>
-    :<ManageMode onDisplay={()=>setMode('display')} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources} inboxCount={inboxCount} setInboxCount={setInboxCount} countdowns={countdowns} setCountdowns={setCountdowns} members={members} setMembers={setMembers} photos={photos} setPhotos={setPhotos}/>;
+    ?<DisplayMode onManage={()=>setMode('manage')} events={events} chores={chores} setChores={setChores} meals={meals} grocery={grocery} countdowns={countdowns} photos={photos} clockFormat={clockFormat}/>
+    :<ManageMode onDisplay={()=>setMode('display')} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources} inboxCount={inboxCount} setInboxCount={setInboxCount} countdowns={countdowns} setCountdowns={setCountdowns} members={members} setMembers={setMembers} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat}/>;
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);

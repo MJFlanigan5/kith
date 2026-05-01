@@ -631,51 +631,216 @@ function DashboardScreen({events,chores,grocery,countdowns}){
 /* ── Calendar ────────────────────────────────────────────────────────── */
 function CalendarScreen({events,setEvents,icsSources,toastAdd,members}){
   const [drawerOpen,setDrawerOpen]=useState(false);
-  const [form,setForm]=useState({title:'',date:localDate(),time:'',duration:'1h',cal:'hearth',notes:'',memberId:''});
+  const [editEvent,setEditEvent]=useState(null);
+  const [form,setForm]=useState({title:'',date:localDate(),time:'',endTime:'',duration:'1h',cal:'hearth',notes:'',memberId:'',recurring:''});
   const [calFilters,setCalFilters]=useState({personal:true,work:true,family:true,hearth:true});
+  const [calView,setCalView]=useState('week');
+  const [weekOffset,setWeekOffset]=useState(0);
+  const [monthOffset,setMonthOffset]=useState(0);
+  const [selectedEvent,setSelectedEvent]=useState(null);
 
   const knownCals={personal:A.blue,work:A.indigo,family:A.teal,hearth:A.green};
-  // Build dynamic calendar list from events + ICS sources
   const calMap={...knownCals};
   icsSources.forEach(s=>{calMap[`ics:${s.name}`]=s.color;});
-
   useEffect(()=>{
-    setCalFilters(prev=>{
-      const next={...prev};
-      Object.keys(calMap).forEach(k=>{if(!(k in next))next[k]=true;});
-      return next;
-    });
+    setCalFilters(prev=>{const next={...prev};Object.keys(calMap).forEach(k=>{if(!(k in next))next[k]=true;});return next;});
   },[icsSources]);
-
   const calLabels={personal:'Personal',work:'Work',family:'Family',hearth:'Hearth'};
   icsSources.forEach(s=>{calLabels[`ics:${s.name}`]=s.name;});
 
-  const weekDays=Array.from({length:7},(_,i)=>{
-    const d=new Date();
-    const start=new Date(d); start.setDate(d.getDate()-d.getDay()+i);
-    return{
-      label:DAYS[start.getDay()].slice(0,3),
-      num:String(start.getDate()),
-      date:localDate(start),
-      today:localDate(start)===localDate(),
-    };
-  });
-  const times=['8 AM','9 AM','10 AM','11 AM','12 PM','1 PM','2 PM','3 PM','4 PM','5 PM','6 PM','7 PM'];
+  const weekStart=useMemo(()=>{
+    const d=new Date(); d.setDate(d.getDate()-d.getDay()+weekOffset*7); d.setHours(0,0,0,0); return d;
+  },[weekOffset]);
+  const weekDays=useMemo(()=>Array.from({length:7},(_,i)=>{
+    const d=new Date(weekStart); d.setDate(weekStart.getDate()+i);
+    return{label:DAYS[d.getDay()].slice(0,3),num:String(d.getDate()),date:localDate(d),today:localDate(d)===localDate()};
+  }),[weekStart]);
+  const refDate=useMemo(()=>{const d=new Date();d.setMonth(d.getMonth()+monthOffset);return d;},[monthOffset]);
+  const mYear=refDate.getFullYear(),mMonth=refDate.getMonth();
+  const firstDayOfMonth=new Date(mYear,mMonth,1).getDay();
+  const daysInMonth=new Date(mYear,mMonth+1,0).getDate();
+  const monthCells=[...Array(firstDayOfMonth).fill(null),...Array.from({length:daysInMonth},(_,i)=>i+1)];
+  const miniFirstDay=new Date(new Date().getFullYear(),new Date().getMonth(),1).getDay();
+  const miniDIM=new Date(new Date().getFullYear(),new Date().getMonth()+1,0).getDate();
+  const miniCal=[...Array(miniFirstDay).fill(null),...Array.from({length:miniDIM},(_,i)=>i+1)];
+  const filteredEvents=events.filter(e=>calFilters[e.calendar]!==false);
 
+  const navBtnStyle={background:A.inputBg,border:'none',borderRadius:A.rXs,color:A.label2,padding:'5px 11px',fontSize:16,cursor:'pointer',fontFamily:'Inter,sans-serif'};
+  const goBack=()=>calView==='month'?setMonthOffset(p=>p-1):setWeekOffset(p=>p-1);
+  const goFwd=()=>calView==='month'?setMonthOffset(p=>p+1):setWeekOffset(p=>p+1);
+  const goToday=()=>{setWeekOffset(0);setMonthOffset(0);};
+  const headerLabel=calView==='month'?`${MONTHS[mMonth]} ${mYear}`:`${MONTHS[weekStart.getMonth()]} ${weekStart.getFullYear()}`;
+
+  const blankForm={title:'',date:localDate(),time:'',endTime:'',duration:'1h',cal:'hearth',notes:'',memberId:'',recurring:''};
+  const openNew=()=>{setEditEvent(null);setForm(blankForm);setDrawerOpen(true);};
+  const openEdit=ev=>{
+    setEditEvent(ev);
+    setForm({title:ev.title,date:ev.date,time:ev.time==='All day'?'':ev.time,endTime:ev.end_time||'',duration:ev.duration||'1h',cal:ev.calendar,notes:ev.notes||'',memberId:ev.member_id?String(ev.member_id):'',recurring:ev.recurring_rule||''});
+    setDrawerOpen(true); setSelectedEvent(null);
+  };
   const saveEvent=async()=>{
     if(!form.title.trim()) return;
     const member=form.memberId?members?.find(m=>m.id===Number(form.memberId)):null;
     const color=member?.color||calMap[form.cal]||A.green;
-    const newEv=await api.post('/api/events',{...form,calendar:form.cal,color,member_id:form.memberId||null});
-    setEvents(p=>[...p,newEv]);
-    toastAdd('Event saved');
+    const payload={title:form.title,date:form.date,time:form.time||'All day',end_time:form.endTime,duration:form.duration,calendar:form.cal,color,notes:form.notes,member_id:form.memberId||null,recurring_rule:form.recurring};
+    if(editEvent){
+      const updated=await api.put(`/api/events/${editEvent.id}`,payload);
+      setEvents(p=>p.map(e=>e.id===editEvent.id?updated:e));
+      toastAdd('Event updated');
+    } else {
+      await api.post('/api/events',payload);
+      api.get('/api/events').then(setEvents);
+      toastAdd('Event saved');
+    }
     setDrawerOpen(false);
-    setForm({title:'',date:localDate(),time:'',duration:'1h',cal:'hearth',notes:'',memberId:''});
+  };
+  const deleteEvent=async id=>{
+    await api.del(`/api/events/${id}`);
+    setEvents(p=>p.filter(e=>e.id!==id));
+    setSelectedEvent(null);
+    toastAdd('Event deleted','blue');
   };
 
-  const firstDay=new Date(new Date().getFullYear(),new Date().getMonth(),1).getDay();
-  const daysInMonth=new Date(new Date().getFullYear(),new Date().getMonth()+1,0).getDate();
-  const miniCal=[...Array(firstDay).fill(null),...Array.from({length:daysInMonth},(_,i)=>i+1)];
+  const sharedHeader=(
+    <div style={{padding:'10px 20px',borderBottom:`1px solid ${A.sep}`,display:'flex',alignItems:'center',justifyContent:'space-between',background:A.cardBg,flexShrink:0}}>
+      <div style={{display:'flex',alignItems:'center',gap:6}}>
+        <button onClick={goBack} style={navBtnStyle}>‹</button>
+        <button onClick={goToday} style={{...navBtnStyle,fontSize:12,padding:'5px 10px'}}>Today</button>
+        <button onClick={goFwd} style={navBtnStyle}>›</button>
+        <span style={{fontSize:14,fontWeight:600,marginLeft:8,color:A.label1}}>{headerLabel}</span>
+      </div>
+      <div style={{display:'flex',gap:6,alignItems:'center'}}>
+        <div style={{display:'flex',background:A.inputBg,borderRadius:A.rXs,padding:2,gap:1}}>
+          {['week','month','agenda'].map(v=>(
+            <button key={v} onClick={()=>setCalView(v)} style={{padding:'4px 10px',border:'none',borderRadius:6,background:calView===v?A.cardBg:'transparent',color:calView===v?A.label1:A.label3,fontSize:12,fontWeight:calView===v?600:400,cursor:'pointer',fontFamily:'Inter,sans-serif',boxShadow:calView===v?A.shadowSm:'none',transition:'all .15s',textTransform:'capitalize'}}>{v}</button>
+          ))}
+        </div>
+        <Btn onClick={openNew}>+ New Event</Btn>
+      </div>
+    </div>
+  );
+
+  const times=['7 AM','8 AM','9 AM','10 AM','11 AM','12 PM','1 PM','2 PM','3 PM','4 PM','5 PM','6 PM','7 PM','8 PM'];
+
+  const WeekView=()=>{
+    const allDayEvs=weekDays.flatMap(d=>filteredEvents.filter(e=>e.date===d.date&&e.time==='All day'));
+    return(
+      <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+        {sharedHeader}
+        {allDayEvs.length>0&&(
+          <div style={{display:'grid',gridTemplateColumns:'52px repeat(7,1fr)',borderBottom:`1px solid ${A.sep}`,background:A.cardBg,flexShrink:0}}>
+            <div style={{padding:'5px 8px',textAlign:'right'}}><span style={{fontSize:10,color:A.label5,fontFamily:'JetBrains Mono,monospace'}}>All day</span></div>
+            {weekDays.map(d=>(
+              <div key={d.date} style={{padding:'3px 4px',borderLeft:`1px solid ${A.sep}`,background:d.today?'rgba(0,122,255,0.02)':'transparent'}}>
+                {filteredEvents.filter(e=>e.date===d.date&&e.time==='All day').map(ev=>(
+                  <div key={ev.id} onClick={()=>setSelectedEvent(ev)} style={{background:ev.color+'22',borderLeft:`2.5px solid ${ev.color}`,borderRadius:'0 6px 6px 0',padding:'3px 7px',fontSize:11,color:ev.color,fontWeight:600,cursor:'pointer',marginBottom:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{ev.title}</div>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
+        <div style={{display:'grid',gridTemplateColumns:'52px repeat(7,1fr)',position:'sticky',top:0,background:A.cardBg,borderBottom:`1px solid ${A.sep}`,zIndex:10,flexShrink:0}}>
+          <div/>
+          {weekDays.map(d=>(
+            <div key={d.date} style={{padding:'10px 4px',textAlign:'center',background:d.today?A.blueFill:'transparent'}}>
+              <div style={{fontSize:11,color:d.today?A.blue:A.label4,fontWeight:700,textTransform:'uppercase',letterSpacing:'.05em'}}>{d.label}</div>
+              <div style={{width:32,height:32,borderRadius:'50%',margin:'3px auto 0',display:'flex',alignItems:'center',justifyContent:'center',background:d.today?A.blue:'transparent',fontSize:18,fontWeight:600,color:d.today?'#fff':A.label1}}>{d.num}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{flex:1,overflowY:'auto'}}>
+          {times.map(t=>(
+            <div key={t} style={{display:'grid',gridTemplateColumns:'52px repeat(7,1fr)',borderBottom:`1px solid ${A.sep}`}}>
+              <div style={{padding:'0 8px',paddingTop:6,textAlign:'right'}}><span style={{fontSize:11,color:A.label5,fontFamily:'JetBrains Mono,monospace'}}>{t}</span></div>
+              {weekDays.map(d=>{
+                const slotH=parseInt(t)+(t.includes('PM')&&!t.startsWith('12')?12:0);
+                const evs=filteredEvents.filter(e=>{
+                  if(e.date!==d.date||e.time==='All day') return false;
+                  const eh=parseInt(e.time),epm=e.time.includes('PM')&&!e.time.startsWith('12');
+                  return(eh+(epm?12:0))===slotH;
+                });
+                return(
+                  <div key={d.date} style={{minHeight:54,padding:'3px 4px',background:d.today?'rgba(0,122,255,0.02)':'transparent',borderLeft:`1px solid ${A.sep}`}}>
+                    {evs.map(ev=>(
+                      <div key={ev.id} onClick={()=>setSelectedEvent(ev)} style={{background:ev.color+'18',borderLeft:`2.5px solid ${ev.color}`,borderRadius:'0 7px 7px 0',padding:'5px 8px',fontSize:12,color:ev.color,fontWeight:600,cursor:'pointer',marginBottom:2}}>
+                        {ev.title}
+                        <div style={{fontSize:10,opacity:.7,fontFamily:'monospace',fontWeight:400}}>{ev.time}{ev.end_time?` – ${ev.end_time}`:''}</div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const MonthView=()=>(
+    <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+      {sharedHeader}
+      <div style={{flex:1,overflowY:'auto',padding:10}}>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:1,background:A.sep}}>
+          {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>(
+            <div key={d} style={{background:A.cardBg,padding:'6px 4px',textAlign:'center',fontSize:11,fontWeight:700,color:A.label4,textTransform:'uppercase',letterSpacing:'.04em'}}>{d}</div>
+          ))}
+          {monthCells.map((d,i)=>{
+            if(!d) return <div key={i} style={{background:A.systemBg,minHeight:76}}/>;
+            const dateStr=`${mYear}-${String(mMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+            const dayEvs=filteredEvents.filter(e=>e.date===dateStr);
+            const isToday=dateStr===localDate();
+            return(
+              <div key={i} style={{background:A.cardBg,minHeight:76,padding:'4px 5px'}}>
+                <div style={{width:24,height:24,borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',marginBottom:3,background:isToday?A.blue:'transparent',fontSize:13,fontWeight:isToday?700:400,color:isToday?'#fff':A.label1}}>{d}</div>
+                {dayEvs.slice(0,3).map(ev=>(
+                  <div key={ev.id} onClick={()=>setSelectedEvent(ev)} style={{background:ev.color+'18',borderLeft:`2px solid ${ev.color}`,borderRadius:'0 4px 4px 0',padding:'2px 5px',fontSize:11,color:ev.color,fontWeight:600,marginBottom:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',cursor:'pointer'}}>{ev.title}</div>
+                ))}
+                {dayEvs.length>3&&<div style={{fontSize:10,color:A.label5,paddingLeft:4}}>+{dayEvs.length-3} more</div>}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+
+  const AgendaView=()=>{
+    const upcoming=filteredEvents.filter(e=>e.date>=localDate()).sort((a,b)=>a.date.localeCompare(b.date)||a.time.localeCompare(b.time));
+    const byDate={};
+    upcoming.forEach(e=>{if(!byDate[e.date])byDate[e.date]=[];byDate[e.date].push(e);});
+    return(
+      <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+        {sharedHeader}
+        <div style={{flex:1,overflowY:'auto',padding:'16px 20px'}}>
+          {Object.keys(byDate).length===0&&<div style={{color:A.label4,fontSize:14,fontStyle:'italic',textAlign:'center',paddingTop:32}}>No upcoming events</div>}
+          {Object.entries(byDate).map(([date,evs])=>{
+            const d=new Date(date+'T12:00:00');
+            const tom=localDate(new Date(Date.now()+86400000));
+            const label=date===localDate()?'Today':date===tom?'Tomorrow':`${DAYS[d.getDay()]}, ${MONTHS[d.getMonth()]} ${d.getDate()}`;
+            return(
+              <div key={date} style={{marginBottom:20}}>
+                <div style={{fontSize:12,fontWeight:700,color:A.label4,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:8}}>{label}</div>
+                {evs.map(ev=>(
+                  <div key={ev.id} onClick={()=>setSelectedEvent(ev)} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 16px',background:A.cardBg,borderRadius:A.rSm,marginBottom:6,cursor:'pointer',boxShadow:A.shadowSm,borderLeft:`3px solid ${ev.color}`}}
+                    onMouseEnter={e=>e.currentTarget.style.background=A.systemBg}
+                    onMouseLeave={e=>e.currentTarget.style.background=A.cardBg}
+                  >
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:14,fontWeight:600,color:A.label1}}>{ev.title}</div>
+                      <div style={{fontSize:12,color:A.label4,fontFamily:'JetBrains Mono,monospace',marginTop:2}}>{ev.time==='All day'?'All day':`${ev.time}${ev.end_time?` – ${ev.end_time}`:''}`}</div>
+                      {ev.recurring_rule&&<div style={{fontSize:11,color:A.purple,marginTop:2}}>↻ {ev.recurring_rule}</div>}
+                    </div>
+                    <div style={{width:10,height:10,borderRadius:3,background:ev.color,flexShrink:0}}/>
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
 
   return(
     <div style={{display:'flex',gap:0,height:'100%'}}>
@@ -715,55 +880,59 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members}){
         </div>
       </div>
 
-      {/* Week view */}
+      {/* Main view area */}
       <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
-        <div style={{padding:'14px 20px',borderBottom:`1px solid ${A.sep}`,display:'flex',alignItems:'center',justifyContent:'space-between',background:A.cardBg,flexShrink:0}}>
-          <span style={{fontSize:15,fontWeight:600,letterSpacing:'-.01em'}}>This Week</span>
-          <Btn onClick={()=>setDrawerOpen(true)}>+ New Event</Btn>
-        </div>
-        <div style={{flex:1,overflowY:'auto',overflowX:'hidden'}}>
-          <div style={{display:'grid',gridTemplateColumns:'52px repeat(7,1fr)',position:'sticky',top:0,background:A.cardBg,borderBottom:`1px solid ${A.sep}`,zIndex:10}}>
-            <div/>
-            {weekDays.map(d=>(
-              <div key={d.date} style={{padding:'10px 4px',textAlign:'center',background:d.today?A.blueFill:'transparent'}}>
-                <div style={{fontSize:11,color:d.today?A.blue:A.label4,fontWeight:700,textTransform:'uppercase',letterSpacing:'.05em'}}>{d.label}</div>
-                <div style={{width:32,height:32,borderRadius:'50%',margin:'3px auto 0',display:'flex',alignItems:'center',justifyContent:'center',background:d.today?A.blue:'transparent',fontSize:18,fontWeight:600,color:d.today?'#fff':A.label1}}>{d.num}</div>
-              </div>
-            ))}
-          </div>
-          {times.map(t=>(
-            <div key={t} style={{display:'grid',gridTemplateColumns:'52px repeat(7,1fr)',borderBottom:`1px solid ${A.sep}`}}>
-              <div style={{padding:'0 8px',paddingTop:6,textAlign:'right'}}>
-                <span style={{fontSize:11,color:A.label5,fontFamily:'JetBrains Mono,monospace'}}>{t}</span>
-              </div>
-              {weekDays.map(d=>{
-                const slotH=parseInt(t)+(t.includes('PM')&&!t.startsWith('12')?12:0);
-                const evs=events.filter(e=>{
-                  if(e.date!==d.date||calFilters[e.calendar]===false) return false;
-                  const eh=parseInt(e.time),epm=e.time.includes('PM')&&!e.time.startsWith('12');
-                  return(eh+(epm?12:0))===slotH;
-                });
-                return(
-                  <div key={d.date} style={{minHeight:54,padding:'3px 4px',background:d.today?'rgba(0,122,255,0.02)':'transparent',borderLeft:`1px solid ${A.sep}`}}>
-                    {evs.map(ev=>(
-                      <div key={ev.id} style={{background:ev.color+'18',borderLeft:`2.5px solid ${ev.color}`,borderRadius:'0 7px 7px 0',padding:'5px 8px',fontSize:12,color:ev.color,fontWeight:600,cursor:'pointer'}}>
-                        {ev.title}
-                        <div style={{fontSize:10,opacity:.7,fontFamily:'monospace',fontWeight:400}}>{ev.time}</div>
-                      </div>
-                    ))}
-                  </div>
-                );
-              })}
-            </div>
-          ))}
-        </div>
+        {calView==='week'&&<WeekView/>}
+        {calView==='month'&&<MonthView/>}
+        {calView==='agenda'&&<AgendaView/>}
       </div>
 
-      <Drawer open={drawerOpen} onClose={()=>setDrawerOpen(false)} title="New Event">
+      {/* Event detail modal */}
+      {selectedEvent&&(
+        <Modal open={!!selectedEvent} onClose={()=>setSelectedEvent(null)} title="" width={460}>
+          <div style={{marginBottom:16}}>
+            <div style={{height:4,borderRadius:'2px 2px 0 0',background:selectedEvent.color,margin:'-20px -24px 20px'}}/>
+            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+              <div style={{width:10,height:10,borderRadius:3,background:calMap[selectedEvent.calendar]||A.blue,flexShrink:0}}/>
+              <span style={{fontSize:13,color:A.label4,fontWeight:500}}>{calLabels[selectedEvent.calendar]||selectedEvent.calendar}</span>
+            </div>
+            <div style={{fontSize:19,fontWeight:700,color:A.label1,marginBottom:10,letterSpacing:'-.01em'}}>{selectedEvent.title}</div>
+            <div style={{fontSize:14,color:A.label3,marginBottom:4}}>{selectedEvent.date}</div>
+            <div style={{fontSize:14,color:A.label3,fontFamily:'JetBrains Mono,monospace',marginBottom:selectedEvent.recurring_rule||selectedEvent.notes?12:0}}>
+              {selectedEvent.time==='All day'?'All day':`${selectedEvent.time}${selectedEvent.end_time?` – ${selectedEvent.end_time}`:''}`}
+            </div>
+            {selectedEvent.recurring_rule&&<div style={{fontSize:13,color:A.purple,marginBottom:8,fontWeight:500}}>↻ {selectedEvent.recurring_rule}</div>}
+            {selectedEvent.notes&&<div style={{fontSize:14,color:A.label2,background:A.systemBg,borderRadius:A.rXs,padding:'10px 12px',marginBottom:4}}>{selectedEvent.notes}</div>}
+          </div>
+          <div style={{display:'flex',gap:8,paddingTop:16,borderTop:`1px solid ${A.sep}`}}>
+            <Btn sm onClick={()=>openEdit(selectedEvent)} full>Edit</Btn>
+            <Btn sm variant="red" onClick={()=>deleteEvent(selectedEvent.id)} full>Delete</Btn>
+          </div>
+        </Modal>
+      )}
+
+      {/* Add / Edit event drawer */}
+      <Drawer open={drawerOpen} onClose={()=>setDrawerOpen(false)} title={editEvent?'Edit Event':'New Event'}>
         <FormGroup label="Event Details">
           <div style={{padding:'12px 16px'}}><Inp value={form.title} onChange={e=>setForm(p=>({...p,title:e.target.value}))} placeholder="Title"/></div>
           <div style={{padding:'12px 16px',borderTop:`1px solid ${A.sep}`}}><Inp type="date" value={form.date} onChange={e=>setForm(p=>({...p,date:e.target.value}))}/></div>
-          <div style={{padding:'12px 16px',borderTop:`1px solid ${A.sep}`}}><Inp value={form.time} onChange={e=>setForm(p=>({...p,time:e.target.value}))} placeholder="Time (e.g. 3:00 PM)"/></div>
+          <div style={{padding:'12px 16px',borderTop:`1px solid ${A.sep}`,display:'flex',gap:8}}>
+            <Inp value={form.time} onChange={e=>setForm(p=>({...p,time:e.target.value}))} placeholder="Start (e.g. 3:00 PM)" style={{flex:1}}/>
+            <Inp value={form.endTime} onChange={e=>setForm(p=>({...p,endTime:e.target.value}))} placeholder="End time" style={{flex:1}}/>
+          </div>
+        </FormGroup>
+        <FormGroup label="Repeat">
+          <div style={{padding:'12px 16px'}}>
+            <Sel value={form.recurring} onChange={e=>setForm(p=>({...p,recurring:e.target.value}))}>
+              <option value="">Does not repeat</option>
+              <option value="Daily">Daily</option>
+              <option value="Weekdays">Every weekday (Mon–Fri)</option>
+              <option value="Weekly">Weekly</option>
+              <option value="Bi-weekly">Every 2 weeks</option>
+              <option value="Monthly">Monthly</option>
+              <option value="Annually">Annually</option>
+            </Sel>
+          </div>
         </FormGroup>
         <FormGroup label="Calendar">
           <div style={{padding:'12px 16px'}}>
@@ -790,7 +959,7 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members}){
           <div style={{padding:'12px 16px'}}><textarea value={form.notes} onChange={e=>setForm(p=>({...p,notes:e.target.value}))} placeholder="Optional notes..." rows={3} style={{width:'100%',background:'transparent',border:'none',outline:'none',resize:'vertical',fontSize:15,color:A.label1,fontFamily:'Inter,sans-serif'}}/></div>
         </FormGroup>
         <div style={{display:'flex',gap:8}}>
-          <Btn onClick={saveEvent} full>Save Event</Btn>
+          <Btn onClick={saveEvent} full>{editEvent?'Update':'Save'} Event</Btn>
           <Btn variant="ghost" onClick={()=>setDrawerOpen(false)} full>Cancel</Btn>
         </div>
       </Drawer>
@@ -906,15 +1075,45 @@ function InboxScreen({toastAdd,events,setEvents,setInboxCount}){
 /* ── Chores ──────────────────────────────────────────────────────────── */
 function ChoresScreen({chores,setChores,toastAdd}){
   const [drawerOpen,setDrawerOpen]=useState(false);
+  const [editChore,setEditChore]=useState(null);
   const [form,setForm]=useState({name:'',recur:'Weekly',day:'Monday',start:'',notes:''});
+
+  const openNew=()=>{
+    setEditChore(null);
+    setForm({name:'',recur:'Weekly',day:'Monday',start:'',notes:''});
+    setDrawerOpen(true);
+  };
+
+  const openEdit=c=>{
+    // Parse recurrence back into recur + day
+    let recur='Weekly',day='Monday';
+    if(c.recurrence==='Daily') recur='Daily';
+    else if(c.recurrence==='Bi-weekly') recur='Bi-weekly';
+    else if(c.recurrence==='Monthly'||c.recurrence.startsWith('Monthly')) recur='Monthly';
+    else if(c.recurrence.startsWith('Weekly')) {
+      recur='Weekly';
+      const m=c.recurrence.match(/\((\w+)\)/);
+      if(m) day=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'].find(d=>d.startsWith(m[1]))||'Monday';
+    } else recur='Custom';
+    setEditChore(c);
+    setForm({name:c.name,recur,day,start:c.next_due||'',notes:''});
+    setDrawerOpen(true);
+  };
 
   const saveChore=async()=>{
     if(!form.name.trim()) return;
     const recurrence=form.recur==='Weekly'?`Weekly (${form.day.slice(0,3)})`:form.recur;
-    const newChore=await api.post('/api/chores',{name:form.name,recurrence,start:form.start});
-    setChores(p=>[...p,newChore]);
-    toastAdd('Chore added');
+    if(editChore){
+      const updated=await api.put(`/api/chores/${editChore.id}`,{name:form.name,recurrence,next_due:form.start});
+      setChores(p=>p.map(c=>c.id===editChore.id?updated:c));
+      toastAdd('Chore updated');
+    } else {
+      const newChore=await api.post('/api/chores',{name:form.name,recurrence,start:form.start});
+      setChores(p=>[...p,newChore]);
+      toastAdd('Chore added');
+    }
     setDrawerOpen(false);
+    setEditChore(null);
     setForm({name:'',recur:'Weekly',day:'Monday',start:'',notes:''});
   };
 
@@ -937,7 +1136,7 @@ function ChoresScreen({chores,setChores,toastAdd}){
           <h1 style={{fontSize:28,fontWeight:700,letterSpacing:'-.02em'}}>Chores</h1>
           <p style={{color:A.label4,fontSize:15,marginTop:4}}>{chores.filter(c=>c.status==='due'||c.status==='overdue').length} due today · {chores.length} total</p>
         </div>
-        <Btn onClick={()=>setDrawerOpen(true)}>+ Add Chore</Btn>
+        <Btn onClick={openNew}>+ Add Chore</Btn>
       </div>
       <Card>
         <div style={{display:'grid',gridTemplateColumns:'2fr 1.2fr 1fr 1fr 120px 100px',padding:'10px 16px',borderBottom:`1px solid ${A.sep}`}}>
@@ -955,13 +1154,14 @@ function ChoresScreen({chores,setChores,toastAdd}){
               <div style={{fontSize:13,color:A.label4}}>{c.next_due||'—'}</div>
               <Badge color={p.color} bg={p.bg}>{p.label}</Badge>
               <div style={{display:'flex',gap:10}}>
+                <button onClick={()=>openEdit(c)} style={{background:'none',border:'none',color:A.blue,fontSize:13,cursor:'pointer',fontWeight:500}}>Edit</button>
                 <button onClick={()=>deleteChore(c.id)} style={{background:'none',border:'none',color:A.red,fontSize:13,cursor:'pointer',fontWeight:500}}>Delete</button>
               </div>
             </div>
           );
         })}
       </Card>
-      <Drawer open={drawerOpen} onClose={()=>setDrawerOpen(false)} title="Add Chore">
+      <Drawer open={drawerOpen} onClose={()=>{setDrawerOpen(false);setEditChore(null);}} title={editChore?'Edit Chore':'Add Chore'}>
         <FormGroup label="Details">
           <div style={{padding:'12px 16px'}}><Inp value={form.name} onChange={e=>setForm(p=>({...p,name:e.target.value}))} placeholder="Chore name"/></div>
           <div style={{padding:'12px 16px',borderTop:`1px solid ${A.sep}`}}>
@@ -981,8 +1181,8 @@ function ChoresScreen({chores,setChores,toastAdd}){
           </div>
         </FormGroup>
         <div style={{display:'flex',gap:8,marginTop:4}}>
-          <Btn onClick={saveChore} full>Save Chore</Btn>
-          <Btn variant="ghost" onClick={()=>setDrawerOpen(false)} full>Cancel</Btn>
+          <Btn onClick={saveChore} full>{editChore?'Update Chore':'Save Chore'}</Btn>
+          <Btn variant="ghost" onClick={()=>{setDrawerOpen(false);setEditChore(null);}} full>Cancel</Btn>
         </div>
       </Drawer>
     </div>

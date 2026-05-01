@@ -116,6 +116,8 @@ CREATE TABLE IF NOT EXISTS photos (
 
 // member_id on events — added after initial schema; safe to run on every boot
 try { db.exec('ALTER TABLE events ADD COLUMN member_id INTEGER'); } catch {}
+try { db.exec(`ALTER TABLE events ADD COLUMN end_time TEXT DEFAULT ''`); } catch {}
+try { db.exec(`ALTER TABLE events ADD COLUMN recurring_rule TEXT DEFAULT ''`); } catch {}
 
 // ── Seed data (only on first run) ────────────────────────────────────────────
 

@@ -133,14 +133,59 @@ app.get('/api/events', (req, res) => {
 });
 
 app.post('/api/events', (req, res) => {
-  const { title, date, time, duration, calendar, color, notes, member_id } = req.body;
+  const { title, date, time, end_time, duration, calendar, color, notes, member_id, recurring_rule } = req.body;
   if (!title?.trim() || !date) return res.status(400).json({ error: 'title and date are required' });
   const calColors = { personal:'#007AFF', work:'#5856D6', family:'#32ADE6', hearth:'#34C759' };
   const col = color || calColors[calendar] || '#34C759';
   const r = db.prepare(
-    'INSERT INTO events (title,date,time,duration,calendar,color,notes,member_id) VALUES (?,?,?,?,?,?,?,?)'
-  ).run(title.trim(), date, time||'All day', duration||'1h', calendar||'hearth', col, notes||'', member_id||null);
-  res.json({ id: r.lastInsertRowid, title: title.trim(), date, time: time||'All day', calendar: calendar||'hearth', color: col, member_id: member_id||null });
+    'INSERT INTO events (title,date,time,end_time,duration,calendar,color,notes,member_id,recurring_rule) VALUES (?,?,?,?,?,?,?,?,?,?)'
+  ).run(title.trim(), date, time||'All day', end_time||'', duration||'1h', calendar||'hearth', col, notes||'', member_id||null, recurring_rule||'');
+  const seriesId = r.lastInsertRowid;
+
+  // Generate recurring occurrences for next 365 days
+  const rule = recurring_rule || '';
+  if (rule && rule !== 'Does not repeat' && rule !== 'Annually') {
+    const ins2 = db.prepare('INSERT INTO events (title,date,time,end_time,duration,calendar,color,notes,member_id,recurring_rule,source,external_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
+    const cur = new Date(date + 'T12:00:00');
+    const limit = new Date(cur.getTime() + 365 * 86400000);
+    while (true) {
+      if (rule === 'Daily')        cur.setDate(cur.getDate() + 1);
+      else if (rule === 'Weekly')  cur.setDate(cur.getDate() + 7);
+      else if (rule === 'Bi-weekly') cur.setDate(cur.getDate() + 14);
+      else if (rule === 'Monthly') cur.setMonth(cur.getMonth() + 1);
+      else if (rule === 'Weekdays') {
+        cur.setDate(cur.getDate() + 1);
+        while (cur.getDay() === 0 || cur.getDay() === 6) cur.setDate(cur.getDate() + 1);
+      } else break;
+      if (cur > limit) break;
+      ins2.run(title.trim(), localDate(cur), time||'All day', end_time||'', duration||'1h', calendar||'hearth', col, notes||'', member_id||null, recurring_rule||'', 'manual', seriesId);
+    }
+  }
+
+  res.json({ id: seriesId, title: title.trim(), date, time: time||'All day', end_time: end_time||'', calendar: calendar||'hearth', color: col, member_id: member_id||null, recurring_rule: rule });
+});
+
+app.put('/api/events/:id', (req, res) => {
+  const existing = db.prepare('SELECT * FROM events WHERE id=?').get(req.params.id);
+  if (!existing) return res.status(404).json({ error: 'Not found' });
+  const { title, date, time, end_time, duration, calendar, color, notes, member_id, recurring_rule } = req.body;
+  const calColors = { personal:'#007AFF', work:'#5856D6', family:'#32ADE6', hearth:'#34C759' };
+  const col = color || calColors[calendar] || existing.color;
+  db.prepare('UPDATE events SET title=?,date=?,time=?,end_time=?,duration=?,calendar=?,color=?,notes=?,member_id=?,recurring_rule=? WHERE id=?')
+    .run(
+      title?.trim() || existing.title,
+      date || existing.date,
+      time !== undefined ? (time || 'All day') : existing.time,
+      end_time !== undefined ? end_time : existing.end_time,
+      duration || existing.duration,
+      calendar || existing.calendar,
+      col,
+      notes !== undefined ? notes : existing.notes,
+      member_id !== undefined ? (member_id || null) : existing.member_id,
+      recurring_rule !== undefined ? recurring_rule : existing.recurring_rule,
+      existing.id
+    );
+  res.json(db.prepare('SELECT * FROM events WHERE id=?').get(existing.id));
 });
 
 app.delete('/api/events/:id', (req, res) => {
@@ -164,6 +209,18 @@ app.post('/api/chores', (req, res) => {
     'INSERT INTO chores (name,recurrence,next_due,status) VALUES (?,?,?,?)'
   ).run(name.trim(), recurrence.trim(), nextDue, status);
   res.json({ id: r.lastInsertRowid, name: name.trim(), recurrence: recurrence.trim(), last_done: '', next_due: nextDue, status, done: 0 });
+});
+
+app.put('/api/chores/:id', (req, res) => {
+  const c = db.prepare('SELECT * FROM chores WHERE id=?').get(req.params.id);
+  if (!c) return res.status(404).json({ error: 'Not found' });
+  const { name, recurrence, next_due } = req.body;
+  const today = localDate();
+  const nd = next_due || c.next_due;
+  const status = nd < today ? 'overdue' : nd === today ? 'due' : 'upcoming';
+  db.prepare('UPDATE chores SET name=?,recurrence=?,next_due=?,status=? WHERE id=?')
+    .run(name || c.name, recurrence || c.recurrence, nd, status, c.id);
+  res.json(db.prepare('SELECT * FROM chores WHERE id=?').get(c.id));
 });
 
 app.put('/api/chores/:id/done', (req, res) => {

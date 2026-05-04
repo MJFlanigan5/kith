@@ -13,7 +13,7 @@
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body,#root{height:100%}
-body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','SF Pro Display','Helvetica Neue',Arial,sans-serif;background:#ECEEF3;color:#1C1C1E;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','SF Pro Display','Helvetica Neue',Arial,sans-serif;background:#B8BECF;color:#1C1C1E;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
 .fade-scroll{-webkit-mask-image:linear-gradient(to bottom,transparent 0px,black 10px,black calc(100% - 10px),transparent 100%);mask-image:linear-gradient(to bottom,transparent 0px,black 10px,black calc(100% - 10px),transparent 100%)}
 input,select,textarea,button{font-family:inherit}
 button{cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none}
@@ -41,15 +41,15 @@ const {useState,useEffect,useRef,useCallback,useMemo}=React;
 
 /* ── Design tokens ───────────────────────────────────────────────────── */
 const A={
-  systemBg:'radial-gradient(ellipse at 20% 10%, rgba(0,122,255,0.08) 0%, transparent 52%), radial-gradient(ellipse at 80% 90%, rgba(52,199,89,0.06) 0%, transparent 52%), #ECEEF3',
-  cardBg:'rgba(255,255,255,0.80)',inputBg:'rgba(118,118,128,0.11)',
+  systemBg:'radial-gradient(ellipse at 16% 18%, rgba(0,122,255,0.30) 0%, transparent 50%), radial-gradient(ellipse at 84% 76%, rgba(88,86,214,0.24) 0%, transparent 50%), radial-gradient(ellipse at 68% 8%, rgba(255,149,0,0.14) 0%, transparent 40%), radial-gradient(ellipse at 30% 85%, rgba(52,199,89,0.12) 0%, transparent 40%), #B8BECF',
+  cardBg:'rgba(255,255,255,0.70)',inputBg:'rgba(118,118,128,0.11)',
   label1:'#1C1C1E',label2:'#3C3C43',label3:'#636366',label4:'#8E8E93',label5:'#AEAEB2',
   blue:'#007AFF',green:'#34C759',amber:'#FF9500',red:'#FF3B30',indigo:'#5856D6',teal:'#32ADE6',purple:'#AF52DE',
   blueFill:'rgba(0,122,255,0.10)',greenFill:'rgba(52,199,89,0.10)',amberFill:'rgba(255,149,0,0.10)',redFill:'rgba(255,59,48,0.10)',
-  sep:'rgba(60,60,67,0.08)',sepOpaque:'#C6C6C8',
-  shadowSm:'0 1px 1px rgba(255,255,255,0.85) inset,0 1px 3px rgba(0,0,0,.05),0 2px 14px rgba(0,0,0,.08)',
-  shadowMd:'0 1px 1px rgba(255,255,255,0.80) inset,0 2px 4px rgba(0,0,0,.06),0 6px 28px rgba(0,0,0,.11)',
-  shadowLg:'0 1px 1px rgba(255,255,255,0.70) inset,0 8px 48px rgba(0,0,0,.18),0 2px 8px rgba(0,0,0,.08)',
+  sep:'rgba(60,60,67,0.09)',sepOpaque:'#C6C6C8',
+  shadowSm:'0 1px 0 rgba(255,255,255,0.88) inset,0 0 0 1px rgba(255,255,255,0.42),0 2px 8px rgba(0,0,0,.06),0 1px 20px rgba(0,0,0,.09)',
+  shadowMd:'0 1px 0 rgba(255,255,255,0.82) inset,0 0 0 1px rgba(255,255,255,0.42),0 4px 16px rgba(0,0,0,.08),0 6px 28px rgba(0,0,0,.12)',
+  shadowLg:'0 1px 0 rgba(255,255,255,0.72) inset,0 8px 48px rgba(0,0,0,.18),0 2px 8px rgba(0,0,0,.08)',
   r:'14px',rSm:'10px',rXs:'8px',rPill:'999px',
 };
 
@@ -251,7 +251,7 @@ function Badge({children,color=A.blue,bg}){
 }
 
 function Card({children,style:s={}}){
-  return <div style={{background:A.cardBg,borderRadius:A.r,boxShadow:A.shadowSm,border:'1px solid rgba(255,255,255,0.7)',...s}}>{children}</div>;
+  return <div style={{background:A.cardBg,backdropFilter:'blur(22px) saturate(1.8)',WebkitBackdropFilter:'blur(22px) saturate(1.8)',borderRadius:A.r,boxShadow:A.shadowSm,...s}}>{children}</div>;
 }
 
 /* ── Countdowns ──────────────────────────────────────────────────────── */
@@ -418,7 +418,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
   };
 
   const Widget=({children,style:s={}})=>(
-    <div style={{background:A.cardBg,borderRadius:20,boxShadow:A.shadowMd,padding:'18px 20px',overflow:'hidden',...s}}>{children}</div>
+    <div style={{background:'rgba(255,255,255,0.54)',backdropFilter:'blur(32px) saturate(2.2)',WebkitBackdropFilter:'blur(32px) saturate(2.2)',borderRadius:22,boxShadow:'0 1px 0 rgba(255,255,255,0.88) inset,0 0 0 1px rgba(255,255,255,0.52),0 8px 36px rgba(0,0,0,0.14)',padding:'14px 16px',overflow:'hidden',...s}}>{children}</div>
   );
   const WLabel=({children})=>(
     <div style={{fontSize:12,fontWeight:700,color:A.label4,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:10}}>{children}</div>
@@ -451,7 +451,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
         {/* Calendar — left, full height */}
         <Widget style={{gridRow:'1/3',display:'flex',flexDirection:'column',overflow:'hidden'}}>
           <WLabel>Upcoming</WLabel>
-          <div style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:16}}>
+          <div style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:16,WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
             {agendaDays.map(({label,date})=>{
               const evs=events.filter(e=>e.date===date);
               return(
@@ -476,7 +476,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
             <WLabel>Chores</WLabel>
             <Badge color={A.amber}>{chores.filter(c=>(c.status==='due'||c.status==='overdue')&&!c.done).length} due</Badge>
           </div>
-          <div style={{flex:1,overflowY:'auto'}}>
+          <div style={{flex:1,overflowY:'auto',WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
             {chores.map(c=>(
               <div key={c.id} onClick={()=>toggleChore(c.id)} style={{display:'flex',alignItems:'center',gap:12,padding:'9px 0',borderBottom:`1px solid ${A.sep}`,cursor:'pointer',opacity:c.done?.38:1,transition:'opacity .2s'}}>
                 <div style={{width:24,height:24,borderRadius:'50%',flexShrink:0,background:c.done?A.green:'transparent',border:`2px solid ${c.done?A.green:A.sepOpaque}`,display:'flex',alignItems:'center',justifyContent:'center',transition:'all .2s',animation:c.done?'checkPop .3s ease':undefined}}>
@@ -509,28 +509,28 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
         </Widget>
 
         {/* Weather — top right */}
-        <Widget style={{background:'linear-gradient(145deg,#E8F0FE 0%,#EEF6FF 100%)'}}>
+        <Widget style={{display:'flex',flexDirection:'column'}}>
           <WLabel>Weather</WLabel>
           {weather?(
             <>
-              <div style={{display:'flex',alignItems:'flex-end',gap:8,marginBottom:2}}>
-                <span style={{fontSize:52,fontWeight:700,color:A.label1,lineHeight:1,letterSpacing:'-.03em'}}>{weather.temp}°</span>
-                <span style={{fontSize:15,color:A.label3,marginBottom:8}}>{weather.condition}</span>
+              <div style={{display:'flex',alignItems:'baseline',gap:8,marginBottom:2}}>
+                <span style={{fontSize:38,fontWeight:700,color:A.label1,lineHeight:1,letterSpacing:'-.03em'}}>{weather.temp}°</span>
+                <span style={{fontSize:12,color:A.label3}}>{weather.condition}</span>
               </div>
-              <div style={{fontSize:13,color:A.label4,marginBottom:14}}>H: {weather.hi}° · L: {weather.lo}°</div>
-              <div style={{display:'flex',gap:0}}>
+              <div style={{fontSize:11,color:A.label4,marginBottom:10}}>H:{weather.hi}° · L:{weather.lo}°</div>
+              <div style={{display:'flex',gap:0,marginTop:'auto'}}>
                 {weather.forecast.map(f=>(
                   <div key={f.day} style={{flex:1,textAlign:'center'}}>
-                    <div style={{fontSize:11,color:A.label4,fontWeight:600,marginBottom:3}}>{f.day}</div>
-                    <div style={{fontSize:20,marginBottom:2}}>{f.icon}</div>
-                    <div style={{fontSize:13,color:A.label1,fontWeight:600}}>{f.hi}°</div>
-                    <div style={{fontSize:11,color:A.label5}}>{f.lo}°</div>
+                    <div style={{fontSize:10,color:A.label4,fontWeight:600,marginBottom:2}}>{f.day}</div>
+                    <div style={{fontSize:16,marginBottom:1}}>{f.icon}</div>
+                    <div style={{fontSize:11,color:A.label1,fontWeight:600}}>{f.hi}°</div>
+                    <div style={{fontSize:10,color:A.label5}}>{f.lo}°</div>
                   </div>
                 ))}
               </div>
             </>
           ):(
-            <div style={{fontSize:13,color:A.label5,paddingTop:8}}>Loading…</div>
+            <div style={{fontSize:13,color:A.label5}}>Loading…</div>
           )}
         </Widget>
 
@@ -546,7 +546,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
             ))}
             {(grocery||[]).filter(g=>!g.checked).length===0&&<div style={{fontSize:13,color:A.label5,fontStyle:'normal'}}>Nothing on the list</div>}
           </Widget>
-          <Widget style={{background:'linear-gradient(145deg,#EEF2FF,#E8EEFF)'}}>
+          <Widget>
             <WLabel>Countdowns</WLabel>
             {(!countdowns||countdowns.length===0)&&<div style={{fontSize:13,color:A.label5,fontStyle:'normal'}}>No countdowns set</div>}
             {(countdowns||[]).filter(c=>daysUntil(c.date)>=0).slice(0,3).map((c,i)=>{
@@ -1724,7 +1724,7 @@ function ManageMode({onDisplay,events,setEvents,chores,setChores,grocery,setGroc
 
   return(
     <div style={{display:'flex',height:'100vh',overflow:'hidden',background:A.systemBg}}>
-      <div style={{width:232,flexShrink:0,background:'rgba(255,255,255,0.60)',backdropFilter:'blur(40px) saturate(1.8)',WebkitBackdropFilter:'blur(40px) saturate(1.8)',borderRight:'1px solid rgba(255,255,255,0.55)',display:'flex',flexDirection:'column'}}>
+      <div style={{width:232,flexShrink:0,background:'rgba(255,255,255,0.48)',backdropFilter:'blur(48px) saturate(2.4)',WebkitBackdropFilter:'blur(48px) saturate(2.4)',borderRight:'1px solid rgba(255,255,255,0.52)',display:'flex',flexDirection:'column'}}>
         <div style={{padding:'22px 18px 14px'}}>
           <div style={{fontSize:22,fontWeight:800,letterSpacing:'-.05em',color:A.label1}}>Hearth</div>
           <div style={{fontSize:12,color:A.label5,marginTop:1,letterSpacing:'-.01em'}}>Family Dashboard</div>
@@ -1761,7 +1761,7 @@ function ManageMode({onDisplay,events,setEvents,chores,setChores,grocery,setGroc
       </div>
 
       <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
-        <div style={{height:54,background:'rgba(255,255,255,0.65)',backdropFilter:'blur(40px) saturate(1.8)',WebkitBackdropFilter:'blur(40px) saturate(1.8)',borderBottom:'1px solid rgba(255,255,255,0.50)',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 26px',flexShrink:0}}>
+        <div style={{height:54,background:'rgba(255,255,255,0.52)',backdropFilter:'blur(48px) saturate(2.4)',WebkitBackdropFilter:'blur(48px) saturate(2.4)',borderBottom:'1px solid rgba(255,255,255,0.50)',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 26px',flexShrink:0}}>
           <span style={{fontSize:17,fontWeight:700,letterSpacing:'-.03em',color:A.label1}}>{nav.find(n=>n.id===screen)?.label}</span>
           <div style={{display:'flex',alignItems:'center',gap:14}}>
             <div style={{display:'flex',alignItems:'center',gap:6,fontSize:13,color:A.label4}}>

@@ -34,6 +34,10 @@ a{cursor:pointer;user-select:none}
 .irow{transition:background .12s ease}
 .irow:hover{background:rgba(0,0,0,0.025)!important}
 .irow:active{background:rgba(0,0,0,0.045)!important}
+.tap{cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .08s ease,opacity .08s ease;}
+.tap:active{transform:scale(.97);opacity:.82;}
+.noise-layer{background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");background-size:256px 256px;opacity:.038;}
+.hdr{transition:background .25s ease,box-shadow .25s ease,backdrop-filter .25s ease;}
 </style>
 </head>
 <body>
@@ -74,6 +78,20 @@ const A={
   glass:'rgba(255,255,255,0.18)',
   glassFilter:'blur(20px) saturate(180%) brightness(108%)',
 };
+
+function getTimeBg(h=new Date().getHours()){
+  // Dawn 5–7
+  if(h>=5&&h<7)  return 'radial-gradient(ellipse 80% 60% at 25% 30%,rgba(255,149,0,0.32) 0%,transparent 65%),radial-gradient(ellipse 70% 70% at 80% 70%,rgba(255,59,48,0.14) 0%,transparent 60%),radial-gradient(ellipse 90% 50% at 55% 5%,rgba(255,215,0,0.18) 0%,transparent 55%),#d4c0b0';
+  // Morning 7–12
+  if(h>=7&&h<12) return 'radial-gradient(ellipse 80% 60% at 15% 20%,rgba(0,122,255,0.28) 0%,transparent 65%),radial-gradient(ellipse 70% 70% at 85% 75%,rgba(88,86,214,0.22) 0%,transparent 60%),radial-gradient(ellipse 90% 50% at 60% 10%,rgba(255,149,0,0.12) 0%,transparent 55%),#c5cad8';
+  // Midday 12–16
+  if(h>=12&&h<16) return 'radial-gradient(ellipse 80% 60% at 30% 15%,rgba(0,160,255,0.20) 0%,transparent 65%),radial-gradient(ellipse 70% 70% at 75% 80%,rgba(52,199,89,0.10) 0%,transparent 60%),radial-gradient(ellipse 90% 50% at 55% 5%,rgba(200,235,255,0.25) 0%,transparent 55%),#c8d2dd';
+  // Afternoon/dusk 16–21
+  if(h>=16&&h<19) return 'radial-gradient(ellipse 80% 60% at 25% 30%,rgba(255,120,0,0.28) 0%,transparent 65%),radial-gradient(ellipse 70% 70% at 80% 70%,rgba(140,60,200,0.22) 0%,transparent 60%),radial-gradient(ellipse 90% 50% at 50% 0%,rgba(255,60,60,0.12) 0%,transparent 55%),#c0b0c8';
+  if(h>=19&&h<21) return 'radial-gradient(ellipse 80% 60% at 20% 35%,rgba(200,80,0,0.30) 0%,transparent 65%),radial-gradient(ellipse 70% 70% at 80% 70%,rgba(100,50,180,0.35) 0%,transparent 60%),radial-gradient(ellipse 90% 50% at 50% 0%,rgba(255,100,80,0.18) 0%,transparent 55%),#b8a8c2';
+  // Night 21+/before 5
+  return 'radial-gradient(ellipse 80% 60% at 15% 20%,rgba(80,80,200,0.30) 0%,transparent 65%),radial-gradient(ellipse 70% 70% at 85% 75%,rgba(88,86,214,0.28) 0%,transparent 60%),radial-gradient(ellipse 90% 50% at 60% 10%,rgba(0,80,160,0.18) 0%,transparent 55%),#b8bdd4';
+}
 
 const DAYS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -470,7 +488,8 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
   );
 
   return(
-    <div onClick={resetIdle} onMouseMove={resetIdle} style={{width:'100vw',height:'100vh',background:A.systemBg,overflow:'hidden',padding:28,display:'flex',flexDirection:'column',gap:16,position:'relative'}}>
+    <div onClick={resetIdle} onMouseMove={resetIdle} style={{width:'100vw',height:'100vh',background:getTimeBg(now.getHours()),overflow:'hidden',padding:28,display:'flex',flexDirection:'column',gap:16,position:'relative'}}>
+      <div className="noise-layer" aria-hidden="true" style={{position:'fixed',inset:0,zIndex:50,pointerEvents:'none'}}/>
       {ssActive&&photos&&photos.length>0&&(
         <div onClick={resetIdle} style={{position:'absolute',inset:0,zIndex:50,background:'#000',cursor:'pointer',animation:'fadeIn .8s ease',display:'flex',alignItems:'center',justifyContent:'center'}}>
           <img src={`/photos/${photos[ssIdx%photos.length]?.filename}`} style={{width:'100%',height:'100%',objectFit:'cover',opacity:.95}} alt=""/>
@@ -684,10 +703,10 @@ function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weath
     <div>
       <div style={{marginBottom:20,display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:16}}>
         <div>
-          <h1 style={{fontSize:30,fontWeight:800,letterSpacing:'-.04em',color:A.label1}}>{greeting}, Mike</h1>
-          <p style={{color:A.label4,fontSize:15,marginTop:5,letterSpacing:'-.01em'}}>{DAYS[now.getDay()]}, {MONTHS[now.getMonth()]} {now.getDate()} · {now.toLocaleTimeString('en-US',clockOpts)}</p>
+          <h1 style={{fontSize:isMobile?34:44,fontWeight:800,letterSpacing:'-.05em',color:A.label1,lineHeight:1.05}}>{greeting}</h1>
+          <p style={{color:A.label3,fontSize:15,marginTop:6,fontWeight:500,letterSpacing:'-.01em'}}>{DAYS[now.getDay()]}, {MONTHS[now.getMonth()]} {now.getDate()} · {now.toLocaleTimeString('en-US',clockOpts)}</p>
         </div>
-        <Btn onClick={()=>{setQaForm(p=>({...p,date:localDate()}));setQaOpen(true);}} style={{flexShrink:0,marginTop:4}}>+ Add Event</Btn>
+        <Btn onClick={()=>{setQaForm(p=>({...p,date:localDate()}));setQaOpen(true);}} style={{flexShrink:0,marginTop:10}}>+ Add Event</Btn>
       </div>
 
       {/* Stats bar — 4 columns including weather */}
@@ -732,7 +751,7 @@ function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weath
           {upcomingCDs.map(c=>{
             const days=daysUntil(c.date);
             return(
-              <Card key={c.id} style={{padding:'12px 16px',flexShrink:0,minWidth:128,textAlign:'center'}}>
+              <Card key={c.id} style={{padding:'12px 16px',flexShrink:0,minWidth:128,textAlign:'center',cursor:'default'}}>
                 <div style={{fontSize:24}}>{c.emoji}</div>
                 <div style={{fontSize:22,fontWeight:800,color:A.indigo,lineHeight:1,marginTop:4}}>{days===0?'🎉':days}</div>
                 {days>0&&<div style={{fontSize:10,color:A.label4,marginBottom:2}}>days</div>}
@@ -1349,12 +1368,17 @@ function ChoresScreen({chores,setChores,toastAdd}){
         <Btn onClick={openNew}>+ Add Chore</Btn>
       </div>
       <Card>
-        {isMobile ? (
+        {chores.length===0 ? (
+          <div style={{padding:'52px 24px',textAlign:'center'}}>
+            <div style={{fontSize:13,fontWeight:700,color:A.label5,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:10}}>No chores yet</div>
+            <div style={{fontSize:15,color:A.label3,fontWeight:500}}>Add recurring tasks above to keep the home running</div>
+          </div>
+        ) : isMobile ? (
           <div>
             {chores.map(c=>{
               const p=statePill(c.status);
               return(
-                <div key={c.id} style={{padding:'14px 16px',borderTop:`1px solid ${A.sep}`,borderLeft:`3px solid ${c.status==='due'?A.amber:c.status==='overdue'?A.red:'transparent'}`,background:c.status==='due'?`${A.amber}06`:c.status==='overdue'?`${A.red}06`:'transparent'}}>
+                <div key={c.id} className="tap" style={{padding:'14px 16px',borderTop:`1px solid ${A.sep}`,borderLeft:`3px solid ${c.status==='due'?A.amber:c.status==='overdue'?A.red:'transparent'}`,background:c.status==='due'?`${A.amber}06`:c.status==='overdue'?`${A.red}06`:'transparent'}}>
                   <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
                     <span style={{fontSize:15,fontWeight:600}}>{c.name}</span>
                     <Badge color={p.color} bg={p.bg}>{p.label}</Badge>
@@ -1480,19 +1504,32 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,toastAdd}){
           <Inp value={input} onChange={e=>setInput(e.target.value)} placeholder="Add item..." onKeyDown={e=>e.key==='Enter'&&addItem()} inputRef={inputRef}/>
           <Btn onClick={addItem} style={{flexShrink:0}}>Add</Btn>
         </div>
+        {unchecked.length===0&&checked.length===0&&(
+          <div style={{padding:'52px 24px',textAlign:'center',marginBottom:12}}>
+            <div style={{fontSize:15,fontWeight:600,color:A.label3,marginBottom:4}}>List is empty</div>
+            <div style={{fontSize:14,color:A.label4}}>Type an item above and press Enter</div>
+          </div>
+        )}
         {cats.map(cat=>(
           <div key={cat} style={{marginBottom:16}}>
             <div style={{fontSize:12,fontWeight:700,color:A.label4,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:6,paddingLeft:4}}>{cat}</div>
             <Card>
-              {unchecked.filter(i=>i.category===cat).map((item,idx)=>(
-                <div key={item.id} onClick={()=>toggle(item.id)} style={{display:'flex',alignItems:'center',gap:14,padding:'13px 16px',borderTop:idx>0?`1px solid ${A.sep}`:'none',cursor:'pointer'}}
-                  onMouseEnter={e=>e.currentTarget.style.background=A.systemBg}
-                  onMouseLeave={e=>e.currentTarget.style.background='transparent'}
-                >
-                  <div style={{width:24,height:24,borderRadius:'50%',border:`2px solid ${A.sepOpaque}`,flexShrink:0}}/>
-                  <span style={{fontSize:15,color:A.label1}}>{item.name}</span>
-                </div>
-              ))}
+              {unchecked.filter(i=>i.category===cat).map((item,idx)=>{
+                let _tx=0;
+                return(
+                  <div key={item.id} className="tap"
+                    onTouchStart={e=>{_tx=e.touches[0].clientX;}}
+                    onTouchEnd={e=>{if(e.changedTouches[0].clientX-_tx>60) toggle(item.id);}}
+                    onClick={()=>toggle(item.id)}
+                    style={{display:'flex',alignItems:'center',gap:14,padding:'13px 16px',borderTop:idx>0?`1px solid ${A.sep}`:'none',cursor:'pointer'}}
+                    onMouseEnter={e=>e.currentTarget.style.background=A.systemBg}
+                    onMouseLeave={e=>e.currentTarget.style.background='transparent'}
+                  >
+                    <div style={{width:24,height:24,borderRadius:'50%',border:`2px solid ${A.sepOpaque}`,flexShrink:0}}/>
+                    <span style={{fontSize:15,color:A.label1}}>{item.name}</span>
+                  </div>
+                );
+              })}
             </Card>
           </div>
         ))}
@@ -1825,6 +1862,7 @@ function ManageMode({onDisplay,events,setEvents,chores,setChores,grocery,setGroc
   const isMobile=useIsMobile();
   const [screen,setScreen]=useState('dashboard');
   const {toasts,add:toastAdd}=useToast();
+  const [scrolled,setScrolled]=useState(false);
 
   const nav=[
     {id:'dashboard',label:'Dashboard',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="1" y="1" width="6" height="6" rx="2" fill="currentColor" opacity=".9"/><rect x="10" y="1" width="6" height="6" rx="2" fill="currentColor" opacity=".9"/><rect x="1" y="10" width="6" height="6" rx="2" fill="currentColor" opacity=".9"/><rect x="10" y="10" width="6" height="6" rx="2" fill="currentColor" opacity=".9"/></svg>},
@@ -1850,16 +1888,17 @@ function ManageMode({onDisplay,events,setEvents,chores,setChores,grocery,setGroc
 
   if(isMobile){
     return(
-      <div style={{display:'flex',flexDirection:'column',height:'100vh',overflow:'hidden',background:A.systemBg}}>
+      <div style={{display:'flex',flexDirection:'column',height:'100vh',overflow:'hidden',background:getTimeBg()}}>
+        <div className="noise-layer" aria-hidden="true" style={{position:'fixed',inset:0,zIndex:9999,pointerEvents:'none'}}/>
         {/* Mobile top bar */}
-        <div style={{height:54,background:'rgba(255,255,255,0.52)',backdropFilter:'blur(48px) saturate(2.4)',WebkitBackdropFilter:'blur(48px) saturate(2.4)',borderBottom:'1px solid rgba(255,255,255,0.50)',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 16px',flexShrink:0}}>
+        <div className="hdr" style={{height:54,background:scrolled?'rgba(255,255,255,0.75)':'rgba(255,255,255,0.52)',backdropFilter:scrolled?'blur(64px) saturate(3.0)':'blur(48px) saturate(2.4)',WebkitBackdropFilter:scrolled?'blur(64px) saturate(3.0)':'blur(48px) saturate(2.4)',borderBottom:'1px solid rgba(255,255,255,0.50)',boxShadow:scrolled?'0 1px 0 rgba(255,255,255,0.50),0 4px 16px rgba(0,0,0,0.06)':'none',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 16px',flexShrink:0}}>
           <span style={{fontSize:17,fontWeight:700,letterSpacing:'-.03em',color:A.label1}}>{nav.find(n=>n.id===screen)?.label}</span>
           <button onClick={()=>setScreen('settings')} style={{width:30,height:30,borderRadius:'50%',background:A.inputBg,border:'none',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',color:A.label3}}>
             <svg width="15" height="15" viewBox="0 0 17 17" fill="none"><circle cx="8.5" cy="8.5" r="2.5" stroke="currentColor" strokeWidth="1.5"/><path d="M8.5 1v2M8.5 14v2M1 8.5h2M14 8.5h2M3.05 3.05l1.42 1.42M12.53 12.53l1.42 1.42M12.53 3.05l-1.42 1.42M4.47 12.53l-1.42 1.42" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
           </button>
         </div>
         {/* Content */}
-        <div key={screen} className="screen fade-scroll" style={{flex:1,overflowY:'auto',padding:screen==='calendar'?0:'16px',paddingBottom:`calc(90px + env(safe-area-inset-bottom))`}}>
+        <div key={screen} className="screen fade-scroll" onScroll={e=>setScrolled(e.currentTarget.scrollTop>12)} style={{flex:1,overflowY:'auto',padding:screen==='calendar'?0:'16px',paddingBottom:`calc(90px + env(safe-area-inset-bottom))`}}>
           {screens[screen]}
         </div>
         {/* Bottom tab bar */}
@@ -1881,7 +1920,8 @@ function ManageMode({onDisplay,events,setEvents,chores,setChores,grocery,setGroc
   }
 
   return(
-    <div style={{display:'flex',height:'100vh',overflow:'hidden',background:A.systemBg}}>
+    <div style={{display:'flex',height:'100vh',overflow:'hidden',background:getTimeBg()}}>
+      <div className="noise-layer" aria-hidden="true" style={{position:'fixed',inset:0,zIndex:9999,pointerEvents:'none'}}/>
       <div style={{width:232,flexShrink:0,background:'rgba(255,255,255,0.15)',backdropFilter:'blur(20px) saturate(180%) brightness(108%)',WebkitBackdropFilter:'blur(20px) saturate(180%) brightness(108%)',borderRight:'1px solid rgba(255,255,255,0.25)',display:'flex',flexDirection:'column'}}>
         <div style={{padding:'22px 18px 14px'}}>
           <div style={{fontSize:22,fontWeight:800,letterSpacing:'-.05em',color:A.label1}}>Hearth</div>
@@ -1919,7 +1959,7 @@ function ManageMode({onDisplay,events,setEvents,chores,setChores,grocery,setGroc
       </div>
 
       <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
-        <div style={{height:54,background:'rgba(255,255,255,0.15)',backdropFilter:'blur(20px) saturate(180%) brightness(108%)',WebkitBackdropFilter:'blur(20px) saturate(180%) brightness(108%)',borderBottom:'1px solid rgba(255,255,255,0.20)',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 26px',flexShrink:0}}>
+        <div className="hdr" style={{height:54,background:scrolled?'rgba(255,255,255,0.28)':'rgba(255,255,255,0.15)',backdropFilter:scrolled?'blur(48px) saturate(2.2)':'blur(20px) saturate(180%) brightness(108%)',WebkitBackdropFilter:scrolled?'blur(48px) saturate(2.2)':'blur(20px) saturate(180%) brightness(108%)',borderBottom:'1px solid rgba(255,255,255,0.20)',boxShadow:scrolled?'0 1px 0 rgba(255,255,255,0.30),0 4px 20px rgba(0,0,0,0.06)':'none',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 26px',flexShrink:0}}>
           <span style={{fontSize:17,fontWeight:700,letterSpacing:'-.03em',color:A.label1}}>{nav.find(n=>n.id===screen)?.label}</span>
           <div style={{display:'flex',alignItems:'center',gap:14}}>
             <div style={{display:'flex',alignItems:'center',gap:6,fontSize:13,color:A.label4}}>
@@ -1930,7 +1970,7 @@ function ManageMode({onDisplay,events,setEvents,chores,setChores,grocery,setGroc
             </button>
           </div>
         </div>
-        <div key={screen} className="screen fade-scroll" style={{flex:1,overflowY:'auto',padding:screen==='calendar'?0:'28px 32px'}}>
+        <div key={screen} className="screen fade-scroll" onScroll={e=>setScrolled(e.currentTarget.scrollTop>12)} style={{flex:1,overflowY:'auto',padding:screen==='calendar'?0:'28px 32px'}}>
           {screens[screen]}
         </div>
       </div>

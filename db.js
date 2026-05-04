@@ -187,7 +187,9 @@ const defaults = {
   clock_format: '12h', temperature_unit: 'F', refresh_interval: '1min',
   google_email: 'mike@gmail.com', google_connected: '1',
   smtp_host: '', smtp_port: '587', smtp_user: '', smtp_pass: '',
-  forwarding_address: 'hearth@local.home',
+  forwarding_address: 'hearth@mjflanigan.com',
+  email_webhook_secret: require('crypto').randomBytes(24).toString('hex'),
+  anthropic_api_key: '',
   weather_lat: '33.8533', weather_lon: '-84.2201',
 };
 const insSetting = db.prepare('INSERT OR IGNORE INTO settings (key,value) VALUES (?,?)');

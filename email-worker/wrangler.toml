@@ -1,0 +1,9 @@
+name = "hearth-email-worker"
+main = "src/index.js"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+HEARTH_URL = "https://hearth.mjflanigan.com"
+
+# Set via: wrangler secret put HEARTH_WEBHOOK_SECRET

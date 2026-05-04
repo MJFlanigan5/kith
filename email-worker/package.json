@@ -1,0 +1,8 @@
+{
+  "name": "hearth-email-worker",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "postal-mime": "^2.2.5"
+  }
+}

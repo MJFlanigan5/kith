@@ -622,6 +622,72 @@ app.delete('/api/photos/:id', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
+// ── Routes: Email inbound (Cloudflare Email Worker webhook) ───────────────────
+
+async function callClaudeForEvent(subject, body) {
+  const apiKey = db.prepare('SELECT value FROM settings WHERE key=?').get('anthropic_api_key')?.value
+    || process.env.ANTHROPIC_API_KEY || '';
+  if (!apiKey) return null;
+
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 200,
+      messages: [{
+        role: 'user',
+        content: `Extract calendar event details from this email. Return JSON only, no other text.\n\nSubject: ${subject}\nBody: ${body.slice(0, 2000)}\n\nReturn: {"event_name":"...","event_date":"YYYY-MM-DD or description","event_time":"H:MM AM/PM or All day","recurrence":"One-time|Weekly|Monthly|etc","confidence":"high|medium|low"}\nIf no event is found return {"event_name":"","confidence":"low"}`,
+      }],
+    }),
+  });
+  const data = await resp.json();
+  try { return JSON.parse(data.content[0].text); } catch { return null; }
+}
+
+app.post('/api/email/inbound', async (req, res) => {
+  const secret = db.prepare('SELECT value FROM settings WHERE key=?').get('email_webhook_secret')?.value;
+  if (secret && req.headers['x-hearth-secret'] !== secret) {
+    return res.status(401).json({ error: 'Invalid secret' });
+  }
+
+  const { subject, from, body, ics } = req.body || {};
+  let event_name = '', event_date = '', event_time = '', recurrence = 'One-time', confidence = 'low';
+
+  if (ics) {
+    const events = parseICS(ics);
+    if (events.length > 0) {
+      const ev = events[0];
+      event_name = ev.title;
+      event_date = ev.date;
+      event_time = ev.time;
+      confidence = 'high';
+    }
+  }
+
+  if (!event_name) {
+    const result = await callClaudeForEvent(subject || '', body || '').catch(() => null);
+    if (result?.event_name) {
+      event_name = result.event_name;
+      event_date = result.event_date || '';
+      event_time = result.event_time || 'All day';
+      recurrence = result.recurrence || 'One-time';
+      confidence = result.confidence || 'medium';
+    }
+  }
+
+  if (!event_name) event_name = subject || '(Unknown event)';
+
+  db.prepare('INSERT INTO inbox (subject,event_name,event_date,event_time,recurrence,confidence) VALUES (?,?,?,?,?,?)')
+    .run(subject || '', event_name, event_date, event_time, recurrence, confidence);
+
+  res.json({ ok: true });
+});
+
 // ── SPA fallback ──────────────────────────────────────────────────────────────
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 

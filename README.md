@@ -2,77 +2,53 @@
 
 Self-hosted family dashboard. Replaces Skylight Calendar + Donetick.
 
-**Features:** Calendar (Google + ICS/webcal), chores with recurrence, grocery list, meal planner, email inbox for event parsing, TV display mode, browser push notifications.
+**Features:** Calendar (Google + ICS/webcal), chores with recurrence, grocery list, meal planner, email inbox for event parsing, TV display mode, PIN-based auth, browser push notifications.
 
-## Install on Proxmox — LXC (recommended)
+## Install
 
-Run this on your Proxmox host. Creates a Debian 13 LXC with 1 CPU / 512 MB RAM / 2 GB disk.
-
-```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/MJFlanigan5/hearth/main/ct/hearth.sh)
-```
-
-Open `http://<lxc-ip>:7400`
-
-### Update (LXC)
-
-From the Proxmox host, run the same script and choose **Update** when prompted, or exec into the container and run:
+SSH into your Proxmox server or any machine running Docker, then run:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/MJFlanigan5/hearth/main/ct/hearth.sh)
+git clone https://github.com/MJFlanigan5/hearth.git /opt/hearth && cd /opt/hearth && bash deploy.sh
 ```
 
-## Install with Docker
+Open `http://<server-ip>:7400`
+
+On first load you'll be prompted to create an admin PIN. From Settings you can then set PINs for each family member.
+
+## Update
 
 ```bash
-git clone https://github.com/MJFlanigan5/hearth.git
-cd hearth
-docker compose up -d
+cd /opt/hearth && bash deploy.sh
 ```
 
-### One-liner
-
-```bash
-docker run -d \
-  --name hearth \
-  --restart unless-stopped \
-  -p 7400:7400 \
-  -v hearth-data:/data \
-  ghcr.io/mjflanigan5/hearth:latest
-```
-
-### Update (Docker)
-
-```bash
-cd hearth && git pull && docker compose up -d --build
-```
+Pulls latest code, rebuilds the container, and resyncs the Cloudflare email worker automatically.
 
 ## Data
 
-All data is stored in a SQLite database at `/data/hearth.db`.
+SQLite at `/data/hearth.db` inside the container, persisted in a Docker volume. Data survives rebuilds.
 
-**LXC backup:**
+**Backup:**
 ```bash
-# From the Proxmox host
-pct exec <vmid> -- sqlite3 /data/hearth.db ".backup /tmp/hearth-backup.db"
-pct pull <vmid> /tmp/hearth-backup.db ./hearth-backup.db
-```
-
-**Docker backup:**
-```bash
-docker cp hearth:/data/hearth.db ./hearth-backup.db
+docker compose -f /opt/hearth/docker-compose.yml exec hearth sqlite3 /data/hearth.db ".backup /tmp/hearth-backup.db"
+docker cp $(docker compose -f /opt/hearth/docker-compose.yml ps -q hearth):/tmp/hearth-backup.db ./hearth-backup.db
 ```
 
 ## ICS Calendars
 
-In Settings → ICS Calendars, paste any `webcal://` or `https://` `.ics` URL.  
-Works with Google Calendar's "Secret address in iCal format", iCloud, Outlook, Fastmail, etc.
+Settings → ICS Calendars → paste any `webcal://` or `https://` `.ics` URL.
+Works with Google Calendar, iCloud, Outlook, Fastmail, etc.
+
+## Email Inbox
+
+Forward any calendar invite or event email to `hearth@mjflanigan.com`.
+Hearth parses the event and drops it in the inbox for approval.
 
 ## Push Notifications
 
-Click **Enable Notifications** in Settings → Push Notifications.  
-Reminders: due chores at 8am, events 30 minutes before start.  
-Push requires HTTPS for non-localhost access. Front with nginx + a self-signed cert for local network use.
+Settings → Push Notifications → Enable Notifications.
+Reminders fire at 8am for due chores and 30 minutes before calendar events.
+Requires HTTPS for non-localhost devices.
 
 ## Ports
 

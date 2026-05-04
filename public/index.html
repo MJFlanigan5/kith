@@ -13,7 +13,7 @@
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body,#root{height:100%}
-body{font-family:'DM Sans',-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;background:#B8BECF;color:#1C1C1E;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+body{font-family:'DM Sans',-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;background:#ECEDF3;color:#1C1C1E;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
 .fade-scroll{-webkit-mask-image:linear-gradient(to bottom,transparent 0px,black 10px,black calc(100% - 10px),transparent 100%);mask-image:linear-gradient(to bottom,transparent 0px,black 10px,black calc(100% - 10px),transparent 100%)}
 input,select,textarea,button{font-family:inherit}
 button{cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none}
@@ -57,13 +57,7 @@ const {useState,useEffect,useRef,useCallback,useMemo}=React;
 
 /* ── Design tokens ───────────────────────────────────────────────────── */
 const A={
-  systemBg:`
-    radial-gradient(ellipse 80% 60% at 15% 20%, rgba(0,122,255,0.28) 0%, transparent 65%),
-    radial-gradient(ellipse 70% 70% at 85% 75%, rgba(88,86,214,0.22) 0%, transparent 60%),
-    radial-gradient(ellipse 90% 50% at 60% 10%, rgba(255,149,0,0.12) 0%, transparent 55%),
-    radial-gradient(ellipse 60% 80% at 25% 88%, rgba(52,199,89,0.10) 0%, transparent 50%),
-    #c5cad8
-  `.replace(/\s+/g,' ').trim(),
+  systemBg:'#ECEDF3',
   cardBg:'rgba(255,255,255,0.18)',
   inputBg:'rgba(118,118,128,0.11)',
   label1:'#1C1C1E',label2:'#3C3C43',label3:'#636366',label4:'rgba(60,60,67,0.60)',label5:'rgba(60,60,67,0.30)',
@@ -78,20 +72,6 @@ const A={
   glass:'rgba(255,255,255,0.18)',
   glassFilter:'blur(20px) saturate(180%) brightness(108%)',
 };
-
-function getTimeBg(h=new Date().getHours()){
-  // Dawn 5–7
-  if(h>=5&&h<7)  return 'radial-gradient(ellipse 80% 60% at 25% 30%,rgba(255,149,0,0.32) 0%,transparent 65%),radial-gradient(ellipse 70% 70% at 80% 70%,rgba(255,59,48,0.14) 0%,transparent 60%),radial-gradient(ellipse 90% 50% at 55% 5%,rgba(255,215,0,0.18) 0%,transparent 55%),#d4c0b0';
-  // Morning 7–12
-  if(h>=7&&h<12) return 'radial-gradient(ellipse 80% 60% at 15% 20%,rgba(0,122,255,0.28) 0%,transparent 65%),radial-gradient(ellipse 70% 70% at 85% 75%,rgba(88,86,214,0.22) 0%,transparent 60%),radial-gradient(ellipse 90% 50% at 60% 10%,rgba(255,149,0,0.12) 0%,transparent 55%),#c5cad8';
-  // Midday 12–16
-  if(h>=12&&h<16) return 'radial-gradient(ellipse 80% 60% at 30% 15%,rgba(0,160,255,0.20) 0%,transparent 65%),radial-gradient(ellipse 70% 70% at 75% 80%,rgba(52,199,89,0.10) 0%,transparent 60%),radial-gradient(ellipse 90% 50% at 55% 5%,rgba(200,235,255,0.25) 0%,transparent 55%),#c8d2dd';
-  // Afternoon/dusk 16–21
-  if(h>=16&&h<19) return 'radial-gradient(ellipse 80% 60% at 25% 30%,rgba(255,120,0,0.28) 0%,transparent 65%),radial-gradient(ellipse 70% 70% at 80% 70%,rgba(140,60,200,0.22) 0%,transparent 60%),radial-gradient(ellipse 90% 50% at 50% 0%,rgba(255,60,60,0.12) 0%,transparent 55%),#c0b0c8';
-  if(h>=19&&h<21) return 'radial-gradient(ellipse 80% 60% at 20% 35%,rgba(200,80,0,0.30) 0%,transparent 65%),radial-gradient(ellipse 70% 70% at 80% 70%,rgba(100,50,180,0.35) 0%,transparent 60%),radial-gradient(ellipse 90% 50% at 50% 0%,rgba(255,100,80,0.18) 0%,transparent 55%),#b8a8c2';
-  // Night 21+/before 5
-  return 'radial-gradient(ellipse 80% 60% at 15% 20%,rgba(80,80,200,0.30) 0%,transparent 65%),radial-gradient(ellipse 70% 70% at 85% 75%,rgba(88,86,214,0.28) 0%,transparent 60%),radial-gradient(ellipse 90% 50% at 60% 10%,rgba(0,80,160,0.18) 0%,transparent 55%),#b8bdd4';
-}
 
 const DAYS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -488,7 +468,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
   );
 
   return(
-    <div onClick={resetIdle} onMouseMove={resetIdle} style={{width:'100vw',height:'100vh',background:getTimeBg(now.getHours()),overflow:'hidden',padding:28,display:'flex',flexDirection:'column',gap:16,position:'relative'}}>
+    <div onClick={resetIdle} onMouseMove={resetIdle} style={{width:'100vw',height:'100vh',background:A.systemBg,overflow:'hidden',padding:28,display:'flex',flexDirection:'column',gap:16,position:'relative'}}>
       <div className="noise-layer" aria-hidden="true" style={{position:'fixed',inset:0,zIndex:50,pointerEvents:'none'}}/>
       {ssActive&&photos&&photos.length>0&&(
         <div onClick={resetIdle} style={{position:'absolute',inset:0,zIndex:50,background:'#000',cursor:'pointer',animation:'fadeIn .8s ease',display:'flex',alignItems:'center',justifyContent:'center'}}>
@@ -1888,7 +1868,7 @@ function ManageMode({onDisplay,events,setEvents,chores,setChores,grocery,setGroc
 
   if(isMobile){
     return(
-      <div style={{display:'flex',flexDirection:'column',height:'100vh',overflow:'hidden',background:getTimeBg()}}>
+      <div style={{display:'flex',flexDirection:'column',height:'100vh',overflow:'hidden',background:A.systemBg}}>
         <div className="noise-layer" aria-hidden="true" style={{position:'fixed',inset:0,zIndex:9999,pointerEvents:'none'}}/>
         {/* Mobile top bar */}
         <div className="hdr" style={{height:54,background:scrolled?'rgba(255,255,255,0.75)':'rgba(255,255,255,0.52)',backdropFilter:scrolled?'blur(64px) saturate(3.0)':'blur(48px) saturate(2.4)',WebkitBackdropFilter:scrolled?'blur(64px) saturate(3.0)':'blur(48px) saturate(2.4)',borderBottom:'1px solid rgba(255,255,255,0.50)',boxShadow:scrolled?'0 1px 0 rgba(255,255,255,0.50),0 4px 16px rgba(0,0,0,0.06)':'none',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 16px',flexShrink:0}}>
@@ -1920,7 +1900,7 @@ function ManageMode({onDisplay,events,setEvents,chores,setChores,grocery,setGroc
   }
 
   return(
-    <div style={{display:'flex',height:'100vh',overflow:'hidden',background:getTimeBg()}}>
+    <div style={{display:'flex',height:'100vh',overflow:'hidden',background:A.systemBg}}>
       <div className="noise-layer" aria-hidden="true" style={{position:'fixed',inset:0,zIndex:9999,pointerEvents:'none'}}/>
       <div style={{width:232,flexShrink:0,background:'rgba(255,255,255,0.15)',backdropFilter:'blur(20px) saturate(180%) brightness(108%)',WebkitBackdropFilter:'blur(20px) saturate(180%) brightness(108%)',borderRight:'1px solid rgba(255,255,255,0.25)',display:'flex',flexDirection:'column'}}>
         <div style={{padding:'22px 18px 14px'}}>

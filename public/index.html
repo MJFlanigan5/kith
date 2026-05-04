@@ -374,7 +374,7 @@ function FamilyScreen({members,setMembers,toastAdd}){
 }
 
 /* ── Display Mode ────────────────────────────────────────────────────── */
-function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,photos,weather}){
+function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,photos,weather,clockFormat='12h'}){
   const now=useClock();
   const h12=now.getHours()%12||12;
   const min=String(now.getMinutes()).padStart(2,'0');
@@ -1340,6 +1340,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
       if(st.weather_lon) setWeatherLon(st.weather_lon);
       if(st.weather_city){setWeatherCity(st.weather_city);setWeatherDisplay(st.weather_city);}
       if(st.forwarding_address) setFwdAddress(st.forwarding_address);
+      if(st.temperature_unit) setTemp(st.temperature_unit==='C'?'°C':'°F');
     }).catch(()=>{});
   },[]);
   const geocodeCity=async()=>{
@@ -1535,7 +1536,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
         </div>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px',borderTop:`1px solid ${A.sep}`}}>
           <span style={{fontSize:15,color:A.label1}}>Temperature</span>
-          <SegControl value={temp} onChange={setTemp} options={['°F','°C']}/>
+          <SegControl value={temp} onChange={v=>{setTemp(v);saveSetting('temperature_unit',v==='°C'?'C':'F');}} options={['°F','°C']}/>
         </div>
         <div style={{padding:'12px 16px',borderTop:`1px solid ${A.sep}`}}>
           <Btn onClick={onDisplay}>Open Display Mode ↗</Btn>

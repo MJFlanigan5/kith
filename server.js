@@ -175,6 +175,24 @@ function wmoInfo(code) {
   return ['🌡️', '--'];
 }
 
+app.get('/api/weather/geocode', async (req, res) => {
+  const { city } = req.query;
+  if (!city) return res.status(400).json({ error: 'city required' });
+  try {
+    const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=en&format=json`;
+    const data = await fetch(url).then(r => r.json());
+    const r = (data.results || [])[0];
+    if (!r) return res.status(404).json({ error: 'City not found' });
+    res.json({
+      name: [r.name, r.admin1, r.country].filter(Boolean).join(', '),
+      lat: r.latitude,
+      lon: r.longitude,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/weather', async (req, res) => {
   if (_weatherCache && Date.now() - _weatherCacheAt < WEATHER_TTL) {
     return res.json(_weatherCache);
@@ -412,7 +430,7 @@ app.get('/api/meals', (req, res) => {
   res.json(rows);
 });
 
-app.put('/api/meals/:day', (req, res) => {
+app.put('/api/meals/:day', requireAuth, (req, res) => {
   const meal = req.body?.meal ?? '';
   db.prepare('INSERT OR REPLACE INTO meals (day,meal) VALUES (?,?)').run(req.params.day, meal);
   res.json({ ok: true });
@@ -486,13 +504,13 @@ app.post('/api/push/subscribe', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-app.post('/api/push/unsubscribe', (req, res) => {
+app.post('/api/push/unsubscribe', requireAuth, (req, res) => {
   const { endpoint } = req.body;
   db.prepare('DELETE FROM push_subscriptions WHERE endpoint=?').run(endpoint);
   res.json({ ok: true });
 });
 
-app.post('/api/push/test', async (req, res) => {
+app.post('/api/push/test', requireAuth, async (req, res) => {
   const subs = db.prepare('SELECT * FROM push_subscriptions').all();
   await sendPushToAll({ title: 'Hearth', body: 'Push notifications are working!', tag: 'test' });
   res.json({ ok: true, sent: subs.length });
@@ -507,6 +525,7 @@ app.get('/api/settings', (req, res) => {
 app.put('/api/settings', requireAdmin, (req, res) => {
   const upd = db.prepare('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)');
   for (const [k, v] of Object.entries(req.body)) upd.run(k, String(v));
+  if ('weather_lat' in req.body || 'weather_lon' in req.body || 'temperature_unit' in req.body) _weatherCache = null;
   res.json({ ok: true });
 });
 

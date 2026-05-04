@@ -64,11 +64,12 @@ function daysUntil(dateStr){
 }
 
 /* ── API helper ──────────────────────────────────────────────────────── */
+const _authHdr=()=>{const t=localStorage.getItem('hearth_token');return t?{'Authorization':`Bearer ${t}`}:{};};
 const api={
   get:(path)=>fetch(path).then(r=>r.json()),
-  post:(path,data)=>fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}).then(r=>r.json()),
-  put:(path,data)=>fetch(path,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}).then(r=>r.json()),
-  del:(path)=>fetch(path,{method:'DELETE'}).then(r=>r.json()),
+  post:(path,data)=>fetch(path,{method:'POST',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify(data)}).then(r=>r.json()),
+  put:(path,data)=>fetch(path,{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify(data)}).then(r=>r.json()),
+  del:(path)=>fetch(path,{method:'DELETE',headers:{..._authHdr()}}).then(r=>r.json()),
 };
 
 /* ── Time formatting helper ─────────────────────────────────────────── */
@@ -373,7 +374,7 @@ function FamilyScreen({members,setMembers,toastAdd}){
 }
 
 /* ── Display Mode ────────────────────────────────────────────────────── */
-function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,photos}){
+function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,photos,weather}){
   const now=useClock();
   const h12=now.getHours()%12||12;
   const min=String(now.getMinutes()).padStart(2,'0');
@@ -402,11 +403,6 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
     const label=offset===0?'Today':offset===1?'Tomorrow':DAYS[d.getDay()];
     return{label,date:localDate(d)};
   });
-
-  const forecast=[
-    {day:'Fri',icon:'☀️',hi:72,lo:58},{day:'Sat',icon:'⛅',hi:68,lo:55},
-    {day:'Sun',icon:'🌧',hi:63,lo:52},{day:'Mon',icon:'⛅',hi:70,lo:56},{day:'Tue',icon:'☀️',hi:75,lo:60},
-  ];
 
   const toggleChore=async id=>{
     const result=await api.put(`/api/chores/${id}/done`);
@@ -512,21 +508,27 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
         {/* Weather — top right */}
         <Widget style={{background:'linear-gradient(145deg,#E8F0FE 0%,#EEF6FF 100%)'}}>
           <WLabel>Weather</WLabel>
-          <div style={{display:'flex',alignItems:'flex-end',gap:8,marginBottom:2}}>
-            <span style={{fontSize:52,fontWeight:700,color:A.label1,lineHeight:1,letterSpacing:'-.03em'}}>72°</span>
-            <span style={{fontSize:15,color:A.label3,marginBottom:8}}>Partly Cloudy</span>
-          </div>
-          <div style={{fontSize:13,color:A.label4,marginBottom:14}}>H: 76° · L: 58°</div>
-          <div style={{display:'flex',gap:0}}>
-            {forecast.map(f=>(
-              <div key={f.day} style={{flex:1,textAlign:'center'}}>
-                <div style={{fontSize:11,color:A.label4,fontWeight:600,marginBottom:3}}>{f.day}</div>
-                <div style={{fontSize:20,marginBottom:2}}>{f.icon}</div>
-                <div style={{fontSize:13,color:A.label1,fontWeight:600}}>{f.hi}°</div>
-                <div style={{fontSize:11,color:A.label5}}>{f.lo}°</div>
+          {weather?(
+            <>
+              <div style={{display:'flex',alignItems:'flex-end',gap:8,marginBottom:2}}>
+                <span style={{fontSize:52,fontWeight:700,color:A.label1,lineHeight:1,letterSpacing:'-.03em'}}>{weather.temp}°</span>
+                <span style={{fontSize:15,color:A.label3,marginBottom:8}}>{weather.condition}</span>
               </div>
-            ))}
-          </div>
+              <div style={{fontSize:13,color:A.label4,marginBottom:14}}>H: {weather.hi}° · L: {weather.lo}°</div>
+              <div style={{display:'flex',gap:0}}>
+                {weather.forecast.map(f=>(
+                  <div key={f.day} style={{flex:1,textAlign:'center'}}>
+                    <div style={{fontSize:11,color:A.label4,fontWeight:600,marginBottom:3}}>{f.day}</div>
+                    <div style={{fontSize:20,marginBottom:2}}>{f.icon}</div>
+                    <div style={{fontSize:13,color:A.label1,fontWeight:600}}>{f.hi}°</div>
+                    <div style={{fontSize:11,color:A.label5}}>{f.lo}°</div>
+                  </div>
+                ))}
+              </div>
+            </>
+          ):(
+            <div style={{fontSize:13,color:A.label5,paddingTop:8}}>Loading…</div>
+          )}
         </Widget>
 
         {/* Grocery + HA status — bottom right */}
@@ -1324,6 +1326,18 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,toastAdd}){
 
 /* ── Settings ────────────────────────────────────────────────────────── */
 function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setPhotos,clockFormat,setClockFormat}){
+  const [weatherLat,setWeatherLat]=useState('33.749');
+  const [weatherLon,setWeatherLon]=useState('-84.388');
+  useEffect(()=>{
+    api.get('/api/settings').then(st=>{
+      if(st.weather_lat) setWeatherLat(st.weather_lat);
+      if(st.weather_lon) setWeatherLon(st.weather_lon);
+    }).catch(()=>{});
+  },[]);
+  const saveWeatherLocation=async()=>{
+    await api.put('/api/settings',{weather_lat:weatherLat,weather_lon:weatherLon});
+    toastAdd('Weather location saved');
+  };
   const [codeModal,setCodeModal]=useState(false);
   const [codeVal,setCodeVal]=useState(`<div style="font-family:sans-serif;padding:16px">
   <div style="color:#34C759;font-weight:700;font-size:18px">All Systems Clear</div>
@@ -1509,6 +1523,14 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
         </div>
       </FormGroup>
 
+      <FormGroup label="Weather Location" footer="Coordinates for your local weather. Find lat/lon at latlong.net.">
+        <div style={{padding:'14px 16px',display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+          <div><label style={{fontSize:12,color:A.label4,display:'block',marginBottom:4}}>Latitude</label><Inp value={weatherLat} onChange={e=>setWeatherLat(e.target.value)} placeholder="33.749"/></div>
+          <div><label style={{fontSize:12,color:A.label4,display:'block',marginBottom:4}}>Longitude</label><Inp value={weatherLon} onChange={e=>setWeatherLon(e.target.value)} placeholder="-84.388"/></div>
+        </div>
+        <div style={{padding:'0 16px 14px'}}><Btn sm onClick={saveWeatherLocation}>Save Location</Btn></div>
+      </FormGroup>
+
       <FormGroup label="Screensaver Photos" footer="Photos cycle every 10 seconds when the display is idle for 2 minutes.">
         <div style={{padding:'14px 16px'}}>
           <label style={{display:'inline-flex',alignItems:'center',gap:10,cursor:'pointer',background:A.blue,color:'#fff',padding:'9px 18px',borderRadius:A.rPill,fontSize:14,fontWeight:600}}>
@@ -1645,7 +1667,147 @@ function ManageMode({onDisplay,events,setEvents,chores,setChores,grocery,setGroc
 }
 
 /* ── App Root ─────────────────────────────────────────────────────────── */
+/* ── Auth / Login ────────────────────────────────────────────────────────── */
+function PinPad({title,subtitle,onSubmit,onBack,error,loading}){
+  const [pin,setPin]=useState('');
+  const press=(d)=>{
+    if(loading) return;
+    const next=pin+d;
+    if(next.length<=4){
+      setPin(next);
+      if(next.length===4) onSubmit(next).then(ok=>{if(!ok) setPin('');});
+    }
+  };
+  const del=()=>setPin(p=>p.slice(0,-1));
+  return(
+    <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:28,animation:'slideUp .2s ease'}}>
+      <div style={{textAlign:'center'}}>
+        <div style={{fontSize:22,fontWeight:600,color:A.label1}}>{title}</div>
+        {subtitle&&<div style={{fontSize:14,color:A.label3,marginTop:5}}>{subtitle}</div>}
+      </div>
+      <div style={{display:'flex',gap:18,alignItems:'center'}}>
+        {[0,1,2,3].map(i=>(
+          <div key={i} style={{width:14,height:14,borderRadius:'50%',background:pin.length>i?A.blue:A.sep,transition:'background .12s'}}/>
+        ))}
+      </div>
+      {error&&<div style={{fontSize:13,color:A.red,fontWeight:500,marginTop:-8}}>{error}</div>}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(3,76px)',gap:12}}>
+        {[1,2,3,4,5,6,7,8,9,'',0,'⌫'].map((d,i)=>(
+          d===''?<div key={i}/>:
+          <button key={i} onClick={()=>d==='⌫'?del():press(String(d))}
+            style={{width:76,height:76,borderRadius:'50%',border:'none',background:d==='⌫'?'transparent':A.inputBg,fontSize:d==='⌫'?22:24,fontWeight:500,color:A.label1,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',opacity:loading?.5:1,transition:'opacity .1s'}}>
+            {d}
+          </button>
+        ))}
+      </div>
+      {onBack&&<button onClick={onBack} style={{color:A.blue,background:'none',border:'none',fontSize:15,cursor:'pointer',marginTop:4}}>Back</button>}
+    </div>
+  );
+}
+
+function LoginOverlay({onLogin,onKiosk}){
+  const [members,setMembers]=useState([]);
+  const [selected,setSelected]=useState(null);
+  const [error,setError]=useState('');
+  const [loading,setLoading]=useState(false);
+  const [setupNeeded,setSetupNeeded]=useState(false);
+
+  useEffect(()=>{
+    fetch('/api/members').then(r=>r.json()).then(setMembers).catch(()=>{});
+    fetch('/api/auth/setup-status').then(r=>r.json()).then(s=>{
+      if(!s.configured) setSetupNeeded(true);
+    }).catch(()=>{});
+  },[]);
+
+  const submitPin=async(pin)=>{
+    setError(''); setLoading(true);
+    try{
+      if(setupNeeded){
+        const r=await fetch('/api/auth/setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin})});
+        const d=await r.json();
+        if(!r.ok){setError(d.error||'Setup failed');setLoading(false);return false;}
+        onLogin(d.token,null); return true;
+      }
+      const endpoint=selected.type==='admin'?'/api/auth/admin':'/api/auth/login';
+      const body=selected.type==='admin'?{pin}:{member_id:selected.data.id,pin};
+      const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      const d=await r.json();
+      if(!r.ok){setError(d.error||'Wrong PIN');setLoading(false);return false;}
+      onLogin(d.token,d.member||null); return true;
+    }catch(e){setError('Connection error');setLoading(false);return false;}
+  };
+
+  const wrap=(children)=>(
+    <div style={{position:'fixed',inset:0,background:A.systemBg,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',zIndex:10000,gap:40}}>
+      {children}
+    </div>
+  );
+
+  if(setupNeeded) return wrap(
+    <>
+      <div style={{textAlign:'center'}}>
+        <div style={{fontSize:28,fontWeight:700,color:A.label1}}>Welcome to Hearth</div>
+        <div style={{fontSize:15,color:A.label3,marginTop:8,maxWidth:280}}>Create an admin PIN to get started.</div>
+      </div>
+      <PinPad title="Create Admin PIN" onSubmit={submitPin} error={error} loading={loading}/>
+    </>
+  );
+
+  if(selected) return wrap(
+    <PinPad
+      title={selected.type==='admin'?'Admin':selected.data.name}
+      subtitle={selected.type==='admin'?'Enter admin PIN':'Enter your PIN'}
+      onSubmit={submitPin}
+      onBack={()=>{setSelected(null);setError('');}}
+      error={error}
+      loading={loading}
+    />
+  );
+
+  return wrap(
+    <>
+      <div style={{textAlign:'center'}}>
+        <div style={{fontSize:28,fontWeight:700,color:A.label1}}>Hearth</div>
+        <div style={{fontSize:15,color:A.label3,marginTop:6}}>Who&rsquo;s using this?</div>
+      </div>
+      <div style={{display:'flex',gap:20,flexWrap:'wrap',justifyContent:'center',maxWidth:420}}>
+        {members.map(m=>(
+          <button key={m.id} onClick={()=>setSelected({type:'member',data:m})}
+            style={{display:'flex',flexDirection:'column',alignItems:'center',gap:10,background:'none',border:'none',cursor:'pointer',padding:8}}>
+            <div style={{width:68,height:68,borderRadius:'50%',background:m.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,fontWeight:700,color:'#fff',boxShadow:A.shadowMd}}>
+              {m.initials}
+            </div>
+            <div style={{fontSize:14,fontWeight:500,color:A.label1}}>{m.name}</div>
+          </button>
+        ))}
+        <button onClick={()=>setSelected({type:'admin'})}
+          style={{display:'flex',flexDirection:'column',alignItems:'center',gap:10,background:'none',border:'none',cursor:'pointer',padding:8}}>
+          <div style={{width:68,height:68,borderRadius:'50%',background:A.label4,display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,color:'#fff',boxShadow:A.shadowMd}}>⚙</div>
+          <div style={{fontSize:14,fontWeight:500,color:A.label3}}>Admin</div>
+        </button>
+      </div>
+      <button onClick={onKiosk} style={{color:A.label4,background:'none',border:'none',fontSize:13,cursor:'pointer'}}>
+        View Only (Display Mode)
+      </button>
+    </>
+  );
+}
+
 function App(){
+  const [auth,setAuth]=useState(()=>localStorage.getItem('hearth_token')||'');
+  const [kiosk,setKiosk]=useState(()=>localStorage.getItem('hearth_kiosk')==='1');
+  const [currentMember,setCurrentMember]=useState(null);
+
+  const handleLogin=(token,member)=>{
+    localStorage.setItem('hearth_token',token);
+    if(member) setCurrentMember(member);
+    setAuth(token);
+  };
+  const handleKiosk=()=>{
+    localStorage.setItem('hearth_kiosk','1');
+    setKiosk(true);
+  };
+
   const [mode,setMode]=useState('manage');
   const [events,setEvents]=useState([]);
   const [chores,setChores]=useState([]);
@@ -1657,7 +1819,10 @@ function App(){
   const [members,setMembers]=useState([]);
   const [photos,setPhotos]=useState([]);
   const [clockFormat,setClockFormat]=useState('12h');
+  const [weather,setWeather]=useState(null);
   const [loading,setLoading]=useState(true);
+
+  if(!auth&&!kiosk) return <LoginOverlay onLogin={handleLogin} onKiosk={handleKiosk}/>;
 
   useEffect(()=>{
     if('serviceWorker' in navigator){
@@ -1687,6 +1852,7 @@ function App(){
       if(st.clock_format) setClockFormat(st.clock_format);
       setLoading(false);
     }).catch(()=>setLoading(false));
+    api.get('/api/weather').then(w=>{if(!w.error) setWeather(w);}).catch(()=>{});
   },[]);
 
   if(loading) return(
@@ -1697,7 +1863,7 @@ function App(){
   );
 
   return mode==='display'
-    ?<DisplayMode onManage={()=>setMode('manage')} events={events} chores={chores} setChores={setChores} meals={meals} grocery={grocery} countdowns={countdowns} photos={photos} clockFormat={clockFormat}/>
+    ?<DisplayMode onManage={()=>setMode('manage')} events={events} chores={chores} setChores={setChores} meals={meals} grocery={grocery} countdowns={countdowns} photos={photos} clockFormat={clockFormat} weather={weather}/>
     :<ManageMode onDisplay={()=>setMode('display')} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources} inboxCount={inboxCount} setInboxCount={setInboxCount} countdowns={countdowns} setCountdowns={setCountdowns} members={members} setMembers={setMembers} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat}/>;
 }
 

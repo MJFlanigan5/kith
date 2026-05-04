@@ -1,0 +1,3001 @@
+{
+  "video_id": "-C8_AtxEEQc",
+  "segments": [
+    {
+      "text": "Have you ever heard of a split-flap",
+      "start": 0.0,
+      "duration": 3.04
+    },
+    {
+      "text": "display before? Well, you've probably",
+      "start": 1.24,
+      "duration": 3.24
+    },
+    {
+      "text": "seen one even if you didn't know that's",
+      "start": 3.04,
+      "duration": 3.04
+    },
+    {
+      "text": "what it was called. These things used to",
+      "start": 4.48,
+      "duration": 3.16
+    },
+    {
+      "text": "be in airports and train stations",
+      "start": 6.08,
+      "duration": 3.28
+    },
+    {
+      "text": "everywhere, but I'm a little bit too",
+      "start": 7.64,
+      "duration": 3.24
+    },
+    {
+      "text": "young to have seen them there. So,",
+      "start": 9.36,
+      "duration": 3.24
+    },
+    {
+      "text": "nowadays you'll most often see them at",
+      "start": 10.88,
+      "duration": 4.08
+    },
+    {
+      "text": "bars and restaurants, fancy startup",
+      "start": 12.6,
+      "duration": 4.68
+    },
+    {
+      "text": "offices, and places like that. I",
+      "start": 14.96,
+      "duration": 4.4
+    },
+    {
+      "text": "stumbled upon one in a bookstore and",
+      "start": 17.28,
+      "duration": 3.68
+    },
+    {
+      "text": "ever since I saw it in person,",
+      "start": 19.36,
+      "duration": 1.8
+    },
+    {
+      "text": ">> [music]",
+      "start": 20.96,
+      "duration": 2.0
+    },
+    {
+      "text": ">> I've wanted one of my own.",
+      "start": 21.16,
+      "duration": 3.92
+    },
+    {
+      "text": "But, did I buy one?",
+      "start": 22.96,
+      "duration": 4.44
+    },
+    {
+      "text": "Hell no. I just spent hundreds of hours",
+      "start": 25.08,
+      "duration": 4.36
+    },
+    {
+      "text": "building this thing for myself. And in",
+      "start": 27.4,
+      "duration": 3.28
+    },
+    {
+      "text": "this video, I'm going to show you the",
+      "start": 29.44,
+      "duration": 3.159
+    },
+    {
+      "text": "entire process from start to finish of",
+      "start": 30.68,
+      "duration": 3.72
+    },
+    {
+      "text": "how this thing came to be. If you stick",
+      "start": 32.599,
+      "duration": 3.201
+    },
+    {
+      "text": "around to the end, I might just let you",
+      "start": 34.4,
+      "duration": 4.48
+    },
+    {
+      "text": "control it yourself.",
+      "start": 35.8,
+      "duration": 3.08
+    },
+    {
+      "text": "My obsession with split flaps started",
+      "start": 41.04,
+      "duration": 3.32
+    },
+    {
+      "text": "when I made this little eight-character",
+      "start": 42.8,
+      "duration": 4.24
+    },
+    {
+      "text": "model from a tutorial by Morgan Manly.",
+      "start": 44.36,
+      "duration": 6.36
+    },
+    {
+      "text": "But, hold on a second. Let me rewind.",
+      "start": 47.04,
+      "duration": 3.68
+    },
+    {
+      "text": "If you don't already know what a",
+      "start": 51.4,
+      "duration": 2.6
+    },
+    {
+      "text": "split-flap display is, let me show you",
+      "start": 52.44,
+      "duration": 3.56
+    },
+    {
+      "text": "how one works using this clear acrylic",
+      "start": 54.0,
+      "duration": 3.76
+    },
+    {
+      "text": "open-source model from a project by",
+      "start": 56.0,
+      "duration": 3.88
+    },
+    {
+      "text": "Scott Bessac. Inside of a split-flap",
+      "start": 57.76,
+      "duration": 4.24
+    },
+    {
+      "text": "module such as this, you'll find a hub",
+      "start": 59.88,
+      "duration": 3.96
+    },
+    {
+      "text": "that looks a little something like this",
+      "start": 62.0,
+      "duration": 3.12
+    },
+    {
+      "text": "that has a number of holes on either",
+      "start": 63.84,
+      "duration": 3.84
+    },
+    {
+      "text": "side. Inside of those holes rides one of",
+      "start": 65.12,
+      "duration": 3.88
+    },
+    {
+      "text": "these flaps. [music]",
+      "start": 67.68,
+      "duration": 3.48
+    },
+    {
+      "text": "These are half flaps or split flaps, if",
+      "start": 69.0,
+      "duration": 4.36
+    },
+    {
+      "text": "you will. And once they rotate down due",
+      "start": 71.16,
+      "duration": 3.44
+    },
+    {
+      "text": "to [music] gravity,",
+      "start": 73.36,
+      "duration": 3.2
+    },
+    {
+      "text": "they'll display a whole character. Once",
+      "start": 74.6,
+      "duration": 3.64
+    },
+    {
+      "text": "we turn it on, you can see the module",
+      "start": 76.56,
+      "duration": 3.96
+    },
+    {
+      "text": "stepping here one at a time. You can see",
+      "start": 78.24,
+      "duration": 3.64
+    },
+    {
+      "text": "the hub rotating in there with the help",
+      "start": 80.52,
+      "duration": 3.36
+    },
+    {
+      "text": "of the stepper motor. You can also see",
+      "start": 81.88,
+      "duration": 3.925
+    },
+    {
+      "text": "at the top here the flaps are retained",
+      "start": 83.88,
+      "duration": 3.6
+    },
+    {
+      "text": "[music] by this faceplate so that only",
+      "start": 85.805,
+      "duration": 3.595
+    },
+    {
+      "text": "one flips down at a time.",
+      "start": 87.48,
+      "duration": 3.48
+    },
+    {
+      "text": "The type of motor you're using on a",
+      "start": 89.4,
+      "duration": 3.2
+    },
+    {
+      "text": "split-flap display is important. This is",
+      "start": 90.96,
+      "duration": 3.88
+    },
+    {
+      "text": "a stepper motor and it allows us to turn",
+      "start": 92.6,
+      "duration": 4.04
+    },
+    {
+      "text": "a precise number of degrees so that we",
+      "start": 94.84,
+      "duration": 3.96
+    },
+    {
+      "text": "can display whatever letter we want.",
+      "start": 96.64,
+      "duration": 3.6
+    },
+    {
+      "text": "The other half of the story is this",
+      "start": 98.8,
+      "duration": 2.68
+    },
+    {
+      "text": "little sensor here, which is called a",
+      "start": 100.24,
+      "duration": 2.72
+    },
+    {
+      "text": "Hall effect sensor.",
+      "start": 101.48,
+      "duration": 3.6
+    },
+    {
+      "text": "And when it rotates, it can detect this",
+      "start": 102.96,
+      "duration": 3.84
+    },
+    {
+      "text": "little magnet here",
+      "start": 105.08,
+      "duration": 3.84
+    },
+    {
+      "text": "so that when I plug it in,",
+      "start": 106.8,
+      "duration": 4.4
+    },
+    {
+      "text": "it's going to rotate until the magnet is",
+      "start": 108.92,
+      "duration": 4.52
+    },
+    {
+      "text": "in line with the Hall effect sensor,",
+      "start": 111.2,
+      "duration": 3.76
+    },
+    {
+      "text": "which is indicated by that LED there.",
+      "start": 113.44,
+      "duration": 3.0
+    },
+    {
+      "text": "And then after that, it knows precisely",
+      "start": 114.96,
+      "duration": 3.56
+    },
+    {
+      "text": "where it is. And if you want to type a",
+      "start": 116.44,
+      "duration": 3.52
+    },
+    {
+      "text": "C, for example, it knows how many",
+      "start": 118.52,
+      "duration": 3.56
+    },
+    {
+      "text": "degrees to rotate to show that C. So,",
+      "start": 119.96,
+      "duration": 3.64
+    },
+    {
+      "text": "this is just how one module of a",
+      "start": 122.08,
+      "duration": 3.24
+    },
+    {
+      "text": "split-flap display works, but imagine",
+      "start": 123.6,
+      "duration": 3.56
+    },
+    {
+      "text": "you had 50 of them. It gets more",
+      "start": 125.32,
+      "duration": 3.4
+    },
+    {
+      "text": "complicated as you add more of these and",
+      "start": 127.16,
+      "duration": 2.8
+    },
+    {
+      "text": "that's the project that I'll be working",
+      "start": 128.72,
+      "duration": 4.319
+    },
+    {
+      "text": "on in this video.",
+      "start": 129.96,
+      "duration": 3.079
+    },
+    {
+      "text": "All right. Now that we all know how a",
+      "start": 135.84,
+      "duration": 2.56
+    },
+    {
+      "text": "split-flap works, let me show you this",
+      "start": 136.84,
+      "duration": 3.24
+    },
+    {
+      "text": "one again. I'll take it apart, show you",
+      "start": 138.4,
+      "duration": 3.68
+    },
+    {
+      "text": "some of the things I like and dislike,",
+      "start": 140.08,
+      "duration": 3.4
+    },
+    {
+      "text": "and that way we'll get some requirements",
+      "start": 142.08,
+      "duration": 3.56
+    },
+    {
+      "text": "going for a new design. So, right off",
+      "start": 143.48,
+      "duration": 3.48
+    },
+    {
+      "text": "the bat, one thing I really like about",
+      "start": 145.64,
+      "duration": 3.48
+    },
+    {
+      "text": "this design is the size of the modules",
+      "start": 146.96,
+      "duration": 3.92
+    },
+    {
+      "text": "themselves. They're pretty compact. The",
+      "start": 149.12,
+      "duration": 3.4
+    },
+    {
+      "text": "motor is right inside of the hub, which",
+      "start": 150.88,
+      "duration": 3.96
+    },
+    {
+      "text": "I'll show you in a second. So, it allows",
+      "start": 152.52,
+      "duration": 3.92
+    },
+    {
+      "text": "them to be right up next to each other,",
+      "start": 154.84,
+      "duration": 3.64
+    },
+    {
+      "text": "but I don't like how many modules it",
+      "start": 156.44,
+      "duration": 4.28
+    },
+    {
+      "text": "has. It only has eight in this version",
+      "start": 158.48,
+      "duration": 3.68
+    },
+    {
+      "text": "and I definitely want mine to have a lot",
+      "start": 160.72,
+      "duration": 2.84
+    },
+    {
+      "text": "more than that. So, let me take it apart",
+      "start": 162.16,
+      "duration": 2.72
+    },
+    {
+      "text": "and show you some other things that I",
+      "start": 163.56,
+      "duration": 2.96
+    },
+    {
+      "text": "want to change on the inside. All right.",
+      "start": 164.88,
+      "duration": 3.4
+    },
+    {
+      "text": "Now that it's apart, you can see all",
+      "start": 166.52,
+      "duration": 3.88
+    },
+    {
+      "text": "these modules are strung together by",
+      "start": 168.28,
+      "duration": 3.72
+    },
+    {
+      "text": "connectors here",
+      "start": 170.4,
+      "duration": 3.56
+    },
+    {
+      "text": "and they're all held together by these",
+      "start": 172.0,
+      "duration": 3.76
+    },
+    {
+      "text": "long threaded rods that go through all",
+      "start": 173.96,
+      "duration": 3.88
+    },
+    {
+      "text": "eight modules. This is one thing I don't",
+      "start": 175.76,
+      "duration": 3.72
+    },
+    {
+      "text": "like cuz it's hard to put these together",
+      "start": 177.84,
+      "duration": 3.84
+    },
+    {
+      "text": "and requires you to, you know, sandwich",
+      "start": 179.48,
+      "duration": 3.8
+    },
+    {
+      "text": "all these wires together with these",
+      "start": 181.68,
+      "duration": 4.4
+    },
+    {
+      "text": "spacers and it was just a pain to put",
+      "start": 183.28,
+      "duration": 3.96
+    },
+    {
+      "text": "together and I don't think it's going to",
+      "start": 186.08,
+      "duration": 3.4
+    },
+    {
+      "text": "scale very well when I add more modules.",
+      "start": 187.24,
+      "duration": 3.24
+    },
+    {
+      "text": "So, we're definitely going to change",
+      "start": 189.48,
+      "duration": 2.8
+    },
+    {
+      "text": "that. Here's a closer view of one of the",
+      "start": 190.48,
+      "duration": 4.76
+    },
+    {
+      "text": "modules' enclosures and I really like",
+      "start": 192.28,
+      "duration": 4.44
+    },
+    {
+      "text": "most of this design. The motor is in",
+      "start": 195.24,
+      "duration": 3.44
+    },
+    {
+      "text": "here. Here's some gears that help turn",
+      "start": 196.72,
+      "duration": 4.0
+    },
+    {
+      "text": "the hub. There's a Hall effect sensor in",
+      "start": 198.68,
+      "duration": 3.8
+    },
+    {
+      "text": "the back and I like this wire retainer",
+      "start": 200.72,
+      "duration": 3.36
+    },
+    {
+      "text": "clip. So, we're definitely going to use",
+      "start": 202.48,
+      "duration": 3.48
+    },
+    {
+      "text": "this as a starting point. But, one thing",
+      "start": 204.08,
+      "duration": 3.84
+    },
+    {
+      "text": "I don't like too much is this",
+      "start": 205.96,
+      "duration": 3.8
+    },
+    {
+      "text": "electronics package here. It's a bit of",
+      "start": 207.92,
+      "duration": 3.68
+    },
+    {
+      "text": "a rat's nest of wires and it was hard to",
+      "start": 209.76,
+      "duration": 3.28
+    },
+    {
+      "text": "solder it all together and cram it in",
+      "start": 211.6,
+      "duration": 2.52
+    },
+    {
+      "text": "there. So, we're definitely going to try",
+      "start": 213.04,
+      "duration": 4.4
+    },
+    {
+      "text": "and improve upon that for my version.",
+      "start": 214.12,
+      "duration": 5.28
+    },
+    {
+      "text": "Our first criteria, I think, is that we",
+      "start": 217.44,
+      "duration": 3.76
+    },
+    {
+      "text": "want it to have more flaps. I like A",
+      "start": 219.4,
+      "duration": 3.6
+    },
+    {
+      "text": "through Z, 0 through 9, but [music] I",
+      "start": 221.2,
+      "duration": 3.6
+    },
+    {
+      "text": "want some special characters involved. I",
+      "start": 223.0,
+      "duration": 3.68
+    },
+    {
+      "text": "like the ones that involve some color.",
+      "start": 224.8,
+      "duration": 4.08
+    },
+    {
+      "text": "So, we're going to set it to 64 flaps.",
+      "start": 226.68,
+      "duration": 4.2
+    },
+    {
+      "text": "We also want it to have more modules in",
+      "start": 228.88,
+      "duration": 3.08
+    },
+    {
+      "text": "the first place. [music] I don't want",
+      "start": 230.88,
+      "duration": 3.08
+    },
+    {
+      "text": "just a single line. My goal is going to",
+      "start": 231.96,
+      "duration": 4.497
+    },
+    {
+      "text": "be 15 modules per row and three rows",
+      "start": 233.96,
+      "duration": 4.8
+    },
+    {
+      "text": "[music] for a total of 45 modules. Now,",
+      "start": 236.457,
+      "duration": 4.183
+    },
+    {
+      "text": "with that many modules, we need it to be",
+      "start": 238.76,
+      "duration": 3.76
+    },
+    {
+      "text": "much easier to build. [music] So, the",
+      "start": 240.64,
+      "duration": 4.24
+    },
+    {
+      "text": "goal is for it to be totally modular and",
+      "start": 242.52,
+      "duration": 4.48
+    },
+    {
+      "text": "essentially that means snap-on, snap-off",
+      "start": 244.88,
+      "duration": 3.84
+    },
+    {
+      "text": "design. I don't want to have any",
+      "start": 247.0,
+      "duration": 3.04
+    },
+    {
+      "text": "threaded rods throughout the entire",
+      "start": 248.72,
+      "duration": 3.36
+    },
+    {
+      "text": "thing. I don't want to deal with taking",
+      "start": 250.04,
+      "duration": 3.0
+    },
+    {
+      "text": "the whole [music] thing apart just to",
+      "start": 252.08,
+      "duration": 2.24
+    },
+    {
+      "text": "service one in the middle. I just want",
+      "start": 253.04,
+      "duration": 3.16
+    },
+    {
+      "text": "to be able to plug and play and have the",
+      "start": 254.32,
+      "duration": 3.52
+    },
+    {
+      "text": "modules working. [music] For criterion",
+      "start": 256.2,
+      "duration": 4.08
+    },
+    {
+      "text": "number four, I don't want to have to do",
+      "start": 257.84,
+      "duration": 3.8
+    },
+    {
+      "text": "too much soldering. I think there might",
+      "start": 260.28,
+      "duration": 2.88
+    },
+    {
+      "text": "be a little bit involved, but for the",
+      "start": 261.64,
+      "duration": 2.88
+    },
+    {
+      "text": "most part, I want the boards to be",
+      "start": 263.16,
+      "duration": 3.56
+    },
+    {
+      "text": "self-enclosed. I want to just be able to",
+      "start": 264.52,
+      "duration": 3.96
+    },
+    {
+      "text": "plug in the motor, plug in the sensor,",
+      "start": 266.72,
+      "duration": 3.56
+    },
+    {
+      "text": "and be ready to go. And the last",
+      "start": 268.48,
+      "duration": 3.76
+    },
+    {
+      "text": "criteria, might be the hardest to hit,",
+      "start": 270.28,
+      "duration": 4.4
+    },
+    {
+      "text": "is that I want to spend under $1,000 on",
+      "start": 272.24,
+      "duration": 4.28
+    },
+    {
+      "text": "this project. Online, I can buy a board",
+      "start": 274.68,
+      "duration": 4.92
+    },
+    {
+      "text": "that's 15 by 3 [music] for under $1,000.",
+      "start": 276.52,
+      "duration": 4.6
+    },
+    {
+      "text": "So, I think it would only be fitting",
+      "start": 279.6,
+      "duration": 3.84
+    },
+    {
+      "text": "that mine should cost less than that. It",
+      "start": 281.12,
+      "duration": 3.68
+    },
+    {
+      "text": "wouldn't make any sense for me to build",
+      "start": 283.44,
+      "duration": 2.52
+    },
+    {
+      "text": "one [music] just for it to be more",
+      "start": 284.8,
+      "duration": 2.84
+    },
+    {
+      "text": "expensive than the one that I could buy.",
+      "start": 285.96,
+      "duration": 3.2
+    },
+    {
+      "text": "So, that's my goal. That's my target",
+      "start": 287.64,
+      "duration": 2.6
+    },
+    {
+      "text": "that I'm going to hit. We'll keep a",
+      "start": 289.16,
+      "duration": 2.68
+    },
+    {
+      "text": "tally of how [music] much I spend and",
+      "start": 290.24,
+      "duration": 4.6
+    },
+    {
+      "text": "see if I get there in the end.",
+      "start": 291.84,
+      "duration": 3.0
+    },
+    {
+      "text": "All right. Let's tackle the easy part",
+      "start": 297.28,
+      "duration": 2.52
+    },
+    {
+      "text": "first. How are we going to make it have",
+      "start": 298.6,
+      "duration": 3.68
+    },
+    {
+      "text": "64 flaps? Well, the current version has",
+      "start": 299.8,
+      "duration": 5.36
+    },
+    {
+      "text": "37. So, to make it have 64, you might",
+      "start": 302.28,
+      "duration": 4.84
+    },
+    {
+      "text": "think you just need to add 27 more",
+      "start": 305.16,
+      "duration": 3.08
+    },
+    {
+      "text": "holes.",
+      "start": 307.12,
+      "duration": 2.84
+    },
+    {
+      "text": "But, it can't be that easy, can't it?",
+      "start": 308.24,
+      "duration": 3.6
+    },
+    {
+      "text": "Well, the short answer is maybe.",
+      "start": 309.96,
+      "duration": 3.16
+    },
+    {
+      "text": "These are the stepper motors that power",
+      "start": 311.84,
+      "duration": 4.08
+    },
+    {
+      "text": "the whole thing. They're little 28BYJ-48",
+      "start": 313.12,
+      "duration": 4.52
+    },
+    {
+      "text": "5-V stepper motors and they don't have a",
+      "start": 315.92,
+      "duration": 3.12
+    },
+    {
+      "text": "great resolution. So, there's no",
+      "start": 317.64,
+      "duration": 3.8
+    },
+    {
+      "text": "guarantee they can handle 64 flaps. But,",
+      "start": 319.04,
+      "duration": 3.84
+    },
+    {
+      "text": "there's nothing to do than to just try",
+      "start": 321.44,
+      "duration": 4.04
+    },
+    {
+      "text": "it out. So, I went into Onshape, removed",
+      "start": 322.88,
+      "duration": 5.12
+    },
+    {
+      "text": "all the old holes, and extruded 64 new",
+      "start": 325.48,
+      "duration": 4.48
+    },
+    {
+      "text": "ones. But a bing, but a boom, you got a",
+      "start": 328.0,
+      "duration": 3.28
+    },
+    {
+      "text": "new drum.",
+      "start": 329.96,
+      "duration": 2.72
+    },
+    {
+      "text": "And after a quick 3D print, here's the",
+      "start": 331.28,
+      "duration": 3.4
+    },
+    {
+      "text": "old one and here's the new one. You can",
+      "start": 332.68,
+      "duration": 4.48
+    },
+    {
+      "text": "see the 27 new holes. They're a little",
+      "start": 334.68,
+      "duration": 4.28
+    },
+    {
+      "text": "bit smaller and I did have to modify the",
+      "start": 337.16,
+      "duration": 3.32
+    },
+    {
+      "text": "flaps to make them a little bit thinner",
+      "start": 338.96,
+      "duration": 3.32
+    },
+    {
+      "text": "and smaller to fit, but that's pretty",
+      "start": 340.48,
+      "duration": 3.44
+    },
+    {
+      "text": "much all I had to do. Just add the new",
+      "start": 342.28,
+      "duration": 3.8
+    },
+    {
+      "text": "characters [music] that we want and all",
+      "start": 343.92,
+      "duration": 3.88
+    },
+    {
+      "text": "we got to do is try it on a module and",
+      "start": 346.08,
+      "duration": 3.08
+    },
+    {
+      "text": "see if there's enough resolution to make",
+      "start": 347.8,
+      "duration": 3.08
+    },
+    {
+      "text": "it work. And thankfully, it did work.",
+      "start": 349.16,
+      "duration": 3.88
+    },
+    {
+      "text": "You can see it step along happily here",
+      "start": 350.88,
+      "duration": 3.68
+    },
+    {
+      "text": "and it gives me more confidence that",
+      "start": 353.04,
+      "duration": 2.84
+    },
+    {
+      "text": "these things have enough resolution to",
+      "start": 354.56,
+      "duration": 3.56
+    },
+    {
+      "text": "handle the 64 flaps. I guess it was just",
+      "start": 355.88,
+      "duration": 3.68
+    },
+    {
+      "text": "as easy as adding more holes to the",
+      "start": 358.12,
+      "duration": 3.32
+    },
+    {
+      "text": "drum. And now we can move on to the next",
+      "start": 359.56,
+      "duration": 2.88
+    },
+    {
+      "text": "step, which is probably going to be a",
+      "start": 361.44,
+      "duration": 3.72
+    },
+    {
+      "text": "lot harder.",
+      "start": 362.44,
+      "duration": 2.72
+    },
+    {
+      "text": "Okay, it's time to tackle the",
+      "start": 368.48,
+      "duration": 2.44
+    },
+    {
+      "text": "electronics, which is one of the parts",
+      "start": 369.56,
+      "duration": 2.76
+    },
+    {
+      "text": "I'm most concerned about cuz I have the",
+      "start": 370.92,
+      "duration": 3.04
+    },
+    {
+      "text": "least experience in this, but I think",
+      "start": 372.32,
+      "duration": 3.0
+    },
+    {
+      "text": "I've [music] got a plan.",
+      "start": 373.96,
+      "duration": 2.84
+    },
+    {
+      "text": "So, the way the last one worked is that",
+      "start": 375.32,
+      "duration": 3.92
+    },
+    {
+      "text": "there was a single ESP32 microcontroller",
+      "start": 376.8,
+      "duration": 4.48
+    },
+    {
+      "text": "controlling [music] all eight motors.",
+      "start": 379.24,
+      "duration": 3.64
+    },
+    {
+      "text": "But, for a variety of reasons that I'm",
+      "start": 381.28,
+      "duration": 3.2
+    },
+    {
+      "text": "not going to get into in this video, I",
+      "start": 382.88,
+      "duration": 2.68
+    },
+    {
+      "text": "don't think that's going to scale up",
+      "start": 384.48,
+      "duration": 2.629
+    },
+    {
+      "text": "very well when we have to control 45",
+      "start": 385.56,
+      "duration": 4.64
+    },
+    {
+      "text": "[music] motors and read 45 sensors. So,",
+      "start": 387.109,
+      "duration": 4.411
+    },
+    {
+      "text": "instead, what I think I'm going to do is",
+      "start": 390.2,
+      "duration": 3.76
+    },
+    {
+      "text": "put an individual chip on each module",
+      "start": 391.52,
+      "duration": 4.28
+    },
+    {
+      "text": "that can just control that module's",
+      "start": 393.96,
+      "duration": 3.08
+    },
+    {
+      "text": "motor.",
+      "start": 395.8,
+      "duration": 2.52
+    },
+    {
+      "text": "And then we'll have a Raspberry Pi",
+      "start": 397.04,
+      "duration": 2.76
+    },
+    {
+      "text": "sending signals to all of them telling",
+      "start": 398.32,
+      "duration": 3.16
+    },
+    {
+      "text": "them where to go. It sounds pretty",
+      "start": 399.8,
+      "duration": 3.44
+    },
+    {
+      "text": "simple, but it will entail me having to",
+      "start": 401.48,
+      "duration": 3.56
+    },
+    {
+      "text": "make a custom PCB, which is something",
+      "start": 403.24,
+      "duration": 3.88
+    },
+    {
+      "text": "I've never done before. So, I'll give it",
+      "start": 405.04,
+      "duration": 4.0
+    },
+    {
+      "text": "my best shot. Okay, check this out. This",
+      "start": 407.12,
+      "duration": 3.28
+    },
+    {
+      "text": "is what I came up with. There's a",
+      "start": 409.04,
+      "duration": 3.2
+    },
+    {
+      "text": "microcontroller there, motor controller",
+      "start": 410.4,
+      "duration": 3.88
+    },
+    {
+      "text": "there, plugins for the motor and the",
+      "start": 412.24,
+      "duration": 3.92
+    },
+    {
+      "text": "Hall effect sensor. It looks a bit",
+      "start": 414.28,
+      "duration": 3.84
+    },
+    {
+      "text": "shotty, but it's my first time doing",
+      "start": 416.16,
+      "duration": 3.12
+    },
+    {
+      "text": "this. So, I just want to make sure the",
+      "start": 418.12,
+      "duration": 2.6
+    },
+    {
+      "text": "idea is there. So, I'm going to send",
+      "start": 419.28,
+      "duration": 3.4
+    },
+    {
+      "text": "this to the manufacturer and see if it",
+      "start": 420.72,
+      "duration": 4.04
+    },
+    {
+      "text": "works when it comes back. One week",
+      "start": 422.68,
+      "duration": 4.68
+    },
+    {
+      "text": "later.",
+      "start": 424.76,
+      "duration": 2.6
+    },
+    {
+      "text": "All right. Check it out. Here's the PCB",
+      "start": 432.32,
+      "duration": 3.56
+    },
+    {
+      "text": "all made up. Got all the components on",
+      "start": 433.88,
+      "duration": 5.64
+    },
+    {
+      "text": "there and I went ahead and did some",
+      "start": 435.88,
+      "duration": 5.28
+    },
+    {
+      "text": "testing. All right. I got it all",
+      "start": 439.52,
+      "duration": 3.44
+    },
+    {
+      "text": "programmed up, plugged in the power and",
+      "start": 441.16,
+      "duration": 3.2
+    },
+    {
+      "text": "the motor plugged in and when I turn it",
+      "start": 442.96,
+      "duration": 2.36
+    },
+    {
+      "text": "on,",
+      "start": 444.36,
+      "duration": 2.0
+    },
+    {
+      "text": "there we go. You can see the motor",
+      "start": 445.32,
+      "duration": 2.24
+    },
+    {
+      "text": "spinning.",
+      "start": 446.36,
+      "duration": 2.4
+    },
+    {
+      "text": "Overall, these things worked pretty",
+      "start": 447.56,
+      "duration": 3.28
+    },
+    {
+      "text": "well. There was a resistor on there that",
+      "start": 448.76,
+      "duration": 3.72
+    },
+    {
+      "text": "I had to remove, but other than that,",
+      "start": 450.84,
+      "duration": 3.8
+    },
+    {
+      "text": "nothing too wrong with the design.",
+      "start": 452.48,
+      "duration": 3.4
+    },
+    {
+      "text": "There are a couple things we still got",
+      "start": 454.64,
+      "duration": 2.76
+    },
+    {
+      "text": "to figure out like how to deliver the",
+      "start": 455.88,
+      "duration": 3.72
+    },
+    {
+      "text": "power and the signal to it when it's all",
+      "start": 457.4,
+      "duration": 4.48
+    },
+    {
+      "text": "on the board, but I'm pretty happy with",
+      "start": 459.6,
+      "duration": 4.16
+    },
+    {
+      "text": "the results and I'm going to change a",
+      "start": 461.88,
+      "duration": 3.72
+    },
+    {
+      "text": "few things and [music] then hopefully we",
+      "start": 463.76,
+      "duration": 5.16
+    },
+    {
+      "text": "can manufacture 50 of them.",
+      "start": 465.6,
+      "duration": 3.32
+    },
+    {
+      "text": "I think I found the perfect solution for",
+      "start": 472.68,
+      "duration": 3.32
+    },
+    {
+      "text": "both mounting the modules and delivering",
+      "start": 474.2,
+      "duration": 3.84
+    },
+    {
+      "text": "the power and data they'll need. It",
+      "start": 476.0,
+      "duration": 4.16
+    },
+    {
+      "text": "starts with this. This is DIN rail and",
+      "start": 478.04,
+      "duration": 3.68
+    },
+    {
+      "text": "it's a standardized type of rail that's",
+      "start": 480.16,
+      "duration": 3.12
+    },
+    {
+      "text": "often used for mounting electrical",
+      "start": 481.72,
+      "duration": 3.0
+    },
+    {
+      "text": "components.",
+      "start": 483.28,
+      "duration": 3.12
+    },
+    {
+      "text": "And I also found this cool 3D print",
+      "start": 484.72,
+      "duration": 4.2
+    },
+    {
+      "text": "online that has a compliant mechanism",
+      "start": 486.4,
+      "duration": 4.12
+    },
+    {
+      "text": "that allows me to just snap right onto",
+      "start": 488.92,
+      "duration": 3.92
+    },
+    {
+      "text": "the DIN rails and I can stick the",
+      "start": 490.52,
+      "duration": 4.01
+    },
+    {
+      "text": "modules on there. They'll be good",
+      "start": 492.84,
+      "duration": 2.8
+    },
+    {
+      "text": "[music] to go.",
+      "start": 494.53,
+      "duration": 2.27
+    },
+    {
+      "text": "I don't know how well you can see, but",
+      "start": 495.64,
+      "duration": 2.76
+    },
+    {
+      "text": "there's also four holes that I put",
+      "start": 496.8,
+      "duration": 3.08
+    },
+    {
+      "text": "inside this mount and those [music] are",
+      "start": 498.4,
+      "duration": 3.0
+    },
+    {
+      "text": "going to be for pogo pins. So, I've",
+      "start": 499.88,
+      "duration": 3.28
+    },
+    {
+      "text": "taken the liberty of making this new",
+      "start": 501.4,
+      "duration": 3.6
+    },
+    {
+      "text": "circuit board, which is essentially just",
+      "start": 503.16,
+      "duration": 3.96
+    },
+    {
+      "text": "four long traces that will carry the",
+      "start": 505.0,
+      "duration": 4.28
+    },
+    {
+      "text": "power, ground, [music] and signal A and",
+      "start": 507.12,
+      "duration": 3.72
+    },
+    {
+      "text": "B lines. And the pogo pins will",
+      "start": 509.28,
+      "duration": 3.439
+    },
+    {
+      "text": "interface directly with that. So, all",
+      "start": 510.84,
+      "duration": 3.56
+    },
+    {
+      "text": "that's left to do is to modify the",
+      "start": 512.719,
+      "duration": 3.481
+    },
+    {
+      "text": "circuit boards to have the pads to fit",
+      "start": 514.4,
+      "duration": 3.48
+    },
+    {
+      "text": "the pogo pins that will fit inside the",
+      "start": 516.2,
+      "duration": 3.32
+    },
+    {
+      "text": "mount here and I should be able [music]",
+      "start": 517.88,
+      "duration": 3.4
+    },
+    {
+      "text": "to order 50 more and we can start",
+      "start": 519.52,
+      "duration": 5.8
+    },
+    {
+      "text": "actually building the thing. All right.",
+      "start": 521.28,
+      "duration": 5.48
+    },
+    {
+      "text": "I just got home from a couple weeks away",
+      "start": 525.32,
+      "duration": 4.16
+    },
+    {
+      "text": "for the holidays, but look what's here.",
+      "start": 526.76,
+      "duration": 4.16
+    },
+    {
+      "text": "It's about midnight and I do have to go",
+      "start": 529.48,
+      "duration": 4.16
+    },
+    {
+      "text": "to bed, but I needed to open this and",
+      "start": 530.92,
+      "duration": 4.84
+    },
+    {
+      "text": "check out what's inside.",
+      "start": 533.64,
+      "duration": 3.88
+    },
+    {
+      "text": "Ooh.",
+      "start": 535.76,
+      "duration": 3.76
+    },
+    {
+      "text": "Nice. I completely forgot, to be honest,",
+      "start": 537.52,
+      "duration": 4.76
+    },
+    {
+      "text": "that I got them in blue.",
+      "start": 539.52,
+      "duration": 5.28
+    },
+    {
+      "text": "Looks like there's all 50.",
+      "start": 542.28,
+      "duration": 5.36
+    },
+    {
+      "text": "How cool is that?",
+      "start": 544.8,
+      "duration": 4.56
+    },
+    {
+      "text": "All right. Well,",
+      "start": 547.64,
+      "duration": 2.8
+    },
+    {
+      "text": "to be honest, I didn't think they would",
+      "start": 549.36,
+      "duration": 2.48
+    },
+    {
+      "text": "have these",
+      "start": 550.44,
+      "duration": 2.84
+    },
+    {
+      "text": "edges on them, but hopefully they'll",
+      "start": 551.84,
+      "duration": 4.56
+    },
+    {
+      "text": "just snap off.",
+      "start": 553.28,
+      "duration": 4.44
+    },
+    {
+      "text": "Sweet.",
+      "start": 556.4,
+      "duration": 2.76
+    },
+    {
+      "text": "All right. So, I just got to get the",
+      "start": 557.72,
+      "duration": 3.44
+    },
+    {
+      "text": "pins soldered on there,",
+      "start": 559.16,
+      "duration": 3.52
+    },
+    {
+      "text": "get them all programmed up and plugged",
+      "start": 561.16,
+      "duration": 4.08
+    },
+    {
+      "text": "in. Hopefully, they work.",
+      "start": 562.68,
+      "duration": 3.84
+    },
+    {
+      "text": "Cool. All right. I'm going to bed, but",
+      "start": 565.24,
+      "duration": 2.68
+    },
+    {
+      "text": "I'll work on these tomorrow. Here's a",
+      "start": 566.52,
+      "duration": 3.12
+    },
+    {
+      "text": "closer look at the final PCBs that are",
+      "start": 567.92,
+      "duration": 3.2
+    },
+    {
+      "text": "going to go on each module for all the",
+      "start": 569.64,
+      "duration": 3.44
+    },
+    {
+      "text": "nerds out there like me.",
+      "start": 571.12,
+      "duration": 3.56
+    },
+    {
+      "text": "Up here in the top right is the actual",
+      "start": 573.08,
+      "duration": 4.64
+    },
+    {
+      "text": "microcontroller, which is the ATtiny1616",
+      "start": 574.68,
+      "duration": 4.84
+    },
+    {
+      "text": "in this case. Definitely overkill for",
+      "start": 577.72,
+      "duration": 3.32
+    },
+    {
+      "text": "this purpose, but [music] hey, what are",
+      "start": 579.52,
+      "duration": 3.32
+    },
+    {
+      "text": "you going to do? That little one to the",
+      "start": 581.04,
+      "duration": 4.96
+    },
+    {
+      "text": "left is the RS485 transceiver, which is",
+      "start": 582.84,
+      "duration": 4.24
+    },
+    {
+      "text": "going to be able to receive and",
+      "start": 586.0,
+      "duration": 3.52
+    },
+    {
+      "text": "interpret signals from the Raspberry Pi.",
+      "start": 587.08,
+      "duration": 4.0
+    },
+    {
+      "text": "You got the motor controller chip and a",
+      "start": 589.52,
+      "duration": 3.4
+    },
+    {
+      "text": "bunch of power circuitry. And then the",
+      "start": 591.08,
+      "duration": 3.08
+    },
+    {
+      "text": "four pins in the middle are where the",
+      "start": 592.92,
+      "duration": 2.76
+    },
+    {
+      "text": "pogo pins are going to I",
+      "start": 594.16,
+      "duration": 3.4
+    },
+    {
+      "text": "So, I'm actually pretty proud of this",
+      "start": 595.68,
+      "duration": 3.12
+    },
+    {
+      "text": "circuit board. [music] It's only the",
+      "start": 597.56,
+      "duration": 3.44
+    },
+    {
+      "text": "third one I've ever made and if you're",
+      "start": 598.8,
+      "duration": 3.6
+    },
+    {
+      "text": "experiencing in this, you might think",
+      "start": 601.0,
+      "duration": 3.92
+    },
+    {
+      "text": "it's pretty simple, but [music]",
+      "start": 602.4,
+      "duration": 3.96
+    },
+    {
+      "text": "I just think it's so cool how you can go",
+      "start": 604.92,
+      "duration": 3.581
+    },
+    {
+      "text": "from not knowing something to watching a",
+      "start": 606.36,
+      "duration": 3.6
+    },
+    {
+      "text": "[music] few YouTube videos, trying it",
+      "start": 608.501,
+      "duration": 2.899
+    },
+    {
+      "text": "out, and",
+      "start": 609.96,
+      "duration": 4.08
+    },
+    {
+      "text": "you know, not too long later have 50",
+      "start": 611.4,
+      "duration": 4.44
+    },
+    {
+      "text": "circuit boards that seemingly [music]",
+      "start": 614.04,
+      "duration": 3.48
+    },
+    {
+      "text": "work in your hands. And I'm really glad",
+      "start": 615.84,
+      "duration": 2.84
+    },
+    {
+      "text": "I went with the blue cuz I think it",
+      "start": 617.52,
+      "duration": 3.48
+    },
+    {
+      "text": "makes them look super slick. So,",
+      "start": 618.68,
+      "duration": 4.08
+    },
+    {
+      "text": "anyway, let's get on to building the",
+      "start": 621.0,
+      "duration": 4.4
+    },
+    {
+      "text": "rest of them.",
+      "start": 622.76,
+      "duration": 2.64
+    },
+    {
+      "text": "We're finally at the point where we can",
+      "start": 628.68,
+      "duration": 2.56
+    },
+    {
+      "text": "start to put some stuff together. So,",
+      "start": 629.88,
+      "duration": 3.04
+    },
+    {
+      "text": "here we got everything we need to put",
+      "start": 631.24,
+      "duration": 4.08
+    },
+    {
+      "text": "together exactly one split flat module.",
+      "start": 632.92,
+      "duration": 3.52
+    },
+    {
+      "text": "So, we're going to try and speed run it",
+      "start": 635.32,
+      "duration": 2.36
+    },
+    {
+      "text": "and then see how long it might take to",
+      "start": 636.44,
+      "duration": 3.64
+    },
+    {
+      "text": "put together 45 of them.",
+      "start": 637.68,
+      "duration": 3.72
+    },
+    {
+      "text": "All right, ready,",
+      "start": 640.08,
+      "duration": 3.88
+    },
+    {
+      "text": "set, and go.",
+      "start": 641.4,
+      "duration": 3.52
+    },
+    {
+      "text": "All right, first we're going to be",
+      "start": 643.96,
+      "duration": 2.56
+    },
+    {
+      "text": "attaching the flaps to the board. I",
+      "start": 644.92,
+      "duration": 4.8
+    },
+    {
+      "text": "don't need any of this.",
+      "start": 646.52,
+      "duration": 3.2
+    },
+    {
+      "text": ">> [music]",
+      "start": 655.662,
+      "duration": 2.02
+    },
+    {
+      "text": "[music]",
+      "start": 665.487,
+      "duration": 2.02
+    },
+    {
+      "text": "[music]",
+      "start": 675.312,
+      "duration": 2.888
+    },
+    {
+      "text": ">> Done.",
+      "start": 677.0,
+      "duration": 4.16
+    },
+    {
+      "text": "All right, here's the finished module.",
+      "start": 678.2,
+      "duration": 4.96
+    },
+    {
+      "text": "Got the pogo pins sticking out the back.",
+      "start": 681.16,
+      "duration": 3.679
+    },
+    {
+      "text": "Let's see if it spins.",
+      "start": 683.16,
+      "duration": 3.4
+    },
+    {
+      "text": "Nice.",
+      "start": 684.839,
+      "duration": 3.681
+    },
+    {
+      "text": "All right, well, 14 minutes, uh longer",
+      "start": 686.56,
+      "duration": 3.84
+    },
+    {
+      "text": "than I would have liked, but I probably",
+      "start": 688.52,
+      "duration": 3.44
+    },
+    {
+      "text": "could have sped that up if I didn't",
+      "start": 690.4,
+      "duration": 3.04
+    },
+    {
+      "text": "fumble a couple things. Like, I should",
+      "start": 691.96,
+      "duration": 3.24
+    },
+    {
+      "text": "have had that label printed and I lost a",
+      "start": 693.44,
+      "duration": 3.96
+    },
+    {
+      "text": "couple bolts and nuts along the way.",
+      "start": 695.2,
+      "duration": 5.36
+    },
+    {
+      "text": "Let's see, 14 minutes times 45 modules",
+      "start": 697.4,
+      "duration": 4.84
+    },
+    {
+      "text": "should take me about 10 hours to finish",
+      "start": 700.56,
+      "duration": 3.04
+    },
+    {
+      "text": "all of them, but hopefully I can speed",
+      "start": 702.24,
+      "duration": 2.76
+    },
+    {
+      "text": "that up by batching some of the",
+      "start": 703.6,
+      "duration": 3.239
+    },
+    {
+      "text": "processes out, like soldering everything",
+      "start": 705.0,
+      "duration": 4.0
+    },
+    {
+      "text": "together and things like that.",
+      "start": 706.839,
+      "duration": 4.241
+    },
+    {
+      "text": "Got my work cut out for me, though.",
+      "start": 709.0,
+      "duration": 3.96
+    },
+    {
+      "text": "Excited to test this thing out. During",
+      "start": 711.08,
+      "duration": 3.96
+    },
+    {
+      "text": "this part of the project, I was so busy",
+      "start": 712.96,
+      "duration": 3.76
+    },
+    {
+      "text": "printing and assembling that I didn't",
+      "start": 715.04,
+      "duration": 2.92
+    },
+    {
+      "text": "get too much footage, [music] but here's",
+      "start": 716.72,
+      "duration": 2.96
+    },
+    {
+      "text": "a little bit of me testing it on the DIN",
+      "start": 717.96,
+      "duration": 3.6
+    },
+    {
+      "text": "rail for the first time.",
+      "start": 719.68,
+      "duration": 3.4
+    },
+    {
+      "text": "It was a little tough to program them,",
+      "start": 721.56,
+      "duration": 3.44
+    },
+    {
+      "text": "but once I got that figured out, they",
+      "start": 723.08,
+      "duration": 3.56
+    },
+    {
+      "text": "worked like a charm. [music]",
+      "start": 725.0,
+      "duration": 3.12
+    },
+    {
+      "text": "I didn't get too much assembly footage",
+      "start": 726.64,
+      "duration": 3.52
+    },
+    {
+      "text": "either, but here's a little sample for",
+      "start": 728.12,
+      "duration": 4.84
+    },
+    {
+      "text": "you. Just a lot of gluing, soldering,",
+      "start": 730.16,
+      "duration": 4.64
+    },
+    {
+      "text": "printing. This [music] thing, I'm",
+      "start": 732.96,
+      "duration": 3.36
+    },
+    {
+      "text": "telling you, took hundreds of hours of",
+      "start": 734.8,
+      "duration": 3.12
+    },
+    {
+      "text": "printing.",
+      "start": 736.32,
+      "duration": 4.0
+    },
+    {
+      "text": "Each set of flaps was its own, so I had",
+      "start": 737.92,
+      "duration": 4.44
+    },
+    {
+      "text": "to do 45 overnight prints pretty much",
+      "start": 740.32,
+      "duration": 4.28
+    },
+    {
+      "text": "just for the flaps and then,",
+      "start": 742.36,
+      "duration": 5.24
+    },
+    {
+      "text": "you know, enclosures, DIN rail mounts,",
+      "start": 744.6,
+      "duration": 5.4
+    },
+    {
+      "text": "everything took forever, but I got it",
+      "start": 747.6,
+      "duration": 4.76
+    },
+    {
+      "text": "done.",
+      "start": 750.0,
+      "duration": 2.36
+    },
+    {
+      "text": "All right, they're all complete. You",
+      "start": 768.32,
+      "duration": 2.48
+    },
+    {
+      "text": "would not believe how much work that",
+      "start": 769.68,
+      "duration": 2.84
+    },
+    {
+      "text": "was. I was working overtime. My printer",
+      "start": 770.8,
+      "duration": 3.52
+    },
+    {
+      "text": "was working overtime. Still, that took",
+      "start": 772.52,
+      "duration": 3.24
+    },
+    {
+      "text": "like over a month.",
+      "start": 774.32,
+      "duration": 3.56
+    },
+    {
+      "text": "But, all 45 [music] are done. Hopefully,",
+      "start": 775.76,
+      "duration": 3.72
+    },
+    {
+      "text": "all that's left to do is to attach them",
+      "start": 777.88,
+      "duration": 3.56
+    },
+    {
+      "text": "to the DIN rail on that backing board,",
+      "start": 779.48,
+      "duration": 3.4
+    },
+    {
+      "text": "see if they all work together. I think",
+      "start": 781.44,
+      "duration": 2.72
+    },
+    {
+      "text": "it's probably wishful thinking that",
+      "start": 782.88,
+      "duration": 2.4
+    },
+    {
+      "text": "they're going to work first try, but",
+      "start": 784.16,
+      "duration": 4.16
+    },
+    {
+      "text": "we're going to give it a shot anyway.",
+      "start": 785.28,
+      "duration": 5.08
+    },
+    {
+      "text": "All right, here is that backing board I",
+      "start": 788.32,
+      "duration": 4.04
+    },
+    {
+      "text": "was talking about.",
+      "start": 790.36,
+      "duration": 3.8
+    },
+    {
+      "text": "Looks a little shotty right now, and I",
+      "start": 792.36,
+      "duration": 3.08
+    },
+    {
+      "text": "may or may not try and clean it up",
+      "start": 794.16,
+      "duration": 2.56
+    },
+    {
+      "text": "before I'm done. We'll see how well it",
+      "start": 795.44,
+      "duration": 2.52
+    },
+    {
+      "text": "works.",
+      "start": 796.72,
+      "duration": 2.4
+    },
+    {
+      "text": "But, you got the power supply, the",
+      "start": 797.96,
+      "duration": 3.769
+    },
+    {
+      "text": "Raspberry Pi. Here are the four, sorry,",
+      "start": 799.12,
+      "duration": 4.44
+    },
+    {
+      "text": "[music] the three DIN rails with their",
+      "start": 801.729,
+      "duration": 4.391
+    },
+    {
+      "text": "PCBs that will deliver the power and",
+      "start": 803.56,
+      "duration": 4.56
+    },
+    {
+      "text": "data in the middle, and that's about it.",
+      "start": 806.12,
+      "duration": 4.56
+    },
+    {
+      "text": "I put a power switch over here and a",
+      "start": 808.12,
+      "duration": 4.92
+    },
+    {
+      "text": "power cord plug. I should just be able",
+      "start": 810.68,
+      "duration": 6.72
+    },
+    {
+      "text": "to attach the first one.",
+      "start": 813.04,
+      "duration": 9.0
+    },
+    {
+      "text": "And then, if I were to turn it on,",
+      "start": 817.4,
+      "duration": 4.64
+    },
+    {
+      "text": "there we go.",
+      "start": 822.36,
+      "duration": 2.6
+    },
+    {
+      "text": "I find its home position.",
+      "start": 825.72,
+      "duration": 3.04
+    },
+    {
+      "text": "All right, I'm going to turn this off,",
+      "start": 827.52,
+      "duration": 2.56
+    },
+    {
+      "text": "attach all of them, and then we'll turn",
+      "start": 828.76,
+      "duration": 4.28
+    },
+    {
+      "text": "it on for the first time.",
+      "start": 830.08,
+      "duration": 2.96
+    },
+    {
+      "text": "If you'll notice right here, there's a",
+      "start": 837.4,
+      "duration": 3.92
+    },
+    {
+      "text": "little bit of extra PCB soldered on.",
+      "start": 839.08,
+      "duration": 3.84
+    },
+    {
+      "text": "That's because",
+      "start": 841.32,
+      "duration": 3.519
+    },
+    {
+      "text": "I guess when I designed it, I don't know",
+      "start": 842.92,
+      "duration": 4.0
+    },
+    {
+      "text": "if I was accounting for something, but",
+      "start": 844.839,
+      "duration": 3.721
+    },
+    {
+      "text": "essentially, I needed an extra inch of",
+      "start": 846.92,
+      "duration": 3.44
+    },
+    {
+      "text": "PCB, so I just cut one up and soldered",
+      "start": 848.56,
+      "duration": 4.56
+    },
+    {
+      "text": "it to the end. So, you know, things are",
+      "start": 850.36,
+      "duration": 5.76
+    },
+    {
+      "text": "fixable. Things are fixable.",
+      "start": 853.12,
+      "duration": 5.56
+    },
+    {
+      "text": "Row two.",
+      "start": 856.12,
+      "duration": 2.56
+    },
+    {
+      "text": "All right, third row.",
+      "start": 862.72,
+      "duration": 2.72
+    },
+    {
+      "text": "Last one.",
+      "start": 868.48,
+      "duration": 4.04
+    },
+    {
+      "text": "All right.",
+      "start": 871.12,
+      "duration": 3.28
+    },
+    {
+      "text": "Should we try to turn it on? Let's turn",
+      "start": 872.52,
+      "duration": 5.12
+    },
+    {
+      "text": "it on and see what happens.",
+      "start": 874.4,
+      "duration": 3.24
+    },
+    {
+      "text": "Okay, not so bad. Couple of them didn't",
+      "start": 888.28,
+      "duration": 4.44
+    },
+    {
+      "text": "spin for some reason, but [music]",
+      "start": 890.64,
+      "duration": 3.68
+    },
+    {
+      "text": "the rest performed about as well as I",
+      "start": 892.72,
+      "duration": 3.4
+    },
+    {
+      "text": "expected. At least they spun. That's",
+      "start": 894.32,
+      "duration": 3.04
+    },
+    {
+      "text": "amazing.",
+      "start": 896.12,
+      "duration": 2.44
+    },
+    {
+      "text": "We're going to have to figure out why",
+      "start": 897.36,
+      "duration": 3.2
+    },
+    {
+      "text": "some of them are A's and some are",
+      "start": 898.56,
+      "duration": 3.399
+    },
+    {
+      "text": "correct. They should be on this blank",
+      "start": 900.56,
+      "duration": 3.08
+    },
+    {
+      "text": "space character. I think that has to do",
+      "start": 901.959,
+      "duration": 3.321
+    },
+    {
+      "text": "with their tuning, but that's going to",
+      "start": 903.64,
+      "duration": 3.319
+    },
+    {
+      "text": "be fixed in software. So, the way they",
+      "start": 905.28,
+      "duration": 3.2
+    },
+    {
+      "text": "all find their home position, similar to",
+      "start": 906.959,
+      "duration": 3.081
+    },
+    {
+      "text": "the models, is that there's a magnet",
+      "start": 908.48,
+      "duration": 3.56
+    },
+    {
+      "text": "with a Hall effect sensor and it detects",
+      "start": 910.04,
+      "duration": 3.799
+    },
+    {
+      "text": "it and then steps a certain distance",
+      "start": 912.04,
+      "duration": 3.56
+    },
+    {
+      "text": "away so that it knows where it is. And",
+      "start": 913.839,
+      "duration": 3.961
+    },
+    {
+      "text": "just the way, you know, the 3D printed",
+      "start": 915.6,
+      "duration": 3.52
+    },
+    {
+      "text": "parts are made, there might be little",
+      "start": 917.8,
+      "duration": 3.159
+    },
+    {
+      "text": "irregularities that cause some of them",
+      "start": 919.12,
+      "duration": 3.68
+    },
+    {
+      "text": "to have different offsets than others.",
+      "start": 920.959,
+      "duration": 4.081
+    },
+    {
+      "text": "So, [music] they're all set to 28, 32",
+      "start": 922.8,
+      "duration": 4.64
+    },
+    {
+      "text": "steps right now, but I made this",
+      "start": 925.04,
+      "duration": 4.6
+    },
+    {
+      "text": "handy-dandy little app and it allows me",
+      "start": 927.44,
+      "duration": 6.72
+    },
+    {
+      "text": "to, for example, home them all.",
+      "start": 929.64,
+      "duration": 4.52
+    },
+    {
+      "text": "But, it also allows me to change the",
+      "start": 937.0,
+      "duration": 4.0
+    },
+    {
+      "text": "home offset. So, this A, for example, is",
+      "start": 938.36,
+      "duration": 4.88
+    },
+    {
+      "text": "on module nine. So, if I go to module",
+      "start": 941.0,
+      "duration": 3.6
+    },
+    {
+      "text": "nine,",
+      "start": 943.24,
+      "duration": 3.76
+    },
+    {
+      "text": "scroll down to the home offset,",
+      "start": 944.6,
+      "duration": 4.4
+    },
+    {
+      "text": "let's decrease it by 32 steps and home",
+      "start": 947.0,
+      "duration": 4.52
+    },
+    {
+      "text": "it again.",
+      "start": 949.0,
+      "duration": 2.52
+    },
+    {
+      "text": "Yeah, there we go. Now, the A is gone.",
+      "start": 953.24,
+      "duration": 3.08
+    },
+    {
+      "text": "So, I'm going to go ahead and do that",
+      "start": 955.079,
+      "duration": 2.961
+    },
+    {
+      "text": "for all of them, and I'll let you know",
+      "start": 956.32,
+      "duration": 4.2
+    },
+    {
+      "text": "when we're done.",
+      "start": 958.04,
+      "duration": 2.48
+    },
+    {
+      "text": "All right, now I've set all the offsets",
+      "start": 966.48,
+      "duration": 4.44
+    },
+    {
+      "text": "for all of them. So, if I hit home all,",
+      "start": 968.68,
+      "duration": 5.64
+    },
+    {
+      "text": "it's already all black, but",
+      "start": 970.92,
+      "duration": 3.4
+    },
+    {
+      "text": "I go back to all black again. So, that's",
+      "start": 977.72,
+      "duration": 3.72
+    },
+    {
+      "text": "great. So,",
+      "start": 979.64,
+      "duration": 6.04
+    },
+    {
+      "text": "let's see what happens if we try all",
+      "start": 981.44,
+      "duration": 6.28
+    },
+    {
+      "text": "ones, for example. Let's see if ones",
+      "start": 985.68,
+      "duration": 4.84
+    },
+    {
+      "text": "will show up.",
+      "start": 987.72,
+      "duration": 2.8
+    },
+    {
+      "text": "All right, so this is another issue",
+      "start": 993.079,
+      "duration": 3.241
+    },
+    {
+      "text": "we're going to have to fix. This is what",
+      "start": 995.04,
+      "duration": 3.0
+    },
+    {
+      "text": "they call integration hell. When you put",
+      "start": 996.32,
+      "duration": 3.32
+    },
+    {
+      "text": "everything together and it just doesn't",
+      "start": 998.04,
+      "duration": 3.36
+    },
+    {
+      "text": "work quite like you want it to.",
+      "start": 999.64,
+      "duration": 3.176
+    },
+    {
+      "text": "All of these are meant to be showing",
+      "start": 1001.4,
+      "duration": 3.12
+    },
+    {
+      "text": "[music] the number one, but as you can",
+      "start": 1002.816,
+      "duration": 3.584
+    },
+    {
+      "text": "see, some of them are showing zero, some",
+      "start": 1004.52,
+      "duration": 3.2
+    },
+    {
+      "text": "of them are showing two. I've already",
+      "start": 1006.4,
+      "duration": 2.64
+    },
+    {
+      "text": "fixed a few of them, but there were more",
+      "start": 1007.72,
+      "duration": 3.2
+    },
+    {
+      "text": "that were incorrect before.",
+      "start": 1009.04,
+      "duration": 4.039
+    },
+    {
+      "text": "So, I think this is just due to some",
+      "start": 1010.92,
+      "duration": 4.159
+    },
+    {
+      "text": "discrepancies in, you know, the 3D",
+      "start": 1013.079,
+      "duration": 3.76
+    },
+    {
+      "text": "printed parts, how they're manufactured,",
+      "start": 1015.079,
+      "duration": 3.481
+    },
+    {
+      "text": "maybe some differences in the motors or",
+      "start": 1016.839,
+      "duration": 2.841
+    },
+    {
+      "text": "something.",
+      "start": 1018.56,
+      "duration": 2.08
+    },
+    {
+      "text": "You know, some of them are just",
+      "start": 1019.68,
+      "duration": 2.2
+    },
+    {
+      "text": "inconsistent, especially when [music]",
+      "start": 1020.64,
+      "duration": 2.6
+    },
+    {
+      "text": "you get farther away from that zero",
+      "start": 1021.88,
+      "duration": 3.92
+    },
+    {
+      "text": "position. So, thankfully, they're",
+      "start": 1023.24,
+      "duration": 4.48
+    },
+    {
+      "text": "consistently wrong. They're not",
+      "start": 1025.8,
+      "duration": 3.639
+    },
+    {
+      "text": "inconsistently wrong. That would be much",
+      "start": 1027.72,
+      "duration": 3.32
+    },
+    {
+      "text": "worse if they were inconsistent cuz it",
+      "start": 1029.439,
+      "duration": 2.921
+    },
+    {
+      "text": "would be very difficult to fix that",
+      "start": 1031.04,
+      "duration": 2.52
+    },
+    {
+      "text": "problem. But, [music]",
+      "start": 1032.36,
+      "duration": 3.12
+    },
+    {
+      "text": "because they're consistently wrong,",
+      "start": 1033.56,
+      "duration": 4.119
+    },
+    {
+      "text": "what I've gone ahead and done is added a",
+      "start": 1035.48,
+      "duration": 4.24
+    },
+    {
+      "text": "page in my app that will allow me to do",
+      "start": 1037.679,
+      "duration": 3.641
+    },
+    {
+      "text": "per character [music] tuning. So, for",
+      "start": 1039.72,
+      "duration": 2.88
+    },
+    {
+      "text": "example,",
+      "start": 1041.32,
+      "duration": 3.24
+    },
+    {
+      "text": "this one right here, module 24, is",
+      "start": 1042.6,
+      "duration": 3.239
+    },
+    {
+      "text": "showing a zero when it should be showing",
+      "start": 1044.56,
+      "duration": 3.36
+    },
+    {
+      "text": "a one. So, I can go up here, select",
+      "start": 1045.839,
+      "duration": 4.84
+    },
+    {
+      "text": "module 24, and then select",
+      "start": 1047.92,
+      "duration": 4.12
+    },
+    {
+      "text": "the number one, [music]",
+      "start": 1050.679,
+      "duration": 4.0
+    },
+    {
+      "text": "and it's showing that it should be at",
+      "start": 1052.04,
+      "duration": 5.4
+    },
+    {
+      "text": "1792 steps, but that's not far enough",
+      "start": 1054.679,
+      "duration": 4.881
+    },
+    {
+      "text": "because it's showing a zero.",
+      "start": 1057.44,
+      "duration": 3.48
+    },
+    {
+      "text": "So, I can change it to, for example,",
+      "start": 1059.56,
+      "duration": 3.119
+    },
+    {
+      "text": "1815. [music]",
+      "start": 1060.92,
+      "duration": 5.72
+    },
+    {
+      "text": "And then, if we look at module 25,",
+      "start": 1062.679,
+      "duration": 6.881
+    },
+    {
+      "text": "I'm sorry, 24. Now, it's showing a one.",
+      "start": 1066.64,
+      "duration": 4.952
+    },
+    {
+      "text": "And so, I can lock that in, and",
+      "start": 1069.56,
+      "duration": 2.24
+    },
+    {
+      "text": ">> [music]",
+      "start": 1071.592,
+      "duration": 3.368
+    },
+    {
+      "text": ">> now this module knows that anytime it",
+      "start": 1071.8,
+      "duration": 4.28
+    },
+    {
+      "text": "needs to show a one, it should go to",
+      "start": 1074.96,
+      "duration": 3.68
+    },
+    {
+      "text": "1815 [music] instead of 1796. And that",
+      "start": 1076.08,
+      "duration": 4.599
+    },
+    {
+      "text": "one's good. So, I just need to do that,",
+      "start": 1078.64,
+      "duration": 3.96
+    },
+    {
+      "text": "unfortunately, for every character on",
+      "start": 1080.679,
+      "duration": 3.721
+    },
+    {
+      "text": "every module, at least the ones that are",
+      "start": 1082.6,
+      "duration": 2.747
+    },
+    {
+      "text": "incorrect.",
+      "start": 1084.4,
+      "duration": 1.04
+    },
+    {
+      "text": ">> [music]",
+      "start": 1085.347,
+      "duration": 1.693
+    },
+    {
+      "text": ">> After that, hopefully, I only have to do",
+      "start": 1085.44,
+      "duration": 3.2
+    },
+    {
+      "text": "it once and then I'll know for good",
+      "start": 1087.04,
+      "duration": 3.52
+    },
+    {
+      "text": "where they should go. So, it'll take a",
+      "start": 1088.64,
+      "duration": 3.257
+    },
+    {
+      "text": "little bit, but",
+      "start": 1090.56,
+      "duration": 1.4
+    },
+    {
+      "text": ">> [music]",
+      "start": 1091.897,
+      "duration": 1.743
+    },
+    {
+      "text": ">> I think it's for the best.",
+      "start": 1091.96,
+      "duration": 3.24
+    },
+    {
+      "text": "All right. So, I got them all tuned up",
+      "start": 1093.64,
+      "duration": 3.039
+    },
+    {
+      "text": "now and they're all home. So, if I go",
+      "start": 1095.2,
+      "duration": 5.212
+    },
+    {
+      "text": "back to my app and I push all ones,",
+      "start": 1096.679,
+      "duration": 5.753
+    },
+    {
+      "text": ">> [snorts]",
+      "start": 1100.412,
+      "duration": 2.02
+    },
+    {
+      "text": ">> there we go. Now, they're all showing",
+      "start": 1103.64,
+      "duration": 3.28
+    },
+    {
+      "text": "ones. So, that's awesome. They're",
+      "start": 1105.04,
+      "duration": 3.96
+    },
+    {
+      "text": "hopefully more accurate now in all of",
+      "start": 1106.92,
+      "duration": 3.92
+    },
+    {
+      "text": "the characters, not just ones. All",
+      "start": 1109.0,
+      "duration": 2.679
+    },
+    {
+      "text": "right, let's see if we can write a",
+      "start": 1110.84,
+      "duration": 5.319
+    },
+    {
+      "text": "message and have it be readable, right?",
+      "start": 1111.679,
+      "duration": 4.48
+    },
+    {
+      "text": "Nice.",
+      "start": 1120.36,
+      "duration": 3.64
+    },
+    {
+      "text": "Check that out. That's so cool. Okay,",
+      "start": 1121.88,
+      "duration": 4.0
+    },
+    {
+      "text": "so, I mean, it's basically working now.",
+      "start": 1124.0,
+      "duration": 2.8
+    },
+    {
+      "text": "I mean,",
+      "start": 1125.88,
+      "duration": 3.039
+    },
+    {
+      "text": "I got all these apps on here,",
+      "start": 1126.8,
+      "duration": 3.32
+    },
+    {
+      "text": "and I'll show more of them off later,",
+      "start": 1128.919,
+      "duration": 3.0
+    },
+    {
+      "text": "but I can get it to do the time, for",
+      "start": 1130.12,
+      "duration": 4.36
+    },
+    {
+      "text": "example.",
+      "start": 1131.919,
+      "duration": 2.561
+    },
+    {
+      "text": "And it's live updating.",
+      "start": 1135.72,
+      "duration": 2.92
+    },
+    {
+      "text": "So,",
+      "start": 1137.4,
+      "duration": 2.519
+    },
+    {
+      "text": "I'm kind of underplaying this. This",
+      "start": 1138.64,
+      "duration": 2.92
+    },
+    {
+      "text": "took, you know,",
+      "start": 1139.919,
+      "duration": 3.321
+    },
+    {
+      "text": "even after I was done building, it took",
+      "start": 1141.56,
+      "duration": 3.84
+    },
+    {
+      "text": "hours, days, weeks just to get it to",
+      "start": 1143.24,
+      "duration": 3.76
+    },
+    {
+      "text": "this point where, you know, things can",
+      "start": 1145.4,
+      "duration": 3.24
+    },
+    {
+      "text": "show accurately,",
+      "start": 1147.0,
+      "duration": 3.76
+    },
+    {
+      "text": "um and reliably, and consistently. I've",
+      "start": 1148.64,
+      "duration": 4.2
+    },
+    {
+      "text": "kept this clock on for days at a time,",
+      "start": 1150.76,
+      "duration": 5.12
+    },
+    {
+      "text": "and it stays accurate, which is great,",
+      "start": 1152.84,
+      "duration": 6.24
+    },
+    {
+      "text": "you know, without re-homing.",
+      "start": 1155.88,
+      "duration": 3.2
+    },
+    {
+      "text": "There's the time. It's getting a little",
+      "start": 1159.12,
+      "duration": 3.96
+    },
+    {
+      "text": "late, but I'm going to make a new",
+      "start": 1161.2,
+      "duration": 3.44
+    },
+    {
+      "text": "enclosure for this, and then I'm going",
+      "start": 1163.08,
+      "duration": 2.833
+    },
+    {
+      "text": "to show it off and",
+      "start": 1164.64,
+      "duration": 1.519
+    },
+    {
+      "text": ">> [music]",
+      "start": 1165.913,
+      "duration": 2.047
+    },
+    {
+      "text": ">> tell you a little bit more about what",
+      "start": 1166.159,
+      "duration": 3.841
+    },
+    {
+      "text": "I've got planned for the future. So,",
+      "start": 1167.96,
+      "duration": 4.719
+    },
+    {
+      "text": "stay tuned.",
+      "start": 1170.0,
+      "duration": 2.679
+    },
+    {
+      "text": ">> [snorts]",
+      "start": 1212.418,
+      "duration": 2.02
+    },
+    {
+      "text": ">> All right, guys. Thanks for watching. I",
+      "start": 1259.04,
+      "duration": 3.32
+    },
+    {
+      "text": "really appreciate it. Oh, yeah. I told",
+      "start": 1260.28,
+      "duration": 3.64
+    },
+    {
+      "text": "you that if you watch this video, you",
+      "start": 1262.36,
+      "duration": 2.8
+    },
+    {
+      "text": "might just get to control this thing",
+      "start": 1263.92,
+      "duration": 2.56
+    },
+    {
+      "text": "yourself. So, here's how that's going to",
+      "start": 1265.16,
+      "duration": 3.28
+    },
+    {
+      "text": "work. For the next few days or maybe",
+      "start": 1266.48,
+      "duration": 4.08
+    },
+    {
+      "text": "weeks, depending on how this goes, I'm",
+      "start": 1268.44,
+      "duration": 3.36
+    },
+    {
+      "text": "going to have a live stream set up",
+      "start": 1270.56,
+      "duration": 2.8
+    },
+    {
+      "text": "pointing at this thing with my live",
+      "start": 1271.8,
+      "duration": 3.96
+    },
+    {
+      "text": "subscriber count on there. Right now, I",
+      "start": 1273.36,
+      "duration": 5.88
+    },
+    {
+      "text": "have 641 subscribers. So, we'll see",
+      "start": 1275.76,
+      "duration": 4.72
+    },
+    {
+      "text": "where we're at when you watch this",
+      "start": 1279.24,
+      "duration": 3.12
+    },
+    {
+      "text": "thing. But, if you subscribe, you can",
+      "start": 1280.48,
+      "duration": 3.8
+    },
+    {
+      "text": "watch this number tick up on your own.",
+      "start": 1282.36,
+      "duration": 3.48
+    },
+    {
+      "text": "Also, if you comment on the video, I",
+      "start": 1284.28,
+      "duration": 3.0
+    },
+    {
+      "text": "might select a few comments that are",
+      "start": 1285.84,
+      "duration": 3.72
+    },
+    {
+      "text": "less than 30 characters and have them",
+      "start": 1287.28,
+      "duration": 4.12
+    },
+    {
+      "text": "display on here as well. So, if you're",
+      "start": 1289.56,
+      "duration": 3.84
+    },
+    {
+      "text": "watching this in the first few weeks,",
+      "start": 1291.4,
+      "duration": 3.56
+    },
+    {
+      "text": "check that out. If it's not up anymore,",
+      "start": 1293.4,
+      "duration": 2.48
+    },
+    {
+      "text": "then",
+      "start": 1294.96,
+      "duration": 2.32
+    },
+    {
+      "text": "sorry you missed it, but I really",
+      "start": 1295.88,
+      "duration": 3.12
+    },
+    {
+      "text": "appreciate you watching the video and",
+      "start": 1297.28,
+      "duration": 2.64
+    },
+    {
+      "text": "let me know what you think in the",
+      "start": 1299.0,
+      "duration": 2.04
+    },
+    {
+      "text": "comments.",
+      "start": 1299.92,
+      "duration": 4.0
+    },
+    {
+      "text": "All right, thanks everyone.",
+      "start": 1301.04,
+      "duration": 2.88
+    },
+    {
+      "text": ">> [music]",
+      "start": 1304.774,
+      "duration": 2.02
+    }
+  ],
+  "full_text": "Have you ever heard of a split-flap display before? Well, you've probably seen one even if you didn't know that's what it was called. These things used to be in airports and train stations everywhere, but I'm a little bit too young to have seen them there. So, nowadays you'll most often see them at bars and restaurants, fancy startup offices, and places like that. I stumbled upon one in a bookstore and ever since I saw it in person, >> [music] >> I've wanted one of my own. But, did I buy one? Hell no. I just spent hundreds of hours building this thing for myself. And in this video, I'm going to show you the entire process from start to finish of how this thing came to be. If you stick around to the end, I might just let you control it yourself. My obsession with split flaps started when I made this little eight-character model from a tutorial by Morgan Manly. But, hold on a second. Let me rewind. If you don't already know what a split-flap display is, let me show you how one works using this clear acrylic open-source model from a project by Scott Bessac. Inside of a split-flap module such as this, you'll find a hub that looks a little something like this that has a number of holes on either side. Inside of those holes rides one of these flaps. [music] These are half flaps or split flaps, if you will. And once they rotate down due to [music] gravity, they'll display a whole character. Once we turn it on, you can see the module stepping here one at a time. You can see the hub rotating in there with the help of the stepper motor. You can also see at the top here the flaps are retained [music] by this faceplate so that only one flips down at a time. The type of motor you're using on a split-flap display is important. This is a stepper motor and it allows us to turn a precise number of degrees so that we can display whatever letter we want. The other half of the story is this little sensor here, which is called a Hall effect sensor. And when it rotates, it can detect this little magnet here so that when I plug it in, it's going to rotate until the magnet is in line with the Hall effect sensor, which is indicated by that LED there. And then after that, it knows precisely where it is. And if you want to type a C, for example, it knows how many degrees to rotate to show that C. So, this is just how one module of a split-flap display works, but imagine you had 50 of them. It gets more complicated as you add more of these and that's the project that I'll be working on in this video. All right. Now that we all know how a split-flap works, let me show you this one again. I'll take it apart, show you some of the things I like and dislike, and that way we'll get some requirements going for a new design. So, right off the bat, one thing I really like about this design is the size of the modules themselves. They're pretty compact. The motor is right inside of the hub, which I'll show you in a second. So, it allows them to be right up next to each other, but I don't like how many modules it has. It only has eight in this version and I definitely want mine to have a lot more than that. So, let me take it apart and show you some other things that I want to change on the inside. All right. Now that it's apart, you can see all these modules are strung together by connectors here and they're all held together by these long threaded rods that go through all eight modules. This is one thing I don't like cuz it's hard to put these together and requires you to, you know, sandwich all these wires together with these spacers and it was just a pain to put together and I don't think it's going to scale very well when I add more modules. So, we're definitely going to change that. Here's a closer view of one of the modules' enclosures and I really like most of this design. The motor is in here. Here's some gears that help turn the hub. There's a Hall effect sensor in the back and I like this wire retainer clip. So, we're definitely going to use this as a starting point. But, one thing I don't like too much is this electronics package here. It's a bit of a rat's nest of wires and it was hard to solder it all together and cram it in there. So, we're definitely going to try and improve upon that for my version. Our first criteria, I think, is that we want it to have more flaps. I like A through Z, 0 through 9, but [music] I want some special characters involved. I like the ones that involve some color. So, we're going to set it to 64 flaps. We also want it to have more modules in the first place. [music] I don't want just a single line. My goal is going to be 15 modules per row and three rows [music] for a total of 45 modules. Now, with that many modules, we need it to be much easier to build. [music] So, the goal is for it to be totally modular and essentially that means snap-on, snap-off design. I don't want to have any threaded rods throughout the entire thing. I don't want to deal with taking the whole [music] thing apart just to service one in the middle. I just want to be able to plug and play and have the modules working. [music] For criterion number four, I don't want to have to do too much soldering. I think there might be a little bit involved, but for the most part, I want the boards to be self-enclosed. I want to just be able to plug in the motor, plug in the sensor, and be ready to go. And the last criteria, might be the hardest to hit, is that I want to spend under $1,000 on this project. Online, I can buy a board that's 15 by 3 [music] for under $1,000. So, I think it would only be fitting that mine should cost less than that. It wouldn't make any sense for me to build one [music] just for it to be more expensive than the one that I could buy. So, that's my goal. That's my target that I'm going to hit. We'll keep a tally of how [music] much I spend and see if I get there in the end. All right. Let's tackle the easy part first. How are we going to make it have 64 flaps? Well, the current version has 37. So, to make it have 64, you might think you just need to add 27 more holes. But, it can't be that easy, can't it? Well, the short answer is maybe. These are the stepper motors that power the whole thing. They're little 28BYJ-48 5-V stepper motors and they don't have a great resolution. So, there's no guarantee they can handle 64 flaps. But, there's nothing to do than to just try it out. So, I went into Onshape, removed all the old holes, and extruded 64 new ones. But a bing, but a boom, you got a new drum. And after a quick 3D print, here's the old one and here's the new one. You can see the 27 new holes. They're a little bit smaller and I did have to modify the flaps to make them a little bit thinner and smaller to fit, but that's pretty much all I had to do. Just add the new characters [music] that we want and all we got to do is try it on a module and see if there's enough resolution to make it work. And thankfully, it did work. You can see it step along happily here and it gives me more confidence that these things have enough resolution to handle the 64 flaps. I guess it was just as easy as adding more holes to the drum. And now we can move on to the next step, which is probably going to be a lot harder. Okay, it's time to tackle the electronics, which is one of the parts I'm most concerned about cuz I have the least experience in this, but I think I've [music] got a plan. So, the way the last one worked is that there was a single ESP32 microcontroller controlling [music] all eight motors. But, for a variety of reasons that I'm not going to get into in this video, I don't think that's going to scale up very well when we have to control 45 [music] motors and read 45 sensors. So, instead, what I think I'm going to do is put an individual chip on each module that can just control that module's motor. And then we'll have a Raspberry Pi sending signals to all of them telling them where to go. It sounds pretty simple, but it will entail me having to make a custom PCB, which is something I've never done before. So, I'll give it my best shot. Okay, check this out. This is what I came up with. There's a microcontroller there, motor controller there, plugins for the motor and the Hall effect sensor. It looks a bit shotty, but it's my first time doing this. So, I just want to make sure the idea is there. So, I'm going to send this to the manufacturer and see if it works when it comes back. One week later. All right. Check it out. Here's the PCB all made up. Got all the components on there and I went ahead and did some testing. All right. I got it all programmed up, plugged in the power and the motor plugged in and when I turn it on, there we go. You can see the motor spinning. Overall, these things worked pretty well. There was a resistor on there that I had to remove, but other than that, nothing too wrong with the design. There are a couple things we still got to figure out like how to deliver the power and the signal to it when it's all on the board, but I'm pretty happy with the results and I'm going to change a few things and [music] then hopefully we can manufacture 50 of them. I think I found the perfect solution for both mounting the modules and delivering the power and data they'll need. It starts with this. This is DIN rail and it's a standardized type of rail that's often used for mounting electrical components. And I also found this cool 3D print online that has a compliant mechanism that allows me to just snap right onto the DIN rails and I can stick the modules on there. They'll be good [music] to go. I don't know how well you can see, but there's also four holes that I put inside this mount and those [music] are going to be for pogo pins. So, I've taken the liberty of making this new circuit board, which is essentially just four long traces that will carry the power, ground, [music] and signal A and B lines. And the pogo pins will interface directly with that. So, all that's left to do is to modify the circuit boards to have the pads to fit the pogo pins that will fit inside the mount here and I should be able [music] to order 50 more and we can start actually building the thing. All right. I just got home from a couple weeks away for the holidays, but look what's here. It's about midnight and I do have to go to bed, but I needed to open this and check out what's inside. Ooh. Nice. I completely forgot, to be honest, that I got them in blue. Looks like there's all 50. How cool is that? All right. Well, to be honest, I didn't think they would have these edges on them, but hopefully they'll just snap off. Sweet. All right. So, I just got to get the pins soldered on there, get them all programmed up and plugged in. Hopefully, they work. Cool. All right. I'm going to bed, but I'll work on these tomorrow. Here's a closer look at the final PCBs that are going to go on each module for all the nerds out there like me. Up here in the top right is the actual microcontroller, which is the ATtiny1616 in this case. Definitely overkill for this purpose, but [music] hey, what are you going to do? That little one to the left is the RS485 transceiver, which is going to be able to receive and interpret signals from the Raspberry Pi. You got the motor controller chip and a bunch of power circuitry. And then the four pins in the middle are where the pogo pins are going to I So, I'm actually pretty proud of this circuit board. [music] It's only the third one I've ever made and if you're experiencing in this, you might think it's pretty simple, but [music] I just think it's so cool how you can go from not knowing something to watching a [music] few YouTube videos, trying it out, and you know, not too long later have 50 circuit boards that seemingly [music] work in your hands. And I'm really glad I went with the blue cuz I think it makes them look super slick. So, anyway, let's get on to building the rest of them. We're finally at the point where we can start to put some stuff together. So, here we got everything we need to put together exactly one split flat module. So, we're going to try and speed run it and then see how long it might take to put together 45 of them. All right, ready, set, and go. All right, first we're going to be attaching the flaps to the board. I don't need any of this. >> [music] [music] [music] >> Done. All right, here's the finished module. Got the pogo pins sticking out the back. Let's see if it spins. Nice. All right, well, 14 minutes, uh longer than I would have liked, but I probably could have sped that up if I didn't fumble a couple things. Like, I should have had that label printed and I lost a couple bolts and nuts along the way. Let's see, 14 minutes times 45 modules should take me about 10 hours to finish all of them, but hopefully I can speed that up by batching some of the processes out, like soldering everything together and things like that. Got my work cut out for me, though. Excited to test this thing out. During this part of the project, I was so busy printing and assembling that I didn't get too much footage, [music] but here's a little bit of me testing it on the DIN rail for the first time. It was a little tough to program them, but once I got that figured out, they worked like a charm. [music] I didn't get too much assembly footage either, but here's a little sample for you. Just a lot of gluing, soldering, printing. This [music] thing, I'm telling you, took hundreds of hours of printing. Each set of flaps was its own, so I had to do 45 overnight prints pretty much just for the flaps and then, you know, enclosures, DIN rail mounts, everything took forever, but I got it done. All right, they're all complete. You would not believe how much work that was. I was working overtime. My printer was working overtime. Still, that took like over a month. But, all 45 [music] are done. Hopefully, all that's left to do is to attach them to the DIN rail on that backing board, see if they all work together. I think it's probably wishful thinking that they're going to work first try, but we're going to give it a shot anyway. All right, here is that backing board I was talking about. Looks a little shotty right now, and I may or may not try and clean it up before I'm done. We'll see how well it works. But, you got the power supply, the Raspberry Pi. Here are the four, sorry, [music] the three DIN rails with their PCBs that will deliver the power and data in the middle, and that's about it. I put a power switch over here and a power cord plug. I should just be able to attach the first one. And then, if I were to turn it on, there we go. I find its home position. All right, I'm going to turn this off, attach all of them, and then we'll turn it on for the first time. If you'll notice right here, there's a little bit of extra PCB soldered on. That's because I guess when I designed it, I don't know if I was accounting for something, but essentially, I needed an extra inch of PCB, so I just cut one up and soldered it to the end. So, you know, things are fixable. Things are fixable. Row two. All right, third row. Last one. All right. Should we try to turn it on? Let's turn it on and see what happens. Okay, not so bad. Couple of them didn't spin for some reason, but [music] the rest performed about as well as I expected. At least they spun. That's amazing. We're going to have to figure out why some of them are A's and some are correct. They should be on this blank space character. I think that has to do with their tuning, but that's going to be fixed in software. So, the way they all find their home position, similar to the models, is that there's a magnet with a Hall effect sensor and it detects it and then steps a certain distance away so that it knows where it is. And just the way, you know, the 3D printed parts are made, there might be little irregularities that cause some of them to have different offsets than others. So, [music] they're all set to 28, 32 steps right now, but I made this handy-dandy little app and it allows me to, for example, home them all. But, it also allows me to change the home offset. So, this A, for example, is on module nine. So, if I go to module nine, scroll down to the home offset, let's decrease it by 32 steps and home it again. Yeah, there we go. Now, the A is gone. So, I'm going to go ahead and do that for all of them, and I'll let you know when we're done. All right, now I've set all the offsets for all of them. So, if I hit home all, it's already all black, but I go back to all black again. So, that's great. So, let's see what happens if we try all ones, for example. Let's see if ones will show up. All right, so this is another issue we're going to have to fix. This is what they call integration hell. When you put everything together and it just doesn't work quite like you want it to. All of these are meant to be showing [music] the number one, but as you can see, some of them are showing zero, some of them are showing two. I've already fixed a few of them, but there were more that were incorrect before. So, I think this is just due to some discrepancies in, you know, the 3D printed parts, how they're manufactured, maybe some differences in the motors or something. You know, some of them are just inconsistent, especially when [music] you get farther away from that zero position. So, thankfully, they're consistently wrong. They're not inconsistently wrong. That would be much worse if they were inconsistent cuz it would be very difficult to fix that problem. But, [music] because they're consistently wrong, what I've gone ahead and done is added a page in my app that will allow me to do per character [music] tuning. So, for example, this one right here, module 24, is showing a zero when it should be showing a one. So, I can go up here, select module 24, and then select the number one, [music] and it's showing that it should be at 1792 steps, but that's not far enough because it's showing a zero. So, I can change it to, for example, 1815. [music] And then, if we look at module 25, I'm sorry, 24. Now, it's showing a one. And so, I can lock that in, and >> [music] >> now this module knows that anytime it needs to show a one, it should go to 1815 [music] instead of 1796. And that one's good. So, I just need to do that, unfortunately, for every character on every module, at least the ones that are incorrect. >> [music] >> After that, hopefully, I only have to do it once and then I'll know for good where they should go. So, it'll take a little bit, but >> [music] >> I think it's for the best. All right. So, I got them all tuned up now and they're all home. So, if I go back to my app and I push all ones, >> [snorts] >> there we go. Now, they're all showing ones. So, that's awesome. They're hopefully more accurate now in all of the characters, not just ones. All right, let's see if we can write a message and have it be readable, right? Nice. Check that out. That's so cool. Okay, so, I mean, it's basically working now. I mean, I got all these apps on here, and I'll show more of them off later, but I can get it to do the time, for example. And it's live updating. So, I'm kind of underplaying this. This took, you know, even after I was done building, it took hours, days, weeks just to get it to this point where, you know, things can show accurately, um and reliably, and consistently. I've kept this clock on for days at a time, and it stays accurate, which is great, you know, without re-homing. There's the time. It's getting a little late, but I'm going to make a new enclosure for this, and then I'm going to show it off and >> [music] >> tell you a little bit more about what I've got planned for the future. So, stay tuned. >> [snorts] >> All right, guys. Thanks for watching. I really appreciate it. Oh, yeah. I told you that if you watch this video, you might just get to control this thing yourself. So, here's how that's going to work. For the next few days or maybe weeks, depending on how this goes, I'm going to have a live stream set up pointing at this thing with my live subscriber count on there. Right now, I have 641 subscribers. So, we'll see where we're at when you watch this thing. But, if you subscribe, you can watch this number tick up on your own. Also, if you comment on the video, I might select a few comments that are less than 30 characters and have them display on here as well. So, if you're watching this in the first few weeks, check that out. If it's not up anymore, then sorry you missed it, but I really appreciate you watching the video and let me know what you think in the comments. All right, thanks everyone. >> [music]"
+}

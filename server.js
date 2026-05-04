@@ -5,6 +5,8 @@ const fs      = require('fs');
 const cron    = require('node-cron');
 const webpush = require('web-push');
 const db      = require('./db');
+const jwt     = require('jsonwebtoken');
+const bcrypt  = require('bcryptjs');
 
 const app  = express();
 const PORT = process.env.PORT || 7400;
@@ -15,6 +17,34 @@ app.use('/photos', express.static(PHOTOS_DIR));
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+
+// ── Auth helpers ──────────────────────────────────────────────────────────────
+
+function getJwtSecret() {
+  let s = db.prepare('SELECT value FROM settings WHERE key=?').get('jwt_secret')?.value;
+  if (!s) {
+    s = require('crypto').randomBytes(32).toString('hex');
+    db.prepare('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)').run('jwt_secret', s);
+  }
+  return s;
+}
+
+function requireAuth(req, res, next) {
+  const token = (req.headers.authorization || '').replace('Bearer ', '');
+  if (!token) return res.status(401).json({ error: 'Authentication required' });
+  try { req.user = jwt.verify(token, getJwtSecret()); next(); }
+  catch { res.status(401).json({ error: 'Invalid or expired token' }); }
+}
+
+function requireAdmin(req, res, next) {
+  const token = (req.headers.authorization || '').replace('Bearer ', '');
+  if (!token) return res.status(401).json({ error: 'Authentication required' });
+  try {
+    const user = jwt.verify(token, getJwtSecret());
+    if (user.role !== 'admin') return res.status(403).json({ error: 'Admin required' });
+    req.user = user; next();
+  } catch { res.status(401).json({ error: 'Invalid or expired token' }); }
+}
 
 // ── VAPID setup ───────────────────────────────────────────────────────────────
 {
@@ -127,12 +157,118 @@ async function sendPushToAll(payload) {
   }
 }
 
+// ── Weather ───────────────────────────────────────────────────────────────────
+let _weatherCache = null;
+let _weatherCacheAt = 0;
+const WEATHER_TTL = 30 * 60 * 1000;
+
+function wmoInfo(code) {
+  if (code === 0)       return ['☀️',  'Clear'];
+  if (code <= 2)        return ['⛅',  'Partly Cloudy'];
+  if (code === 3)       return ['☁️',  'Overcast'];
+  if (code <= 48)      return ['🌫️', 'Fog'];
+  if (code <= 55)      return ['🌦️', 'Drizzle'];
+  if (code <= 65)      return ['🌧️', 'Rain'];
+  if (code <= 77)      return ['🌨️', 'Snow'];
+  if (code <= 82)      return ['🌦️', 'Showers'];
+  if (code <= 99)      return ['⛈️',  'Thunderstorm'];
+  return ['🌡️', '--'];
+}
+
+app.get('/api/weather', async (req, res) => {
+  if (_weatherCache && Date.now() - _weatherCacheAt < WEATHER_TTL) {
+    return res.json(_weatherCache);
+  }
+  const getSetting = key => db.prepare('SELECT value FROM settings WHERE key=?').get(key)?.value;
+  const lat  = getSetting('weather_lat')      || '33.749';
+  const lon  = getSetting('weather_lon')      || '-84.388';
+  const unit = getSetting('temperature_unit') || 'F';
+  const omUnit = unit === 'C' ? 'celsius' : 'fahrenheit';
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+      `&current=temperature_2m,weather_code` +
+      `&daily=weather_code,temperature_2m_max,temperature_2m_min` +
+      `&temperature_unit=${omUnit}&timezone=auto&forecast_days=5`;
+    const data = await fetch(url).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); });
+    const [icon, condition] = wmoInfo(data.current.weather_code);
+    const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const todayISO = localDate();
+    const forecast = data.daily.time.map((date, i) => ({
+      day: date === todayISO ? 'Today' : DAYS[new Date(date + 'T12:00:00').getDay()],
+      icon: wmoInfo(data.daily.weather_code[i])[0],
+      hi: Math.round(data.daily.temperature_2m_max[i]),
+      lo: Math.round(data.daily.temperature_2m_min[i]),
+    }));
+    _weatherCache = {
+      temp: Math.round(data.current.temperature_2m),
+      hi: forecast[0].hi,
+      lo: forecast[0].lo,
+      condition,
+      icon,
+      unit,
+      forecast,
+    };
+    _weatherCacheAt = Date.now();
+    res.json(_weatherCache);
+  } catch (e) {
+    if (_weatherCache) return res.json(_weatherCache); // serve stale on error
+    res.status(503).json({ error: e.message });
+  }
+});
+
+// ── Routes: Auth ──────────────────────────────────────────────────────────────
+
+app.get('/api/auth/setup-status', (req, res) => {
+  const hash = db.prepare('SELECT value FROM settings WHERE key=?').get('admin_pin_hash')?.value;
+  res.json({ configured: !!(hash && hash.length > 0) });
+});
+
+app.post('/api/auth/setup', async (req, res) => {
+  const existing = db.prepare('SELECT value FROM settings WHERE key=?').get('admin_pin_hash')?.value;
+  if (existing) return res.status(403).json({ error: 'Admin already configured' });
+  const { pin } = req.body;
+  if (!String(pin || '').match(/^\d{4,8}$/)) return res.status(400).json({ error: 'PIN must be 4–8 digits' });
+  const hash = await bcrypt.hash(String(pin), 10);
+  db.prepare('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)').run('admin_pin_hash', hash);
+  const token = jwt.sign({ sub: 'admin', role: 'admin' }, getJwtSecret(), { expiresIn: '30d' });
+  res.json({ token });
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  const { member_id, pin } = req.body;
+  const member = db.prepare('SELECT * FROM family_members WHERE id=?').get(Number(member_id));
+  if (!member) return res.status(401).json({ error: 'Member not found' });
+  if (!member.pin_hash) return res.status(401).json({ error: 'PIN not set for this member' });
+  if (!await bcrypt.compare(String(pin || ''), member.pin_hash))
+    return res.status(401).json({ error: 'Wrong PIN' });
+  const token = jwt.sign({ sub: member.id, name: member.name, role: 'member' }, getJwtSecret(), { expiresIn: '30d' });
+  res.json({ token, member: { id: member.id, name: member.name, color: member.color, initials: member.initials } });
+});
+
+app.post('/api/auth/admin', async (req, res) => {
+  const hash = db.prepare('SELECT value FROM settings WHERE key=?').get('admin_pin_hash')?.value;
+  if (!hash) return res.status(401).json({ error: 'Admin not configured' });
+  if (!await bcrypt.compare(String(req.body.pin || ''), hash))
+    return res.status(401).json({ error: 'Wrong PIN' });
+  const token = jwt.sign({ sub: 'admin', role: 'admin' }, getJwtSecret(), { expiresIn: '30d' });
+  res.json({ token });
+});
+
+app.put('/api/auth/admin/pin', requireAdmin, async (req, res) => {
+  const { pin } = req.body;
+  if (!String(pin || '').match(/^\d{4,8}$/)) return res.status(400).json({ error: 'PIN must be 4–8 digits' });
+  db.prepare('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)').run('admin_pin_hash', await bcrypt.hash(String(pin), 10));
+  res.json({ ok: true });
+});
+
+app.get('/api/auth/me', requireAuth, (req, res) => res.json(req.user));
+
 // ── Routes: Events ────────────────────────────────────────────────────────────
 app.get('/api/events', (req, res) => {
   res.json(db.prepare('SELECT * FROM events ORDER BY date, time').all());
 });
 
-app.post('/api/events', (req, res) => {
+app.post('/api/events', requireAuth, (req, res) => {
   const { title, date, time, end_time, duration, calendar, color, notes, member_id, recurring_rule } = req.body;
   if (!title?.trim() || !date) return res.status(400).json({ error: 'title and date are required' });
   const calColors = { personal:'#007AFF', work:'#5856D6', family:'#32ADE6', hearth:'#34C759' };
@@ -167,7 +303,7 @@ app.post('/api/events', (req, res) => {
   res.json({ id: seriesId, title: title.trim(), date, time: time||'All day', end_time: end_time||'', calendar: calendar||'hearth', color: col, member_id: member_id||null, recurring_rule: rule });
 });
 
-app.put('/api/events/:id', (req, res) => {
+app.put('/api/events/:id', requireAuth, (req, res) => {
   const existing = db.prepare('SELECT * FROM events WHERE id=?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Not found' });
   const { title, date, time, end_time, duration, calendar, color, notes, member_id, recurring_rule } = req.body;
@@ -190,7 +326,7 @@ app.put('/api/events/:id', (req, res) => {
   res.json(db.prepare('SELECT * FROM events WHERE id=?').get(existing.id));
 });
 
-app.delete('/api/events/:id', (req, res) => {
+app.delete('/api/events/:id', requireAuth, (req, res) => {
   db.prepare('DELETE FROM events WHERE id=?').run(req.params.id);
   res.json({ ok: true });
 });
@@ -201,7 +337,7 @@ app.get('/api/chores', (req, res) => {
   res.json(db.prepare("SELECT * FROM chores ORDER BY CASE status WHEN 'overdue' THEN 0 WHEN 'due' THEN 1 ELSE 2 END, created_at").all());
 });
 
-app.post('/api/chores', (req, res) => {
+app.post('/api/chores', requireAdmin, (req, res) => {
   const { name, recurrence, start } = req.body;
   if (!name?.trim() || !recurrence?.trim()) return res.status(400).json({ error: 'name and recurrence are required' });
   const today = localDate();
@@ -213,7 +349,7 @@ app.post('/api/chores', (req, res) => {
   res.json({ id: r.lastInsertRowid, name: name.trim(), recurrence: recurrence.trim(), last_done: '', next_due: nextDue, status, done: 0 });
 });
 
-app.put('/api/chores/:id', (req, res) => {
+app.put('/api/chores/:id', requireAdmin, (req, res) => {
   const c = db.prepare('SELECT * FROM chores WHERE id=?').get(req.params.id);
   if (!c) return res.status(404).json({ error: 'Not found' });
   const { name, recurrence, next_due } = req.body;
@@ -225,7 +361,7 @@ app.put('/api/chores/:id', (req, res) => {
   res.json(db.prepare('SELECT * FROM chores WHERE id=?').get(c.id));
 });
 
-app.put('/api/chores/:id/done', (req, res) => {
+app.put('/api/chores/:id/done', requireAuth, (req, res) => {
   const c = db.prepare('SELECT * FROM chores WHERE id=?').get(req.params.id);
   if (!c) return res.status(404).json({ error: 'Not found' });
   const done = c.done ? 0 : 1;
@@ -239,7 +375,7 @@ app.put('/api/chores/:id/done', (req, res) => {
   res.json({ done, next_due: nextDue });
 });
 
-app.delete('/api/chores/:id', (req, res) => {
+app.delete('/api/chores/:id', requireAdmin, (req, res) => {
   db.prepare('DELETE FROM chores WHERE id=?').run(req.params.id);
   res.json({ ok: true });
 });
@@ -249,13 +385,13 @@ app.get('/api/grocery', (req, res) => {
   res.json(db.prepare('SELECT * FROM grocery ORDER BY checked, category, created_at').all());
 });
 
-app.post('/api/grocery', (req, res) => {
+app.post('/api/grocery', requireAuth, (req, res) => {
   const { name, category } = req.body;
   const r = db.prepare('INSERT INTO grocery (name,category) VALUES (?,?)').run(name, category||'Other');
   res.json({ id: r.lastInsertRowid, name, category: category||'Other', checked: 0 });
 });
 
-app.put('/api/grocery/:id/toggle', (req, res) => {
+app.put('/api/grocery/:id/toggle', requireAuth, (req, res) => {
   const item = db.prepare('SELECT checked FROM grocery WHERE id=?').get(req.params.id);
   if (!item) return res.status(404).json({ error: 'Not found' });
   const checked = item.checked ? 0 : 1;
@@ -263,7 +399,7 @@ app.put('/api/grocery/:id/toggle', (req, res) => {
   res.json({ checked });
 });
 
-app.delete('/api/grocery/checked', (req, res) => {
+app.delete('/api/grocery/checked', requireAuth, (req, res) => {
   db.prepare('DELETE FROM grocery WHERE checked=1').run();
   res.json({ ok: true });
 });
@@ -290,7 +426,7 @@ app.get('/api/inbox', (req, res) => {
   });
 });
 
-app.post('/api/inbox/:id/accept', (req, res) => {
+app.post('/api/inbox/:id/accept', requireAuth, (req, res) => {
   const item = db.prepare('SELECT * FROM inbox WHERE id=?').get(req.params.id);
   if (!item) return res.status(404).json({ error: 'Not found' });
   db.prepare('INSERT INTO events (title,date,time,calendar,color,source) VALUES (?,?,?,?,?,?)')
@@ -301,7 +437,7 @@ app.post('/api/inbox/:id/accept', (req, res) => {
   res.json({ ok: true });
 });
 
-app.delete('/api/inbox/:id', (req, res) => {
+app.delete('/api/inbox/:id', requireAuth, (req, res) => {
   db.prepare('DELETE FROM inbox WHERE id=?').run(req.params.id);
   res.json({ ok: true });
 });
@@ -311,7 +447,7 @@ app.get('/api/ics/sources', (req, res) => {
   res.json(db.prepare('SELECT * FROM ics_sources ORDER BY created_at').all());
 });
 
-app.post('/api/ics/sources', async (req, res) => {
+app.post('/api/ics/sources', requireAdmin, async (req, res) => {
   const { name, url, color } = req.body;
   try {
     const r = db.prepare('INSERT INTO ics_sources (name,url,color) VALUES (?,?,?)').run(name, url, color||'#3B82F6');
@@ -323,13 +459,13 @@ app.post('/api/ics/sources', async (req, res) => {
   }
 });
 
-app.delete('/api/ics/sources/:id', (req, res) => {
+app.delete('/api/ics/sources/:id', requireAdmin, (req, res) => {
   db.prepare('DELETE FROM events WHERE source=?').run(`ics-${req.params.id}`);
   db.prepare('DELETE FROM ics_sources WHERE id=?').run(req.params.id);
   res.json({ ok: true });
 });
 
-app.post('/api/ics/sync', async (req, res) => {
+app.post('/api/ics/sync', requireAuth, async (req, res) => {
   const sources = db.prepare('SELECT * FROM ics_sources WHERE enabled=1').all();
   let total = 0;
   for (const src of sources) {
@@ -343,7 +479,7 @@ app.get('/api/push/vapid-key', (req, res) => {
   res.json({ publicKey: app._vapidPublic });
 });
 
-app.post('/api/push/subscribe', (req, res) => {
+app.post('/api/push/subscribe', requireAuth, (req, res) => {
   const { endpoint, keys } = req.body || {};
   if (!endpoint || !keys?.p256dh || !keys?.auth) return res.status(400).json({ error: 'Invalid subscription' });
   db.prepare('INSERT OR REPLACE INTO push_subscriptions (endpoint,p256dh,auth) VALUES (?,?,?)').run(endpoint, keys.p256dh, keys.auth);
@@ -368,7 +504,7 @@ app.get('/api/settings', (req, res) => {
   res.json(Object.fromEntries(rows.map(r => [r.key, r.value])));
 });
 
-app.put('/api/settings', (req, res) => {
+app.put('/api/settings', requireAdmin, (req, res) => {
   const upd = db.prepare('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)');
   for (const [k, v] of Object.entries(req.body)) upd.run(k, String(v));
   res.json({ ok: true });
@@ -420,14 +556,14 @@ app.get('/api/countdowns', (req, res) => {
   res.json(db.prepare('SELECT * FROM countdowns ORDER BY date').all());
 });
 
-app.post('/api/countdowns', (req, res) => {
+app.post('/api/countdowns', requireAuth, (req, res) => {
   const { label, date, emoji = '🎉' } = req.body;
   if (!label?.trim() || !date) return res.status(400).json({ error: 'label and date are required' });
   const r = db.prepare('INSERT INTO countdowns (label,date,emoji) VALUES (?,?,?)').run(label.trim(), date, emoji);
   res.json({ id: r.lastInsertRowid, label: label.trim(), date, emoji });
 });
 
-app.delete('/api/countdowns/:id', (req, res) => {
+app.delete('/api/countdowns/:id', requireAuth, (req, res) => {
   db.prepare('DELETE FROM countdowns WHERE id=?').run(Number(req.params.id));
   res.json({ ok: true });
 });
@@ -437,7 +573,15 @@ app.get('/api/members', (req, res) => {
   res.json(db.prepare('SELECT * FROM family_members ORDER BY created_at').all());
 });
 
-app.post('/api/members', (req, res) => {
+app.put('/api/members/:id/pin', requireAdmin, async (req, res) => {
+  const { pin } = req.body;
+  if (!String(pin || '').match(/^\d{4,8}$/)) return res.status(400).json({ error: 'PIN must be 4–8 digits' });
+  const hash = await bcrypt.hash(String(pin), 10);
+  db.prepare('UPDATE family_members SET pin_hash=? WHERE id=?').run(hash, Number(req.params.id));
+  res.json({ ok: true });
+});
+
+app.post('/api/members', requireAdmin, (req, res) => {
   const { name, color = '#007AFF', initials } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'name is required' });
   const init = initials || name.trim().split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
@@ -445,7 +589,7 @@ app.post('/api/members', (req, res) => {
   res.json({ id: r.lastInsertRowid, name: name.trim(), color, initials: init });
 });
 
-app.delete('/api/members/:id', (req, res) => {
+app.delete('/api/members/:id', requireAdmin, (req, res) => {
   db.prepare('DELETE FROM family_members WHERE id=?').run(Number(req.params.id));
   res.json({ ok: true });
 });
@@ -455,7 +599,7 @@ app.get('/api/photos', (req, res) => {
   res.json(db.prepare('SELECT * FROM photos ORDER BY created_at DESC').all());
 });
 
-app.post('/api/photos', (req, res) => {
+app.post('/api/photos', requireAuth, (req, res) => {
   const { filename, data } = req.body;
   if (!filename || !data?.startsWith('data:image/')) return res.status(400).json({ error: 'filename and image data required' });
   const ext = (filename.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z]/g, '') || 'jpg';
@@ -469,7 +613,7 @@ app.post('/api/photos', (req, res) => {
   }
 });
 
-app.delete('/api/photos/:id', (req, res) => {
+app.delete('/api/photos/:id', requireAuth, (req, res) => {
   const p = db.prepare('SELECT * FROM photos WHERE id=?').get(Number(req.params.id));
   if (p) {
     try { fs.unlinkSync(path.join(PHOTOS_DIR, p.filename)); } catch {}

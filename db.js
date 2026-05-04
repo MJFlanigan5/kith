@@ -114,10 +114,11 @@ CREATE TABLE IF NOT EXISTS photos (
 );
 `);
 
-// member_id on events — added after initial schema; safe to run on every boot
+// migrations — safe to run on every boot
 try { db.exec('ALTER TABLE events ADD COLUMN member_id INTEGER'); } catch {}
 try { db.exec(`ALTER TABLE events ADD COLUMN end_time TEXT DEFAULT ''`); } catch {}
 try { db.exec(`ALTER TABLE events ADD COLUMN recurring_rule TEXT DEFAULT ''`); } catch {}
+try { db.exec('ALTER TABLE family_members ADD COLUMN pin_hash TEXT'); } catch {}
 
 // ── Seed data (only on first run) ────────────────────────────────────────────
 
@@ -187,6 +188,7 @@ const defaults = {
   google_email: 'mike@gmail.com', google_connected: '1',
   smtp_host: '', smtp_port: '587', smtp_user: '', smtp_pass: '',
   forwarding_address: 'hearth@local.home',
+  weather_lat: '33.8533', weather_lon: '-84.2201',
 };
 const insSetting = db.prepare('INSERT OR IGNORE INTO settings (key,value) VALUES (?,?)');
 for (const [k, v] of Object.entries(defaults)) insSetting.run(k, v);

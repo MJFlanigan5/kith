@@ -196,6 +196,8 @@ const defaults = {
   email_webhook_secret: require('crypto').randomBytes(24).toString('hex'),
   anthropic_api_key: '',
   weather_lat: '33.8533', weather_lon: '-84.2201', weather_city: '',
+  sports_leagues: 'nba,nfl,mlb,nhl',
+  news_feed: 'https://feeds.npr.org/1001/rss.xml',
 };
 const insSetting = db.prepare('INSERT OR IGNORE INTO settings (key,value) VALUES (?,?)');
 for (const [k, v] of Object.entries(defaults)) insSetting.run(k, v);

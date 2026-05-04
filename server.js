@@ -526,7 +526,82 @@ app.put('/api/settings', requireAdmin, (req, res) => {
   const upd = db.prepare('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)');
   for (const [k, v] of Object.entries(req.body)) upd.run(k, String(v));
   if ('weather_lat' in req.body || 'weather_lon' in req.body || 'temperature_unit' in req.body) _weatherCache = null;
+  if ('news_feed' in req.body) { _newsCache = null; _newsCacheAt = 0; }
+  if ('sports_leagues' in req.body) { for (const k of Object.keys(_sportsCache)) delete _sportsCache[k]; }
   res.json({ ok: true });
+});
+
+// ── Sports (ESPN) ─────────────────────────────────────────────────────────────
+const _sportsCache = {};
+const _sportsCacheAt = {};
+const SPORTS_TTL = 2 * 60 * 1000;
+const ESPN_PATHS = { nfl:'football/nfl', nba:'basketball/nba', mlb:'baseball/mlb', nhl:'hockey/nhl' };
+
+app.get('/api/sports', async (req, res) => {
+  const getSetting = key => db.prepare('SELECT value FROM settings WHERE key=?').get(key)?.value;
+  const leagues = (getSetting('sports_leagues') || 'nba,nfl,mlb,nhl').split(',').filter(Boolean);
+  const now = Date.now();
+  const results = [];
+  await Promise.all(leagues.map(async league => {
+    if (_sportsCache[league] && now - _sportsCacheAt[league] < SPORTS_TTL) {
+      results.push(..._sportsCache[league]); return;
+    }
+    const espnPath = ESPN_PATHS[league];
+    if (!espnPath) return;
+    try {
+      const data = await fetch(`https://site.api.espn.com/apis/site/v2/sports/${espnPath}/scoreboard`).then(r => r.json());
+      const games = (data.events || []).map(ev => {
+        const comp = ev.competitions[0];
+        const home = comp.competitors.find(c => c.homeAway === 'home');
+        const away = comp.competitors.find(c => c.homeAway === 'away');
+        const st = comp.status?.type;
+        return {
+          id: ev.id, league: league.toUpperCase(),
+          home: { abbr: home?.team?.abbreviation, score: home?.score },
+          away: { abbr: away?.team?.abbreviation, score: away?.score },
+          state: st?.state, detail: st?.shortDetail,
+        };
+      });
+      _sportsCache[league] = games;
+      _sportsCacheAt[league] = now;
+      results.push(...games);
+    } catch { if (_sportsCache[league]) results.push(..._sportsCache[league]); }
+  }));
+  res.json(results);
+});
+
+// ── News (RSS) ─────────────────────────────────────────────────────────────────
+let _newsCache = null;
+let _newsCacheAt = 0;
+const NEWS_TTL = 15 * 60 * 1000;
+
+function parseRSS(xml) {
+  const items = [];
+  const re = /<item>([\s\S]*?)<\/item>/g;
+  let m;
+  while ((m = re.exec(xml)) !== null && items.length < 8) {
+    const block = m[1];
+    const title = (/<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>/s.exec(block)||[])[1]?.trim();
+    const link = (/<link>\s*(https?:\/\/[^<]+)\s*<\/link>/s.exec(block)||[])[1]?.trim() ||
+                 (/<guid[^>]*>\s*(https?:\/\/[^<]+)\s*<\/guid>/s.exec(block)||[])[1]?.trim();
+    if (title && link) items.push({ title, link });
+  }
+  return items;
+}
+
+app.get('/api/news', async (req, res) => {
+  if (_newsCache && Date.now() - _newsCacheAt < NEWS_TTL) return res.json(_newsCache);
+  const getSetting = key => db.prepare('SELECT value FROM settings WHERE key=?').get(key)?.value;
+  const feedUrl = getSetting('news_feed') || 'https://feeds.npr.org/1001/rss.xml';
+  try {
+    const xml = await fetch(feedUrl, { headers: { 'User-Agent': 'Hearth/1.0' } }).then(r => r.text());
+    _newsCache = parseRSS(xml);
+    _newsCacheAt = Date.now();
+    res.json(_newsCache);
+  } catch (e) {
+    if (_newsCache) return res.json(_newsCache);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ── Cron jobs ─────────────────────────────────────────────────────────────────

@@ -8,7 +8,8 @@ echo "==> Pulling latest code..."
 git pull
 
 echo "==> Rebuilding Hearth..."
-docker compose up -d --build
+docker compose build --no-cache
+docker compose up -d
 
 echo "==> Waiting for Hearth to be ready..."
 for i in $(seq 1 20); do

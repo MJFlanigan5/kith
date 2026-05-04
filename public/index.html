@@ -27,6 +27,7 @@ a{cursor:pointer;user-select:none}
 @keyframes checkPop{0%{transform:scale(.7)}55%{transform:scale(1.18)}100%{transform:scale(1)}}
 @keyframes toastIn{from{opacity:0;transform:translateY(10px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
 @keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
 .screen{animation:slideUp .2s cubic-bezier(.25,.46,.45,.94) both}
 .irow{transition:background .12s ease}
 .irow:hover{background:rgba(0,0,0,0.025)!important}
@@ -577,6 +578,55 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
   );
 }
 
+/* ── Sports widget ───────────────────────────────────────────────────── */
+function SportsWidget(){
+  const [games,setGames]=useState([]);
+  useEffect(()=>{api.get('/api/sports').then(d=>{if(Array.isArray(d))setGames(d);}).catch(()=>{});},[]);
+  if(!games.length) return null;
+  const col={pre:A.blue,in:A.green,post:A.label5};
+  return(
+    <div style={{marginBottom:20}}>
+      <div style={{fontSize:11,fontWeight:600,color:A.label4,textTransform:'uppercase',letterSpacing:'.07em',marginBottom:8}}>Scores</div>
+      <div style={{display:'flex',gap:10,overflowX:'auto',paddingBottom:4}}>
+        {games.map(g=>(
+          <Card key={g.id} style={{padding:'12px 16px',flexShrink:0,minWidth:136}}>
+            <div style={{fontSize:10,fontWeight:700,color:col[g.state]||A.label4,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:8}}>{g.league}</div>
+            {[g.away,g.home].map((t,i)=>(
+              <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:14,marginBottom:i===0?4:0}}>
+                <span style={{fontSize:14,fontWeight:600,color:A.label1}}>{t?.abbr||'TBD'}</span>
+                <span style={{fontSize:16,fontWeight:700,color:A.label1,fontVariantNumeric:'tabular-nums'}}>{g.state==='pre'?'—':t?.score??'—'}</span>
+              </div>
+            ))}
+            <div style={{fontSize:11,color:col[g.state]||A.label4,marginTop:8,fontWeight:g.state==='in'?700:400,display:'flex',alignItems:'center',gap:5}}>
+              {g.state==='in'&&<div style={{width:6,height:6,borderRadius:'50%',background:A.green,animation:'pulse 1.4s ease-in-out infinite',flexShrink:0}}/>}
+              {g.detail||'—'}
+            </div>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ── News widget ─────────────────────────────────────────────────────── */
+function NewsWidget(){
+  const [items,setItems]=useState([]);
+  useEffect(()=>{api.get('/api/news').then(d=>{if(Array.isArray(d))setItems(d);}).catch(()=>{});},[]);
+  if(!items.length) return null;
+  return(
+    <Card style={{marginBottom:20}}>
+      <div style={{padding:'14px 16px',borderBottom:`1px solid ${A.sep}`,fontSize:13,fontWeight:600,color:A.label2,textTransform:'uppercase',letterSpacing:'.06em'}}>Headlines</div>
+      {items.slice(0,6).map((h,i)=>(
+        <a key={i} href={h.link} target="_blank" rel="noopener noreferrer" className="irow"
+          style={{display:'flex',alignItems:'center',gap:12,padding:'12px 16px',borderTop:i>0?`1px solid ${A.sep}`:'none',textDecoration:'none',color:'inherit',cursor:'pointer'}}>
+          <span style={{fontSize:14,color:A.label1,flex:1,lineHeight:1.4}}>{h.title}</span>
+          <svg width="11" height="11" viewBox="0 0 12 12" fill="none" style={{flexShrink:0}}><path d="M2.5 9.5L9.5 2.5M9.5 2.5H4.5M9.5 2.5V7.5" stroke={A.label5} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </a>
+      ))}
+    </Card>
+  );
+}
+
 /* ── Dashboard ───────────────────────────────────────────────────────── */
 function DashboardScreen({events,chores,grocery,countdowns,clockFormat='12h'}){
   const now=useClock();
@@ -623,6 +673,7 @@ function DashboardScreen({events,chores,grocery,countdowns,clockFormat='12h'}){
           })}
         </div>
       )}
+      <SportsWidget/>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
         <Card>
           <div style={{padding:'14px 16px',borderBottom:`1px solid ${A.sep}`,fontSize:13,fontWeight:600,color:A.label2,textTransform:'uppercase',letterSpacing:'.06em'}}>Today's Events</div>
@@ -649,6 +700,7 @@ function DashboardScreen({events,chores,grocery,countdowns,clockFormat='12h'}){
           {dueChores.length===0&&<div style={{padding:'16px',fontSize:14,color:A.label4,fontStyle:'normal'}}>All caught up!</div>}
         </Card>
       </div>
+      <div style={{marginTop:20}}><NewsWidget/></div>
     </div>
   );
 }
@@ -1336,6 +1388,8 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [weatherDisplay,setWeatherDisplay]=useState('');
   const [geoLoading,setGeoLoading]=useState(false);
   const [fwdAddress,setFwdAddress]=useState('hearth@mjflanigan.com');
+  const [sportsLeagues,setSportsLeagues]=useState({nfl:true,nba:true,mlb:true,nhl:true});
+  const [newsFeed,setNewsFeed]=useState('https://feeds.npr.org/1001/rss.xml');
   useEffect(()=>{
     api.get('/api/settings').then(st=>{
       if(st.weather_lat) setWeatherLat(st.weather_lat);
@@ -1343,8 +1397,14 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
       if(st.weather_city){setWeatherCity(st.weather_city);setWeatherDisplay(st.weather_city);}
       if(st.forwarding_address) setFwdAddress(st.forwarding_address);
       if(st.temperature_unit) setTemp(st.temperature_unit==='C'?'°C':'°F');
+      if(st.sports_leagues){const on=st.sports_leagues.split(',');setSportsLeagues({nfl:on.includes('nfl'),nba:on.includes('nba'),mlb:on.includes('mlb'),nhl:on.includes('nhl')});}
+      if(st.news_feed) setNewsFeed(st.news_feed);
     }).catch(()=>{});
   },[]);
+  const saveSportsLeagues=(next)=>{
+    const val=Object.entries(next).filter(([,v])=>v).map(([k])=>k).join(',');
+    saveSetting('sports_leagues',val||'nba');
+  };
   const geocodeCity=async()=>{
     if(!weatherCity.trim()) return;
     setGeoLoading(true);
@@ -1551,6 +1611,28 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
           <Btn sm onClick={geocodeCity}>{geoLoading?'…':'Search'}</Btn>
         </div>
         {weatherDisplay&&<div style={{padding:'0 16px 14px',fontSize:13,color:A.green}}>Current: {weatherDisplay}</div>}
+      </FormGroup>
+
+      <FormGroup label="Sports">
+        {['nfl','nba','mlb','nhl'].map((lg,i)=>(
+          <div key={lg} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px',borderTop:i>0?`1px solid ${A.sep}`:'none'}}>
+            <span style={{fontSize:15,color:A.label1,textTransform:'uppercase',fontWeight:600}}>{lg}</span>
+            <Toggle checked={sportsLeagues[lg]} onChange={v=>{const next={...sportsLeagues,[lg]:v};setSportsLeagues(next);saveSportsLeagues(next);}}/>
+          </div>
+        ))}
+      </FormGroup>
+
+      <FormGroup label="News Feed" footer="Paste any RSS feed URL. Updates every 15 minutes.">
+        <div style={{padding:'14px 16px',display:'flex',gap:10}}>
+          <Inp value={newsFeed} onChange={e=>setNewsFeed(e.target.value)} placeholder="https://feeds.npr.org/1001/rss.xml" style={{flex:1,fontSize:13}}/>
+          <Btn sm onClick={()=>saveSetting('news_feed',newsFeed).then(()=>toastAdd('News feed saved'))}>Save</Btn>
+        </div>
+        <div style={{padding:'0 16px 12px',display:'flex',gap:8,flexWrap:'wrap'}}>
+          {[['NPR','https://feeds.npr.org/1001/rss.xml'],['AP','https://feeds.apnews.com/rss/apf-topnews'],['BBC','https://feeds.bbci.co.uk/news/rss.xml']].map(([label,url])=>(
+            <button key={label} onClick={()=>{setNewsFeed(url);saveSetting('news_feed',url).then(()=>toastAdd(`Switched to ${label}`));}}
+              style={{background:A.inputBg,border:'none',borderRadius:A.rPill,padding:'5px 12px',fontSize:12,fontWeight:600,color:A.label3,cursor:'pointer'}}>{label}</button>
+          ))}
+        </div>
       </FormGroup>
 
       <FormGroup label="Screensaver Photos" footer="Photos cycle every 10 seconds when the display is idle for 2 minutes.">

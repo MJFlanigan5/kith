@@ -709,22 +709,21 @@ function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weath
         <Btn onClick={()=>{setQaForm(p=>({...p,date:localDate()}));setQaOpen(true);}} style={{flexShrink:0,marginTop:10}}>+ Add Event</Btn>
       </div>
 
-      {/* Stats bar — 4 columns including weather */}
-      <Card style={{marginBottom:16,padding:0,overflow:'hidden'}}>
-        <div style={{display:'grid',gridTemplateColumns:isMobile?'repeat(2,1fr)':'repeat(4,1fr)'}}>
-          {[
-            {n:todayEvs.length,label:'Events Today',color:A.blue},
-            {n:dueChores.length,label:'Chores Due',color:A.amber},
-            {n:groceryRemaining,label:'Grocery Items',color:A.green},
-            weather?{n:`${weather.temp}°`,label:weather.condition,color:A.teal}:{n:'—',label:'Weather',color:A.teal},
-          ].map((s,i)=>(
-            <div key={s.label} style={{padding:'18px 20px',borderRight:i<3?`1px solid ${A.sep}`:'none',borderTop:`2px solid ${s.color}`}}>
-              <div style={{fontSize:34,fontWeight:800,letterSpacing:'-.04em',color:A.label1,lineHeight:1,marginBottom:6,fontVariantNumeric:'tabular-nums'}}>{s.n}</div>
-              <div style={{fontSize:12,fontWeight:500,color:A.label3}}>{s.label}</div>
-            </div>
-          ))}
-        </div>
-      </Card>
+      {/* Stats — individual cards with big colored numbers */}
+      <div style={{display:'grid',gridTemplateColumns:isMobile?'repeat(2,1fr)':'repeat(4,1fr)',gap:10,marginBottom:16}}>
+        {[
+          {n:todayEvs.length,label:'Events Today',color:A.blue},
+          {n:dueChores.length,label:'Chores Due',color:dueChores.some(c=>c.status==='overdue')?A.red:A.amber},
+          {n:groceryRemaining,label:'On List',color:A.green},
+          weather?{n:`${weather.temp}°`,label:weather.condition,color:A.teal}:{n:'—',label:'Weather',color:A.teal},
+        ].map(s=>(
+          <Card key={s.label} style={{padding:'18px 20px',position:'relative',overflow:'hidden'}}>
+            <div style={{position:'absolute',top:0,left:0,right:0,height:3,background:`linear-gradient(90deg,${s.color},${s.color}44)`}}/>
+            <div style={{fontSize:isMobile?38:52,fontWeight:800,letterSpacing:'-.05em',color:s.color,lineHeight:1,marginBottom:8,fontVariantNumeric:'tabular-nums'}}>{s.n}</div>
+            <div style={{fontSize:11,fontWeight:700,color:A.label4,textTransform:'uppercase',letterSpacing:'.07em'}}>{s.label}</div>
+          </Card>
+        ))}
+      </div>
 
       {/* 7-day week strip */}
       <Card style={{marginBottom:16,padding:'12px 10px'}}>
@@ -764,29 +763,31 @@ function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weath
 
       {/* Today's events + Due today */}
       <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:12,marginBottom:12}}>
-        <Card>
+        <Card style={{position:'relative',overflow:'hidden'}}>
+          <div style={{height:3,background:`linear-gradient(90deg,${todayEvs[0]?.color||A.blue},${(todayEvs[0]?.color||A.blue)+'44'})`}}/>
           <div style={{padding:'12px 16px',borderBottom:`1px solid ${A.sep}`,fontSize:11,fontWeight:700,color:A.label3,textTransform:'uppercase',letterSpacing:'.07em'}}>Today's Events</div>
           {todayEvs.map((ev,i)=>(
-            <div key={ev.id} className="irow" style={{display:'flex',alignItems:'center',gap:12,padding:'11px 16px',borderTop:i>0?`1px solid ${A.sep}`:'none'}}>
-              <div style={{width:4,height:36,borderRadius:2,background:ev.color,flexShrink:0}}/>
-              <div>
-                <div style={{fontSize:14,fontWeight:600,color:A.label1}}>{ev.title}</div>
-                <div style={{fontSize:12,color:A.label4,fontVariantNumeric:'tabular-nums'}}>{fmtTime(ev.time,clockFormat)}</div>
+            <div key={ev.id} className="irow" style={{display:'flex',alignItems:'center',gap:12,padding:'13px 16px',borderTop:i>0?`1px solid ${A.sep}`:'none'}}>
+              <div style={{width:4,height:40,borderRadius:2,background:ev.color,flexShrink:0}}/>
+              <div style={{flex:1}}>
+                <div style={{fontSize:15,fontWeight:600,color:A.label1}}>{ev.title}</div>
+                <div style={{fontSize:12,color:A.label4,fontVariantNumeric:'tabular-nums',marginTop:2}}>{fmtTime(ev.time,clockFormat)}</div>
               </div>
             </div>
           ))}
-          {todayEvs.length===0&&<div style={{padding:'14px 16px',fontSize:14,color:A.label4,fontStyle:'normal'}}>No events today</div>}
+          {todayEvs.length===0&&<div style={{padding:'20px 16px',fontSize:14,color:A.label4}}>Free today</div>}
         </Card>
-        <Card>
+        <Card style={{position:'relative',overflow:'hidden'}}>
+          <div style={{height:3,background:dueChores.length===0?`linear-gradient(90deg,${A.green},${A.green}44)`:dueChores.some(c=>c.status==='overdue')?`linear-gradient(90deg,${A.red},${A.red}44)`:`linear-gradient(90deg,${A.amber},${A.amber}44)`}}/>
           <div style={{padding:'12px 16px',borderBottom:`1px solid ${A.sep}`,fontSize:11,fontWeight:700,color:A.label3,textTransform:'uppercase',letterSpacing:'.07em'}}>Due Today</div>
           {dueChores.map((c,i)=>(
-            <div key={c.id} className="irow" style={{display:'flex',alignItems:'center',gap:10,padding:'11px 16px',borderTop:i>0?`1px solid ${A.sep}`:'none'}}>
+            <div key={c.id} className="irow" style={{display:'flex',alignItems:'center',gap:10,padding:'13px 16px',borderTop:i>0?`1px solid ${A.sep}`:'none'}}>
               <div style={{width:8,height:8,borderRadius:'50%',background:c.status==='overdue'?A.red:A.amber,flexShrink:0}}/>
               <span style={{fontSize:14,color:A.label1,fontWeight:500,flex:1}}>{c.name}</span>
               <span style={{fontSize:12,color:A.label4}}>{c.recurrence.split(' ')[0]}</span>
             </div>
           ))}
-          {dueChores.length===0&&<div style={{padding:'14px 16px',fontSize:14,color:A.label4,fontStyle:'normal'}}>All caught up!</div>}
+          {dueChores.length===0&&<div style={{padding:'20px 16px',fontSize:14,color:A.green,fontWeight:600}}>All caught up!</div>}
         </Card>
       </div>
 
@@ -1362,8 +1363,14 @@ function ChoresScreen({chores,setChores,toastAdd}){
     <div>
       <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:24}}>
         <div>
-          <h1 style={{fontSize:28,fontWeight:800,letterSpacing:'-.04em'}}>Chores</h1>
-          <p style={{color:A.label4,fontSize:15,marginTop:4}}>{chores.filter(c=>c.status==='due'||c.status==='overdue').length} due today · {chores.length} total</p>
+          <h1 style={{fontSize:isMobile?34:44,fontWeight:800,letterSpacing:'-.05em',lineHeight:1.05}}>Chores</h1>
+          {chores.filter(c=>c.status==='due'||c.status==='overdue').length>0?(
+            <p style={{fontSize:15,marginTop:6,fontWeight:600,color:chores.some(c=>c.status==='overdue')?A.red:A.amber}}>
+              {chores.filter(c=>c.status==='due'||c.status==='overdue').length} due today · {chores.length} total
+            </p>
+          ):(
+            <p style={{color:A.label4,fontSize:15,marginTop:6}}>{chores.length} total</p>
+          )}
         </div>
         <Btn onClick={openNew}>+ Add Chore</Btn>
       </div>
@@ -1495,8 +1502,8 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,toastAdd}){
       <div>
         <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',marginBottom:20}}>
           <div>
-            <h1 style={{fontSize:28,fontWeight:800,letterSpacing:'-.04em'}}>Grocery</h1>
-            <p style={{color:A.label4,fontSize:15,marginTop:4}}>{unchecked.length} items remaining</p>
+            <h1 style={{fontSize:isMobile?34:44,fontWeight:800,letterSpacing:'-.05em',lineHeight:1.05}}>Grocery</h1>
+            <p style={{fontSize:15,marginTop:6,fontWeight:unchecked.length>0?600:400,color:unchecked.length>0?A.green:A.label4}}>{unchecked.length>0?`${unchecked.length} items remaining`:'List is clear'}</p>
           </div>
           {checked.length>0&&<button onClick={clearChecked} style={{background:'none',border:'none',color:A.label4,fontSize:14,cursor:'pointer'}}>Clear checked</button>}
         </div>

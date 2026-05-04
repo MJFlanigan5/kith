@@ -112,6 +112,15 @@ CREATE TABLE IF NOT EXISTS photos (
   filename TEXT NOT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS chore_completions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  chore_id INTEGER NOT NULL,
+  member_id INTEGER,
+  member_name TEXT DEFAULT '',
+  points INTEGER DEFAULT 1,
+  completed_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
 `);
 
 // migrations — safe to run on every boot
@@ -119,6 +128,7 @@ try { db.exec('ALTER TABLE events ADD COLUMN member_id INTEGER'); } catch {}
 try { db.exec(`ALTER TABLE events ADD COLUMN end_time TEXT DEFAULT ''`); } catch {}
 try { db.exec(`ALTER TABLE events ADD COLUMN recurring_rule TEXT DEFAULT ''`); } catch {}
 try { db.exec('ALTER TABLE family_members ADD COLUMN pin_hash TEXT'); } catch {}
+try { db.exec('ALTER TABLE chores ADD COLUMN points INTEGER DEFAULT 1'); } catch {}
 // Update old default forwarding address
 const _fwd = db.prepare("SELECT value FROM settings WHERE key='forwarding_address'").get();
 if (_fwd?.value === 'hearth@local.home') {

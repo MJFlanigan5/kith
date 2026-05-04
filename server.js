@@ -355,27 +355,41 @@ app.get('/api/chores', (req, res) => {
   res.json(db.prepare("SELECT * FROM chores ORDER BY CASE status WHEN 'overdue' THEN 0 WHEN 'due' THEN 1 ELSE 2 END, created_at").all());
 });
 
+app.get('/api/chores/leaderboard', (req, res) => {
+  const weekStart = new Date();
+  weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+  weekStart.setHours(0,0,0,0);
+  const rows = db.prepare(`
+    SELECT cc.member_id, cc.member_name, SUM(cc.points) as points, fm.color, fm.initials
+    FROM chore_completions cc
+    LEFT JOIN family_members fm ON fm.id = cc.member_id
+    WHERE date(cc.completed_at) >= date(?)
+    GROUP BY cc.member_id ORDER BY points DESC
+  `).all(weekStart.toISOString().split('T')[0]);
+  res.json(rows);
+});
+
 app.post('/api/chores', requireAdmin, (req, res) => {
-  const { name, recurrence, start } = req.body;
+  const { name, recurrence, start, points } = req.body;
   if (!name?.trim() || !recurrence?.trim()) return res.status(400).json({ error: 'name and recurrence are required' });
   const today = localDate();
   const nextDue = start || today;
   const status = nextDue <= today ? 'due' : 'upcoming';
   const r = db.prepare(
-    'INSERT INTO chores (name,recurrence,next_due,status) VALUES (?,?,?,?)'
-  ).run(name.trim(), recurrence.trim(), nextDue, status);
-  res.json({ id: r.lastInsertRowid, name: name.trim(), recurrence: recurrence.trim(), last_done: '', next_due: nextDue, status, done: 0 });
+    'INSERT INTO chores (name,recurrence,next_due,status,points) VALUES (?,?,?,?,?)'
+  ).run(name.trim(), recurrence.trim(), nextDue, status, Number(points)||1);
+  res.json({ id: r.lastInsertRowid, name: name.trim(), recurrence: recurrence.trim(), last_done: '', next_due: nextDue, status, done: 0, points: Number(points)||1 });
 });
 
 app.put('/api/chores/:id', requireAdmin, (req, res) => {
   const c = db.prepare('SELECT * FROM chores WHERE id=?').get(req.params.id);
   if (!c) return res.status(404).json({ error: 'Not found' });
-  const { name, recurrence, next_due } = req.body;
+  const { name, recurrence, next_due, points } = req.body;
   const today = localDate();
   const nd = next_due || c.next_due;
   const status = nd < today ? 'overdue' : nd === today ? 'due' : 'upcoming';
-  db.prepare('UPDATE chores SET name=?,recurrence=?,next_due=?,status=? WHERE id=?')
-    .run(name || c.name, recurrence || c.recurrence, nd, status, c.id);
+  db.prepare('UPDATE chores SET name=?,recurrence=?,next_due=?,status=?,points=? WHERE id=?')
+    .run(name || c.name, recurrence || c.recurrence, nd, status, points != null ? Number(points) : (c.points||1), c.id);
   res.json(db.prepare('SELECT * FROM chores WHERE id=?').get(c.id));
 });
 
@@ -385,12 +399,18 @@ app.put('/api/chores/:id/done', requireAuth, (req, res) => {
   const done = c.done ? 0 : 1;
   const todayISO = localDate();
   const todayDisplay = new Date().toLocaleDateString('en-US', { month:'short', day:'numeric' });
-  // When marking done: advance next_due. When unmarking: restore to today so it shows as due again.
   const nextDue = done ? computeNextDue(c.recurrence) : todayISO;
   const lastDone = done ? todayDisplay : c.last_done;
   db.prepare('UPDATE chores SET done=?,last_done=?,next_due=? WHERE id=?').run(done, lastDone, nextDue, c.id);
+  if (done && req.user.role === 'member') {
+    const member = db.prepare('SELECT * FROM family_members WHERE id=?').get(Number(req.user.sub));
+    if (member) {
+      db.prepare('INSERT INTO chore_completions (chore_id,member_id,member_name,points) VALUES (?,?,?,?)')
+        .run(c.id, member.id, member.name, c.points || 1);
+    }
+  }
   updateChoreStatuses();
-  res.json({ done, next_due: nextDue });
+  res.json({ done, next_due: nextDue, points_earned: done ? (c.points || 1) : 0 });
 });
 
 app.delete('/api/chores/:id', requireAdmin, (req, res) => {

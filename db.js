@@ -119,6 +119,11 @@ try { db.exec('ALTER TABLE events ADD COLUMN member_id INTEGER'); } catch {}
 try { db.exec(`ALTER TABLE events ADD COLUMN end_time TEXT DEFAULT ''`); } catch {}
 try { db.exec(`ALTER TABLE events ADD COLUMN recurring_rule TEXT DEFAULT ''`); } catch {}
 try { db.exec('ALTER TABLE family_members ADD COLUMN pin_hash TEXT'); } catch {}
+// Update old default forwarding address
+const _fwd = db.prepare("SELECT value FROM settings WHERE key='forwarding_address'").get();
+if (_fwd?.value === 'hearth@local.home') {
+  db.prepare("UPDATE settings SET value='hearth@mjflanigan.com' WHERE key='forwarding_address'").run();
+}
 
 // ── Seed data (only on first run) ────────────────────────────────────────────
 
@@ -190,7 +195,7 @@ const defaults = {
   forwarding_address: 'hearth@mjflanigan.com',
   email_webhook_secret: require('crypto').randomBytes(24).toString('hex'),
   anthropic_api_key: '',
-  weather_lat: '33.8533', weather_lon: '-84.2201',
+  weather_lat: '33.8533', weather_lon: '-84.2201', weather_city: '',
 };
 const insSetting = db.prepare('INSERT OR IGNORE INTO settings (key,value) VALUES (?,?)');
 for (const [k, v] of Object.entries(defaults)) insSetting.run(k, v);

@@ -994,6 +994,7 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
 function InboxScreen({toastAdd,events,setEvents,setInboxCount}){
   const [pending,setPending]=useState([]);
   const [recent,setRecent]=useState([]);
+  const [fwdAddress,setFwdAddress]=useState('hearth@mjflanigan.com');
 
   useEffect(()=>{
     api.get('/api/inbox').then(d=>{
@@ -1001,6 +1002,7 @@ function InboxScreen({toastAdd,events,setEvents,setInboxCount}){
       setRecent(d.recent);
       setInboxCount(d.pending.length);
     });
+    api.get('/api/settings').then(st=>{if(st.forwarding_address) setFwdAddress(st.forwarding_address);}).catch(()=>{});
   },[]);
 
   const accept=async id=>{
@@ -1071,8 +1073,8 @@ function InboxScreen({toastAdd,events,setEvents,setInboxCount}){
       <Card style={{padding:'16px 18px',marginBottom:24}}>
         <div style={{fontSize:14,color:A.label3,marginBottom:10}}>Forward any email with dates to this address:</div>
         <div style={{background:'#1C1C1E',borderRadius:A.rSm,padding:'12px 16px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-          <span style={{fontFamily:'JetBrains Mono,monospace',fontSize:15,color:'#30D158'}}>hearth@local.home</span>
-          <button onClick={()=>{navigator.clipboard.writeText('hearth@local.home');toastAdd('Copied','blue');}} style={{background:'rgba(255,255,255,0.1)',border:'none',color:'rgba(255,255,255,0.7)',borderRadius:6,padding:'5px 12px',fontSize:12,cursor:'pointer'}}>Copy</button>
+          <span style={{fontFamily:'JetBrains Mono,monospace',fontSize:15,color:'#30D158'}}>{fwdAddress}</span>
+          <button onClick={()=>{navigator.clipboard.writeText(fwdAddress);toastAdd('Copied','blue');}} style={{background:'rgba(255,255,255,0.1)',border:'none',color:'rgba(255,255,255,0.7)',borderRadius:6,padding:'5px 12px',fontSize:12,cursor:'pointer'}}>Copy</button>
         </div>
       </Card>
 
@@ -1326,17 +1328,34 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,toastAdd}){
 
 /* ── Settings ────────────────────────────────────────────────────────── */
 function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setPhotos,clockFormat,setClockFormat}){
+  const [weatherCity,setWeatherCity]=useState('');
   const [weatherLat,setWeatherLat]=useState('33.749');
   const [weatherLon,setWeatherLon]=useState('-84.388');
+  const [weatherDisplay,setWeatherDisplay]=useState('');
+  const [geoLoading,setGeoLoading]=useState(false);
+  const [fwdAddress,setFwdAddress]=useState('hearth@mjflanigan.com');
   useEffect(()=>{
     api.get('/api/settings').then(st=>{
       if(st.weather_lat) setWeatherLat(st.weather_lat);
       if(st.weather_lon) setWeatherLon(st.weather_lon);
+      if(st.weather_city){setWeatherCity(st.weather_city);setWeatherDisplay(st.weather_city);}
+      if(st.forwarding_address) setFwdAddress(st.forwarding_address);
     }).catch(()=>{});
   },[]);
-  const saveWeatherLocation=async()=>{
-    await api.put('/api/settings',{weather_lat:weatherLat,weather_lon:weatherLon});
-    toastAdd('Weather location saved');
+  const geocodeCity=async()=>{
+    if(!weatherCity.trim()) return;
+    setGeoLoading(true);
+    try{
+      const r=await api.get(`/api/weather/geocode?city=${encodeURIComponent(weatherCity)}`);
+      if(r.error) throw new Error(r.error);
+      setWeatherLat(String(r.lat));
+      setWeatherLon(String(r.lon));
+      setWeatherDisplay(r.name);
+      await api.put('/api/settings',{weather_lat:String(r.lat),weather_lon:String(r.lon),weather_city:r.name});
+      toastAdd(`Location set to ${r.name}`);
+    }catch(e){
+      toastAdd('City not found','red');
+    }finally{setGeoLoading(false);}
   };
   const [codeModal,setCodeModal]=useState(false);
   const [codeVal,setCodeVal]=useState(`<div style="font-family:sans-serif;padding:16px">
@@ -1475,8 +1494,8 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
         <div style={{padding:'14px 16px'}}>
           <div style={{fontSize:14,color:A.label3,marginBottom:10}}>Forward emails with dates here. They'll appear in your Inbox for review.</div>
           <div style={{background:'#1C1C1E',borderRadius:A.rSm,padding:'11px 14px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-            <span style={{fontFamily:'JetBrains Mono,monospace',fontSize:14,color:'#30D158'}}>hearth@local.home</span>
-            <button onClick={()=>{navigator.clipboard.writeText('hearth@local.home');toastAdd('Copied','blue');}} style={{background:'rgba(255,255,255,0.1)',border:'none',color:'rgba(255,255,255,0.7)',borderRadius:6,padding:'4px 10px',fontSize:12,cursor:'pointer'}}>Copy</button>
+            <span style={{fontFamily:'JetBrains Mono,monospace',fontSize:14,color:'#30D158'}}>{fwdAddress}</span>
+            <button onClick={()=>{navigator.clipboard.writeText(fwdAddress);toastAdd('Copied','blue');}} style={{background:'rgba(255,255,255,0.1)',border:'none',color:'rgba(255,255,255,0.7)',borderRadius:6,padding:'4px 10px',fontSize:12,cursor:'pointer'}}>Copy</button>
           </div>
         </div>
         <details style={{padding:'0 16px 14px'}}>
@@ -1523,12 +1542,12 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
         </div>
       </FormGroup>
 
-      <FormGroup label="Weather Location" footer="Coordinates for your local weather. Find lat/lon at latlong.net.">
-        <div style={{padding:'14px 16px',display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-          <div><label style={{fontSize:12,color:A.label4,display:'block',marginBottom:4}}>Latitude</label><Inp value={weatherLat} onChange={e=>setWeatherLat(e.target.value)} placeholder="33.749"/></div>
-          <div><label style={{fontSize:12,color:A.label4,display:'block',marginBottom:4}}>Longitude</label><Inp value={weatherLon} onChange={e=>setWeatherLon(e.target.value)} placeholder="-84.388"/></div>
+      <FormGroup label="Weather Location">
+        <div style={{padding:'14px 16px',display:'flex',gap:10}}>
+          <Inp value={weatherCity} onChange={e=>setWeatherCity(e.target.value)} onKeyDown={e=>e.key==='Enter'&&geocodeCity()} placeholder="City name, e.g. Atlanta" style={{flex:1}}/>
+          <Btn sm onClick={geocodeCity}>{geoLoading?'…':'Search'}</Btn>
         </div>
-        <div style={{padding:'0 16px 14px'}}><Btn sm onClick={saveWeatherLocation}>Save Location</Btn></div>
+        {weatherDisplay&&<div style={{padding:'0 16px 14px',fontSize:13,color:A.green}}>Current: {weatherDisplay}</div>}
       </FormGroup>
 
       <FormGroup label="Screensaver Photos" footer="Photos cycle every 10 seconds when the display is idle for 2 minutes.">
@@ -1794,20 +1813,10 @@ function LoginOverlay({onLogin,onKiosk}){
 }
 
 function App(){
-  const [auth,setAuth]=useState(()=>localStorage.getItem('hearth_token')||'');
-  const [kiosk,setKiosk]=useState(()=>localStorage.getItem('hearth_kiosk')==='1');
+  const [auth,setAuth]=useState('');
+  const [kiosk,setKiosk]=useState(false);
+  const [authChecked,setAuthChecked]=useState(false);
   const [currentMember,setCurrentMember]=useState(null);
-
-  const handleLogin=(token,member)=>{
-    localStorage.setItem('hearth_token',token);
-    if(member) setCurrentMember(member);
-    setAuth(token);
-  };
-  const handleKiosk=()=>{
-    localStorage.setItem('hearth_kiosk','1');
-    setKiosk(true);
-  };
-
   const [mode,setMode]=useState('manage');
   const [events,setEvents]=useState([]);
   const [chores,setChores]=useState([]);
@@ -1822,9 +1831,29 @@ function App(){
   const [weather,setWeather]=useState(null);
   const [loading,setLoading]=useState(true);
 
-  if(!auth&&!kiosk) return <LoginOverlay onLogin={handleLogin} onKiosk={handleKiosk}/>;
+  const handleLogin=(token,member)=>{
+    localStorage.setItem('hearth_token',token);
+    if(member) setCurrentMember(member);
+    setAuth(token);
+  };
+  const handleKiosk=()=>{
+    localStorage.setItem('hearth_kiosk','1');
+    setKiosk(true);
+  };
 
   useEffect(()=>{
+    const kioskFlag=localStorage.getItem('hearth_kiosk')==='1';
+    if(kioskFlag){setKiosk(true);setAuthChecked(true);return;}
+    const token=localStorage.getItem('hearth_token')||'';
+    if(!token){setAuthChecked(true);return;}
+    fetch('/api/auth/me',{headers:{'Authorization':`Bearer ${token}`}})
+      .then(r=>{if(r.ok) setAuth(token); else localStorage.removeItem('hearth_token');})
+      .catch(()=>{})
+      .finally(()=>setAuthChecked(true));
+  },[]);
+
+  useEffect(()=>{
+    if(!authChecked||(!auth&&!kiosk)) return;
     if('serviceWorker' in navigator){
       navigator.serviceWorker.register('/sw.js').catch(()=>{});
     }
@@ -1853,8 +1882,14 @@ function App(){
       setLoading(false);
     }).catch(()=>setLoading(false));
     api.get('/api/weather').then(w=>{if(!w.error) setWeather(w);}).catch(()=>{});
-  },[]);
+  },[authChecked,auth,kiosk]);
 
+  if(!authChecked) return(
+    <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',background:A.systemBg}}>
+      <div style={{width:36,height:36,border:`3px solid ${A.sep}`,borderTop:`3px solid ${A.blue}`,borderRadius:'50%',animation:'spin 0.8s linear infinite'}}/>
+    </div>
+  );
+  if(!auth&&!kiosk) return <LoginOverlay onLogin={handleLogin} onKiosk={handleKiosk}/>;
   if(loading) return(
     <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',background:A.systemBg,flexDirection:'column',gap:16}}>
       <div style={{width:36,height:36,border:`3px solid ${A.sep}`,borderTop:`3px solid ${A.blue}`,borderRadius:'50%',animation:'spin 0.8s linear infinite'}}/>

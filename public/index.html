@@ -29,7 +29,8 @@ a{cursor:pointer;user-select:none}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
 @keyframes confettiFall{0%{transform:translateY(-10px) rotate(0deg);opacity:1}100%{transform:translateY(105vh) rotate(540deg);opacity:0}}
-.screen{animation:slideUp .2s cubic-bezier(.25,.46,.45,.94) both}
+@keyframes springIn{0%{opacity:0;transform:scale(.94) translateY(6px)}60%{transform:scale(1.02) translateY(-1px)}100%{opacity:1;transform:scale(1) translateY(0)}}
+.screen{animation:springIn .32s cubic-bezier(.34,1.56,.64,1) both}
 .irow{transition:background .12s ease}
 .irow:hover{background:rgba(0,0,0,0.025)!important}
 .irow:active{background:rgba(0,0,0,0.045)!important}
@@ -37,21 +38,41 @@ a{cursor:pointer;user-select:none}
 </head>
 <body>
 <div id="root"></div>
+<svg style="display:none" aria-hidden="true">
+  <defs>
+    <filter id="lg-filter" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="1" result="blurred"/>
+      <feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" stitchTiles="stitch" result="noise"/>
+      <feDisplacementMap in="blurred" in2="noise" scale="30" xChannelSelector="R" yChannelSelector="G" result="displaced"/>
+      <feColorMatrix in="displaced" type="saturate" values="30"/>
+    </filter>
+  </defs>
+</svg>
 <script type="text/babel">
 const {useState,useEffect,useRef,useCallback,useMemo}=React;
 
 /* ── Design tokens ───────────────────────────────────────────────────── */
 const A={
-  systemBg:'radial-gradient(ellipse at 16% 18%, rgba(0,122,255,0.30) 0%, transparent 50%), radial-gradient(ellipse at 84% 76%, rgba(88,86,214,0.24) 0%, transparent 50%), radial-gradient(ellipse at 68% 8%, rgba(255,149,0,0.14) 0%, transparent 40%), radial-gradient(ellipse at 30% 85%, rgba(52,199,89,0.12) 0%, transparent 40%), #B8BECF',
-  cardBg:'rgba(255,255,255,0.70)',inputBg:'rgba(118,118,128,0.11)',
-  label1:'#1C1C1E',label2:'#3C3C43',label3:'#636366',label4:'#8E8E93',label5:'#AEAEB2',
+  systemBg:`
+    radial-gradient(ellipse 80% 60% at 15% 20%, rgba(0,122,255,0.28) 0%, transparent 65%),
+    radial-gradient(ellipse 70% 70% at 85% 75%, rgba(88,86,214,0.22) 0%, transparent 60%),
+    radial-gradient(ellipse 90% 50% at 60% 10%, rgba(255,149,0,0.12) 0%, transparent 55%),
+    radial-gradient(ellipse 60% 80% at 25% 88%, rgba(52,199,89,0.10) 0%, transparent 50%),
+    #c5cad8
+  `.replace(/\s+/g,' ').trim(),
+  cardBg:'rgba(255,255,255,0.18)',
+  inputBg:'rgba(118,118,128,0.11)',
+  label1:'#1C1C1E',label2:'#3C3C43',label3:'#636366',label4:'rgba(60,60,67,0.60)',label5:'rgba(60,60,67,0.30)',
   blue:'#007AFF',green:'#34C759',amber:'#FF9500',red:'#FF3B30',indigo:'#5856D6',teal:'#32ADE6',purple:'#AF52DE',
-  blueFill:'rgba(0,122,255,0.10)',greenFill:'rgba(52,199,89,0.10)',amberFill:'rgba(255,149,0,0.10)',redFill:'rgba(255,59,48,0.10)',
-  sep:'rgba(60,60,67,0.09)',sepOpaque:'#C6C6C8',
-  shadowSm:'0 1px 0 rgba(255,255,255,0.88) inset,0 0 0 1px rgba(255,255,255,0.42),0 2px 8px rgba(0,0,0,.06),0 1px 20px rgba(0,0,0,.09)',
-  shadowMd:'0 1px 0 rgba(255,255,255,0.82) inset,0 0 0 1px rgba(255,255,255,0.42),0 4px 16px rgba(0,0,0,.08),0 6px 28px rgba(0,0,0,.12)',
-  shadowLg:'0 1px 0 rgba(255,255,255,0.72) inset,0 8px 48px rgba(0,0,0,.18),0 2px 8px rgba(0,0,0,.08)',
-  r:'14px',rSm:'10px',rXs:'8px',rPill:'999px',
+  blueFill:'rgba(0,122,255,0.12)',greenFill:'rgba(52,199,89,0.12)',amberFill:'rgba(255,149,0,0.12)',redFill:'rgba(255,59,48,0.12)',
+  sep:'rgba(60,60,67,0.08)',sepOpaque:'#C6C6C8',
+  // Liquid Glass shadows: inset top rim + inset bottom rim + drop
+  shadowSm:'inset 0 1px 0 rgba(255,255,255,0.55),inset 0 -1px 0 rgba(255,255,255,0.08),0 0 0 1px rgba(255,255,255,0.22),0 2px 8px rgba(0,0,0,.06),0 4px 20px rgba(0,0,0,.08)',
+  shadowMd:'inset 0 1px 0 rgba(255,255,255,0.55),inset 0 -1px 0 rgba(255,255,255,0.08),0 0 0 1px rgba(255,255,255,0.22),0 4px 16px rgba(0,0,0,.08),0 8px 32px rgba(0,0,0,.10)',
+  shadowLg:'inset 0 1px 0 rgba(255,255,255,0.50),0 8px 48px rgba(0,0,0,.18),0 2px 8px rgba(0,0,0,.08)',
+  r:'20px',rSm:'14px',rXs:'10px',rPill:'999px',
+  glass:'rgba(255,255,255,0.18)',
+  glassFilter:'blur(20px) saturate(180%) brightness(108%)',
 };
 
 const DAYS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -113,6 +134,12 @@ function useToast(){
   return{toasts,add};
 }
 
+function useIsMobile(){
+  const [w,setW]=useState(window.innerWidth);
+  useEffect(()=>{const h=()=>setW(window.innerWidth);window.addEventListener('resize',h);return()=>window.removeEventListener('resize',h);},[]);
+  return w<768;
+}
+
 /* ── Push notifications ──────────────────────────────────────────────── */
 function urlBase64ToUint8Array(base64String){
   const padding='='.repeat((4-base64String.length%4)%4);
@@ -151,7 +178,7 @@ function Drawer({open,onClose,title,children,width=440}){
   return(
     <>
       {open&&<div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.18)',zIndex:100,backdropFilter:'blur(2px)',animation:'fadeIn .15s'}}/>}
-      <div style={{position:'fixed',top:0,right:0,height:'100%',width,background:A.cardBg,zIndex:101,transform:open?'translateX(0)':`translateX(${width+20}px)`,transition:'transform .3s cubic-bezier(.4,0,.2,1)',display:'flex',flexDirection:'column',boxShadow:open?'-4px 0 60px rgba(0,0,0,0.12)':'none'}}>
+      <div style={{position:'fixed',top:0,right:0,height:'100%',width,background:'rgba(255,255,255,0.22)',backdropFilter:'blur(24px) saturate(180%) brightness(108%)',WebkitBackdropFilter:'blur(24px) saturate(180%) brightness(108%)',zIndex:101,transform:open?'translateX(0)':`translateX(${width+20}px)`,transition:'transform .3s cubic-bezier(.4,0,.2,1)',display:'flex',flexDirection:'column',boxShadow:open?'-4px 0 60px rgba(0,0,0,0.12)':'none'}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'20px 24px 16px',borderBottom:`1px solid ${A.sep}`}}>
           <span style={{fontSize:17,fontWeight:600,letterSpacing:'-.01em'}}>{title}</span>
           <button onClick={onClose} style={{width:28,height:28,borderRadius:'50%',background:A.inputBg,border:'none',cursor:'pointer',fontSize:16,color:A.label3,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
@@ -167,7 +194,7 @@ function Modal({open,onClose,title,children,width=660}){
   return(
     <>
       <div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.2)',zIndex:200,backdropFilter:'blur(8px)',animation:'fadeIn .15s'}}/>
-      <div style={{position:'fixed',top:'50%',left:'50%',transform:'translate(-50%,-50%)',background:A.cardBg,borderRadius:16,zIndex:201,width,maxWidth:'94vw',maxHeight:'88vh',display:'flex',flexDirection:'column',boxShadow:A.shadowLg,animation:'slideUp .2s cubic-bezier(.4,0,.2,1)'}}>
+      <div style={{position:'fixed',top:'50%',left:'50%',transform:'translate(-50%,-50%)',background:'rgba(255,255,255,0.22)',backdropFilter:'blur(24px) saturate(180%) brightness(108%)',WebkitBackdropFilter:'blur(24px) saturate(180%) brightness(108%)',borderRadius:24,border:'1px solid rgba(255,255,255,0.30)',zIndex:201,width,maxWidth:'94vw',maxHeight:'88vh',display:'flex',flexDirection:'column',boxShadow:A.shadowLg,animation:'slideUp .2s cubic-bezier(.4,0,.2,1)'}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'20px 24px 16px',borderBottom:`1px solid ${A.sep}`}}>
           <span style={{fontSize:17,fontWeight:600}}>{title}</span>
           <button onClick={onClose} style={{width:28,height:28,borderRadius:'50%',background:A.inputBg,border:'none',cursor:'pointer',fontSize:16,color:A.label3,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
@@ -252,7 +279,7 @@ function Badge({children,color=A.blue,bg}){
 }
 
 function Card({children,style:s={}}){
-  return <div style={{background:A.cardBg,backdropFilter:'blur(22px) saturate(1.8)',WebkitBackdropFilter:'blur(22px) saturate(1.8)',borderRadius:A.r,boxShadow:A.shadowSm,...s}}>{children}</div>;
+  return <div style={{background:A.glass,backdropFilter:A.glassFilter,WebkitBackdropFilter:A.glassFilter,borderRadius:A.r,boxShadow:A.shadowSm,border:'1px solid rgba(255,255,255,0.28)',...s}}>{children}</div>;
 }
 
 function Confetti({active}){
@@ -291,7 +318,7 @@ function CountdownsScreen({countdowns,setCountdowns,toastAdd}){
   return(
     <div style={{maxWidth:640}}>
       <div style={{marginBottom:24}}>
-        <h1 style={{fontSize:28,fontWeight:800,letterSpacing:'-.03em'}}>Countdowns</h1>
+        <h1 style={{fontSize:28,fontWeight:800,letterSpacing:'-.04em'}}>Countdowns</h1>
         <p style={{color:A.label4,fontSize:15,marginTop:4}}>Track days until special events</p>
       </div>
       <FormGroup label="Add Countdown">
@@ -603,6 +630,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
 
 /* ── Dashboard ───────────────────────────────────────────────────────── */
 function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weather,clockFormat='12h'}){
+  const isMobile=useIsMobile();
   const now=useClock();
   const [qaOpen,setQaOpen]=useState(false);
   const [qaForm,setQaForm]=useState({title:'',date:localDate(),time:'',cal:'hearth'});
@@ -664,7 +692,7 @@ function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weath
 
       {/* Stats bar — 4 columns including weather */}
       <Card style={{marginBottom:16,padding:0,overflow:'hidden'}}>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)'}}>
+        <div style={{display:'grid',gridTemplateColumns:isMobile?'repeat(2,1fr)':'repeat(4,1fr)'}}>
           {[
             {n:todayEvs.length,label:'Events Today',color:A.blue},
             {n:dueChores.length,label:'Chores Due',color:A.amber},
@@ -672,7 +700,7 @@ function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weath
             weather?{n:`${weather.temp}°`,label:weather.condition,color:A.teal}:{n:'—',label:'Weather',color:A.teal},
           ].map((s,i)=>(
             <div key={s.label} style={{padding:'18px 20px',borderRight:i<3?`1px solid ${A.sep}`:'none',borderTop:`2px solid ${s.color}`}}>
-              <div style={{fontSize:30,fontWeight:700,letterSpacing:'-.03em',color:A.label1,lineHeight:1,marginBottom:6,fontVariantNumeric:'tabular-nums'}}>{s.n}</div>
+              <div style={{fontSize:34,fontWeight:800,letterSpacing:'-.04em',color:A.label1,lineHeight:1,marginBottom:6,fontVariantNumeric:'tabular-nums'}}>{s.n}</div>
               <div style={{fontSize:12,fontWeight:500,color:A.label3}}>{s.label}</div>
             </div>
           ))}
@@ -681,9 +709,9 @@ function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weath
 
       {/* 7-day week strip */}
       <Card style={{marginBottom:16,padding:'12px 10px'}}>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2}}>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2,overflowX:isMobile?'auto':undefined}}>
           {weekDays.map(d=>(
-            <div key={d.date} style={{textAlign:'center',padding:'7px 4px',borderRadius:A.rXs,background:d.isToday?A.blueFill:'transparent'}}>
+            <div key={d.date} style={{textAlign:'center',padding:'7px 4px',borderRadius:A.rXs,background:d.isToday?A.blueFill:'transparent',minWidth:isMobile?40:undefined}}>
               <div style={{fontSize:10,fontWeight:700,color:d.isToday?A.blue:A.label4,marginBottom:5,textTransform:'uppercase',letterSpacing:'.05em'}}>{d.label}</div>
               <div style={{fontSize:17,fontWeight:d.isToday?700:400,color:d.isToday?A.blue:A.label1,marginBottom:6,lineHeight:1}}>{d.num}</div>
               <div style={{display:'flex',gap:3,justifyContent:'center',flexWrap:'wrap',minHeight:12}}>
@@ -716,7 +744,7 @@ function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weath
       )}
 
       {/* Today's events + Due today */}
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
+      <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:12,marginBottom:12}}>
         <Card>
           <div style={{padding:'12px 16px',borderBottom:`1px solid ${A.sep}`,fontSize:11,fontWeight:700,color:A.label3,textTransform:'uppercase',letterSpacing:'.07em'}}>Today's Events</div>
           {todayEvs.map((ev,i)=>(
@@ -805,11 +833,12 @@ function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weath
 
 /* ── Calendar ────────────────────────────────────────────────────────── */
 function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockFormat='12h'}){
+  const isMobile=useIsMobile();
   const [drawerOpen,setDrawerOpen]=useState(false);
   const [editEvent,setEditEvent]=useState(null);
   const [form,setForm]=useState({title:'',date:localDate(),time:'',endTime:'',duration:'1h',cal:'hearth',notes:'',memberId:'',recurring:''});
   const [calFilters,setCalFilters]=useState({personal:true,work:true,family:true,hearth:true});
-  const [calView,setCalView]=useState('week');
+  const [calView,setCalView]=useState(()=>window.innerWidth<768?'month':'week');
   const [weekOffset,setWeekOffset]=useState(0);
   const [monthOffset,setMonthOffset]=useState(0);
   const [selectedEvent,setSelectedEvent]=useState(null);
@@ -902,51 +931,55 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
     return(
       <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
         {sharedHeader}
-        {allDayEvs.length>0&&(
-          <div style={{display:'grid',gridTemplateColumns:'52px repeat(7,1fr)',borderBottom:`1px solid ${A.sep}`,background:A.cardBg,flexShrink:0}}>
-            <div style={{padding:'5px 8px',textAlign:'right'}}><span style={{fontSize:10,color:A.label5,letterSpacing:'.02em'}}>All day</span></div>
-            {weekDays.map(d=>(
-              <div key={d.date} style={{padding:'3px 4px',borderLeft:`1px solid ${A.sep}`,background:d.today?'rgba(0,122,255,0.02)':'transparent'}}>
-                {filteredEvents.filter(e=>e.date===d.date&&e.time==='All day').map(ev=>(
-                  <div key={ev.id} onClick={()=>setSelectedEvent(ev)} style={{background:ev.color+'22',borderLeft:`2.5px solid ${ev.color}`,borderRadius:'0 6px 6px 0',padding:'3px 7px',fontSize:11,color:ev.color,fontWeight:600,cursor:'pointer',marginBottom:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{ev.title}</div>
-                ))}
-              </div>
-            ))}
-          </div>
-        )}
-        <div style={{display:'grid',gridTemplateColumns:'52px repeat(7,1fr)',position:'sticky',top:0,background:A.cardBg,borderBottom:`1px solid ${A.sep}`,zIndex:10,flexShrink:0}}>
-          <div/>
-          {weekDays.map(d=>(
-            <div key={d.date} style={{padding:'10px 4px',textAlign:'center',background:d.today?A.blueFill:'transparent'}}>
-              <div style={{fontSize:11,color:d.today?A.blue:A.label4,fontWeight:700,textTransform:'uppercase',letterSpacing:'.05em'}}>{d.label}</div>
-              <div style={{width:32,height:32,borderRadius:'50%',margin:'3px auto 0',display:'flex',alignItems:'center',justifyContent:'center',background:d.today?A.blue:'transparent',fontSize:18,fontWeight:600,color:d.today?'#fff':A.label1}}>{d.num}</div>
-            </div>
-          ))}
-        </div>
-        <div style={{flex:1,overflowY:'auto'}}>
-          {times.map(t=>(
-            <div key={t} style={{display:'grid',gridTemplateColumns:'52px repeat(7,1fr)',borderBottom:`1px solid ${A.sep}`}}>
-              <div style={{padding:'0 8px',paddingTop:6,textAlign:'right'}}><span style={{fontSize:11,color:A.label5,fontVariantNumeric:'tabular-nums'}}>{t}</span></div>
-              {weekDays.map(d=>{
-                const slotH=parseInt(t)+(t.includes('PM')&&!t.startsWith('12')?12:0);
-                const evs=filteredEvents.filter(e=>{
-                  if(e.date!==d.date||e.time==='All day') return false;
-                  const eh=parseInt(e.time),epm=e.time.includes('PM')&&!e.time.startsWith('12');
-                  return(eh+(epm?12:0))===slotH;
-                });
-                return(
-                  <div key={d.date} style={{minHeight:54,padding:'3px 4px',background:d.today?'rgba(0,122,255,0.02)':'transparent',borderLeft:`1px solid ${A.sep}`}}>
-                    {evs.map(ev=>(
-                      <div key={ev.id} onClick={()=>setSelectedEvent(ev)} style={{background:ev.color+'18',borderLeft:`2.5px solid ${ev.color}`,borderRadius:'0 7px 7px 0',padding:'5px 8px',fontSize:12,color:ev.color,fontWeight:600,cursor:'pointer',marginBottom:2}}>
-                        {ev.title}
-                        <div style={{fontSize:10,opacity:.7,fontVariantNumeric:'tabular-nums'}}>{fmtTime(ev.time,clockFormat)}{ev.end_time?` – ${fmtTime(ev.end_time,clockFormat)}`:''}</div>
-                      </div>
+        <div style={{flex:1,overflowX:'auto',display:'flex',flexDirection:'column'}}>
+          <div style={{minWidth:600,display:'flex',flexDirection:'column',flex:1}}>
+            {allDayEvs.length>0&&(
+              <div style={{display:'grid',gridTemplateColumns:'52px repeat(7,1fr)',borderBottom:`1px solid ${A.sep}`,background:A.cardBg,flexShrink:0}}>
+                <div style={{padding:'5px 8px',textAlign:'right'}}><span style={{fontSize:10,color:A.label5,letterSpacing:'.02em'}}>All day</span></div>
+                {weekDays.map(d=>(
+                  <div key={d.date} style={{padding:'3px 4px',borderLeft:`1px solid ${A.sep}`,background:d.today?'rgba(0,122,255,0.02)':'transparent'}}>
+                    {filteredEvents.filter(e=>e.date===d.date&&e.time==='All day').map(ev=>(
+                      <div key={ev.id} onClick={()=>setSelectedEvent(ev)} style={{background:ev.color+'22',borderLeft:`2.5px solid ${ev.color}`,borderRadius:'0 6px 6px 0',padding:'3px 7px',fontSize:11,color:ev.color,fontWeight:600,cursor:'pointer',marginBottom:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{ev.title}</div>
                     ))}
                   </div>
-                );
-              })}
+                ))}
+              </div>
+            )}
+            <div style={{display:'grid',gridTemplateColumns:'52px repeat(7,1fr)',background:A.cardBg,borderBottom:`1px solid ${A.sep}`,zIndex:10,flexShrink:0}}>
+              <div/>
+              {weekDays.map(d=>(
+                <div key={d.date} style={{padding:'10px 4px',textAlign:'center',background:d.today?A.blueFill:'transparent'}}>
+                  <div style={{fontSize:11,color:d.today?A.blue:A.label4,fontWeight:700,textTransform:'uppercase',letterSpacing:'.05em'}}>{d.label}</div>
+                  <div style={{width:32,height:32,borderRadius:'50%',margin:'3px auto 0',display:'flex',alignItems:'center',justifyContent:'center',background:d.today?A.blue:'transparent',fontSize:18,fontWeight:600,color:d.today?'#fff':A.label1}}>{d.num}</div>
+                </div>
+              ))}
             </div>
-          ))}
+            <div style={{flex:1,overflowY:'auto'}}>
+              {times.map(t=>(
+                <div key={t} style={{display:'grid',gridTemplateColumns:'52px repeat(7,1fr)',borderBottom:`1px solid ${A.sep}`}}>
+                  <div style={{padding:'0 8px',paddingTop:6,textAlign:'right'}}><span style={{fontSize:11,color:A.label5,fontVariantNumeric:'tabular-nums'}}>{t}</span></div>
+                  {weekDays.map(d=>{
+                    const slotH=parseInt(t)+(t.includes('PM')&&!t.startsWith('12')?12:0);
+                    const evs=filteredEvents.filter(e=>{
+                      if(e.date!==d.date||e.time==='All day') return false;
+                      const eh=parseInt(e.time),epm=e.time.includes('PM')&&!e.time.startsWith('12');
+                      return(eh+(epm?12:0))===slotH;
+                    });
+                    return(
+                      <div key={d.date} style={{minHeight:54,padding:'3px 4px',background:d.today?'rgba(0,122,255,0.02)':'transparent',borderLeft:`1px solid ${A.sep}`}}>
+                        {evs.map(ev=>(
+                          <div key={ev.id} onClick={()=>setSelectedEvent(ev)} style={{background:ev.color+'18',borderLeft:`2.5px solid ${ev.color}`,borderRadius:'0 7px 7px 0',padding:'5px 8px',fontSize:12,color:ev.color,fontWeight:600,cursor:'pointer',marginBottom:2}}>
+                            {ev.title}
+                            <div style={{fontSize:10,opacity:.7,fontVariantNumeric:'tabular-nums'}}>{fmtTime(ev.time,clockFormat)}{ev.end_time?` – ${fmtTime(ev.end_time,clockFormat)}`:''}</div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -1175,7 +1208,7 @@ function InboxScreen({toastAdd,events,setEvents,setInboxCount}){
     <div style={{maxWidth:720,margin:'0 auto'}}>
       <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:24}}>
         <div>
-          <h1 style={{fontSize:28,fontWeight:800,letterSpacing:'-.03em'}}>Inbox</h1>
+          <h1 style={{fontSize:28,fontWeight:800,letterSpacing:'-.04em'}}>Inbox</h1>
           <p style={{color:A.label4,fontSize:15,marginTop:4}}>Parsed events from forwarded emails</p>
         </div>
         {pending.length>0&&<Badge color={A.blue}>{pending.length} pending</Badge>}
@@ -1251,6 +1284,7 @@ function InboxScreen({toastAdd,events,setEvents,setInboxCount}){
 
 /* ── Chores ──────────────────────────────────────────────────────────── */
 function ChoresScreen({chores,setChores,toastAdd}){
+  const isMobile=useIsMobile();
   const [drawerOpen,setDrawerOpen]=useState(false);
   const [editChore,setEditChore]=useState(null);
   const [form,setForm]=useState({name:'',recur:'Weekly',day:'Monday',start:'',points:1});
@@ -1315,28 +1349,51 @@ function ChoresScreen({chores,setChores,toastAdd}){
         <Btn onClick={openNew}>+ Add Chore</Btn>
       </div>
       <Card>
-        <div style={{display:'grid',gridTemplateColumns:'2fr 56px 1.2fr 1fr 1fr 120px 80px',padding:'10px 16px',borderBottom:`1px solid ${A.sep}`}}>
-          {['Chore','Pts','Recurrence','Last Done','Next Due','Status',''].map((h,i)=>(
-            <div key={i} style={{fontSize:12,fontWeight:700,color:A.label4,textTransform:'uppercase',letterSpacing:'.05em'}}>{h}</div>
-          ))}
-        </div>
-        {chores.map((c,i)=>{
-          const p=statePill(c.status);
-          return(
-            <div key={c.id} className="irow" style={{display:'grid',gridTemplateColumns:'2fr 56px 1.2fr 1fr 1fr 120px 80px',padding:'13px 16px',borderTop:`1px solid ${A.sep}`,borderLeft:`3px solid ${c.status==='due'?A.amber:c.status==='overdue'?A.red:'transparent'}`,background:c.status==='due'?`${A.amber}06`:c.status==='overdue'?`${A.red}06`:'transparent',alignItems:'center'}}>
-              <div style={{fontSize:15,fontWeight:500}}>{c.name}</div>
-              <div style={{fontSize:13,color:A.amber,fontWeight:700}}>{'⭐'.repeat(c.points||1)}</div>
-              <div style={{fontSize:13,color:A.label4}}>{c.recurrence}</div>
-              <div style={{fontSize:13,color:A.label4}}>{c.last_done||'Never'}</div>
-              <div style={{fontSize:13,color:A.label4}}>{c.next_due||'—'}</div>
-              <Badge color={p.color} bg={p.bg}>{p.label}</Badge>
-              <div style={{display:'flex',gap:10}}>
-                <button onClick={()=>openEdit(c)} style={{background:'none',border:'none',color:A.blue,fontSize:13,cursor:'pointer',fontWeight:500}}>Edit</button>
-                <button onClick={()=>deleteChore(c.id)} style={{background:'none',border:'none',color:A.red,fontSize:13,cursor:'pointer',fontWeight:500}}>Delete</button>
-              </div>
+        {isMobile ? (
+          <div>
+            {chores.map(c=>{
+              const p=statePill(c.status);
+              return(
+                <div key={c.id} style={{padding:'14px 16px',borderTop:`1px solid ${A.sep}`,borderLeft:`3px solid ${c.status==='due'?A.amber:c.status==='overdue'?A.red:'transparent'}`,background:c.status==='due'?`${A.amber}06`:c.status==='overdue'?`${A.red}06`:'transparent'}}>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
+                    <span style={{fontSize:15,fontWeight:600}}>{c.name}</span>
+                    <Badge color={p.color} bg={p.bg}>{p.label}</Badge>
+                  </div>
+                  <div style={{fontSize:13,color:A.label4,marginBottom:8}}>{c.recurrence} · Next: {c.next_due||'—'}</div>
+                  <div style={{display:'flex',gap:12}}>
+                    <button onClick={()=>openEdit(c)} style={{background:'none',border:'none',color:A.blue,fontSize:13,cursor:'pointer',fontWeight:500,padding:0}}>Edit</button>
+                    <button onClick={()=>deleteChore(c.id)} style={{background:'none',border:'none',color:A.red,fontSize:13,cursor:'pointer',fontWeight:500,padding:0}}>Delete</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <>
+            <div style={{display:'grid',gridTemplateColumns:'2fr 56px 1.2fr 1fr 1fr 120px 80px',padding:'10px 16px',borderBottom:`1px solid ${A.sep}`}}>
+              {['Chore','Pts','Recurrence','Last Done','Next Due','Status',''].map((h,i)=>(
+                <div key={i} style={{fontSize:12,fontWeight:700,color:A.label4,textTransform:'uppercase',letterSpacing:'.05em'}}>{h}</div>
+              ))}
             </div>
-          );
-        })}
+            {chores.map((c,i)=>{
+              const p=statePill(c.status);
+              return(
+                <div key={c.id} className="irow" style={{display:'grid',gridTemplateColumns:'2fr 56px 1.2fr 1fr 1fr 120px 80px',padding:'13px 16px',borderTop:`1px solid ${A.sep}`,borderLeft:`3px solid ${c.status==='due'?A.amber:c.status==='overdue'?A.red:'transparent'}`,background:c.status==='due'?`${A.amber}06`:c.status==='overdue'?`${A.red}06`:'transparent',alignItems:'center'}}>
+                  <div style={{fontSize:15,fontWeight:500}}>{c.name}</div>
+                  <div style={{fontSize:13,color:A.amber,fontWeight:700}}>{'⭐'.repeat(c.points||1)}</div>
+                  <div style={{fontSize:13,color:A.label4}}>{c.recurrence}</div>
+                  <div style={{fontSize:13,color:A.label4}}>{c.last_done||'Never'}</div>
+                  <div style={{fontSize:13,color:A.label4}}>{c.next_due||'—'}</div>
+                  <Badge color={p.color} bg={p.bg}>{p.label}</Badge>
+                  <div style={{display:'flex',gap:10}}>
+                    <button onClick={()=>openEdit(c)} style={{background:'none',border:'none',color:A.blue,fontSize:13,cursor:'pointer',fontWeight:500}}>Edit</button>
+                    <button onClick={()=>deleteChore(c.id)} style={{background:'none',border:'none',color:A.red,fontSize:13,cursor:'pointer',fontWeight:500}}>Delete</button>
+                  </div>
+                </div>
+              );
+            })}
+          </>
+        )}
       </Card>
       <Drawer open={drawerOpen} onClose={()=>{setDrawerOpen(false);setEditChore(null);}} title={editChore?'Edit Chore':'Add Chore'}>
         <FormGroup label="Details">
@@ -1378,6 +1435,7 @@ function ChoresScreen({chores,setChores,toastAdd}){
 
 /* ── Grocery ─────────────────────────────────────────────────────────── */
 function GroceryScreen({grocery,setGrocery,meals,setMeals,toastAdd}){
+  const isMobile=useIsMobile();
   const [input,setInput]=useState('');
   const [editingDay,setEditingDay]=useState(null);
   const [mealInput,setMealInput]=useState('');
@@ -1409,11 +1467,11 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,toastAdd}){
   const cats=[...new Set(unchecked.map(i=>i.category))];
 
   return(
-    <div style={{display:'grid',gridTemplateColumns:'1fr 340px',gap:20,alignItems:'start'}}>
+    <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 340px',gap:20,alignItems:'start'}}>
       <div>
         <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',marginBottom:20}}>
           <div>
-            <h1 style={{fontSize:28,fontWeight:800,letterSpacing:'-.03em'}}>Grocery</h1>
+            <h1 style={{fontSize:28,fontWeight:800,letterSpacing:'-.04em'}}>Grocery</h1>
             <p style={{color:A.label4,fontSize:15,marginTop:4}}>{unchecked.length} items remaining</p>
           </div>
           {checked.length>0&&<button onClick={clearChecked} style={{background:'none',border:'none',color:A.label4,fontSize:14,cursor:'pointer'}}>Clear checked</button>}
@@ -1764,6 +1822,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
 
 /* ── Manage Shell ────────────────────────────────────────────────────── */
 function ManageMode({onDisplay,events,setEvents,chores,setChores,grocery,setGrocery,meals,setMeals,icsSources,setIcsSources,inboxCount,setInboxCount,countdowns,setCountdowns,members,setMembers,photos,setPhotos,clockFormat,setClockFormat,weather}){
+  const isMobile=useIsMobile();
   const [screen,setScreen]=useState('dashboard');
   const {toasts,add:toastAdd}=useToast();
 
@@ -1789,9 +1848,41 @@ function ManageMode({onDisplay,events,setEvents,chores,setChores,grocery,setGroc
     settings:   <SettingsScreen toastAdd={toastAdd} icsSources={icsSources} setIcsSources={setIcsSources} onDisplay={onDisplay} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat}/>,
   };
 
+  if(isMobile){
+    return(
+      <div style={{display:'flex',flexDirection:'column',height:'100vh',overflow:'hidden',background:A.systemBg}}>
+        {/* Mobile top bar */}
+        <div style={{height:54,background:'rgba(255,255,255,0.52)',backdropFilter:'blur(48px) saturate(2.4)',WebkitBackdropFilter:'blur(48px) saturate(2.4)',borderBottom:'1px solid rgba(255,255,255,0.50)',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 16px',flexShrink:0}}>
+          <span style={{fontSize:17,fontWeight:700,letterSpacing:'-.03em',color:A.label1}}>{nav.find(n=>n.id===screen)?.label}</span>
+          <button onClick={()=>setScreen('settings')} style={{width:30,height:30,borderRadius:'50%',background:A.inputBg,border:'none',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',color:A.label3}}>
+            <svg width="15" height="15" viewBox="0 0 17 17" fill="none"><circle cx="8.5" cy="8.5" r="2.5" stroke="currentColor" strokeWidth="1.5"/><path d="M8.5 1v2M8.5 14v2M1 8.5h2M14 8.5h2M3.05 3.05l1.42 1.42M12.53 12.53l1.42 1.42M12.53 3.05l-1.42 1.42M4.47 12.53l-1.42 1.42" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+        {/* Content */}
+        <div key={screen} className="screen fade-scroll" style={{flex:1,overflowY:'auto',padding:screen==='calendar'?0:'16px',paddingBottom:`calc(90px + env(safe-area-inset-bottom))`}}>
+          {screens[screen]}
+        </div>
+        {/* Bottom tab bar */}
+        <div style={{position:'fixed',bottom:'max(20px, env(safe-area-inset-bottom))',left:'50%',transform:'translateX(-50%)',width:'calc(100% - 32px)',maxWidth:560,background:'rgba(255,255,255,0.22)',backdropFilter:'blur(20px) saturate(180%) brightness(108%)',WebkitBackdropFilter:'blur(20px) saturate(180%) brightness(108%)',border:'1px solid rgba(255,255,255,0.30)',borderRadius:28,boxShadow:'inset 0 1px 0 rgba(255,255,255,0.55),0 4px 24px rgba(0,0,0,0.12)',display:'flex',padding:'0 4px',zIndex:50,height:56,alignItems:'center'}}>
+          {nav.map(item=>{
+            const active=screen===item.id;
+            return(
+              <button key={item.id} onClick={()=>setScreen(item.id)} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'8px 2px',border:'none',background:'none',color:active?A.blue:A.label4,fontSize:9,fontWeight:active?600:400,gap:3,position:'relative',cursor:'pointer'}}>
+                <span style={{opacity:active?1:.7}}>{item.icon}</span>
+                <span>{item.label}</span>
+                {item.badge&&!active&&<span style={{position:'absolute',top:6,right:'50%',transform:'translateX(12px)',background:A.red,color:'#fff',fontSize:9,fontWeight:700,padding:'1px 4px',borderRadius:99,lineHeight:1.4}}>{item.badge}</span>}
+              </button>
+            );
+          })}
+        </div>
+        <ToastStack toasts={toasts}/>
+      </div>
+    );
+  }
+
   return(
     <div style={{display:'flex',height:'100vh',overflow:'hidden',background:A.systemBg}}>
-      <div style={{width:232,flexShrink:0,background:'rgba(255,255,255,0.48)',backdropFilter:'blur(48px) saturate(2.4)',WebkitBackdropFilter:'blur(48px) saturate(2.4)',borderRight:'1px solid rgba(255,255,255,0.52)',display:'flex',flexDirection:'column'}}>
+      <div style={{width:232,flexShrink:0,background:'rgba(255,255,255,0.15)',backdropFilter:'blur(20px) saturate(180%) brightness(108%)',WebkitBackdropFilter:'blur(20px) saturate(180%) brightness(108%)',borderRight:'1px solid rgba(255,255,255,0.25)',display:'flex',flexDirection:'column'}}>
         <div style={{padding:'22px 18px 14px'}}>
           <div style={{fontSize:22,fontWeight:800,letterSpacing:'-.05em',color:A.label1}}>Hearth</div>
           <div style={{fontSize:12,color:A.label5,marginTop:1,letterSpacing:'-.01em'}}>Family Dashboard</div>
@@ -1828,7 +1919,7 @@ function ManageMode({onDisplay,events,setEvents,chores,setChores,grocery,setGroc
       </div>
 
       <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
-        <div style={{height:54,background:'rgba(255,255,255,0.52)',backdropFilter:'blur(48px) saturate(2.4)',WebkitBackdropFilter:'blur(48px) saturate(2.4)',borderBottom:'1px solid rgba(255,255,255,0.50)',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 26px',flexShrink:0}}>
+        <div style={{height:54,background:'rgba(255,255,255,0.15)',backdropFilter:'blur(20px) saturate(180%) brightness(108%)',WebkitBackdropFilter:'blur(20px) saturate(180%) brightness(108%)',borderBottom:'1px solid rgba(255,255,255,0.20)',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 26px',flexShrink:0}}>
           <span style={{fontSize:17,fontWeight:700,letterSpacing:'-.03em',color:A.label1}}>{nav.find(n=>n.id===screen)?.label}</span>
           <div style={{display:'flex',alignItems:'center',gap:14}}>
             <div style={{display:'flex',alignItems:'center',gap:6,fontSize:13,color:A.label4}}>

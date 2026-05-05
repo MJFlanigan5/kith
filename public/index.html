@@ -459,51 +459,61 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
     return meals.find(m=>m.day===dayName)?.meal||'—';
   };
 
+  // Dark dashboard tokens
+  const D={
+    bg:'#0F1013',card:'#1A1B21',border:'rgba(255,255,255,0.07)',
+    t1:'#FFFFFF',t2:'rgba(255,255,255,0.65)',t3:'rgba(255,255,255,0.38)',t4:'rgba(255,255,255,0.20)',
+    sep:'rgba(255,255,255,0.07)',
+  };
   const Widget=({children,style:s={}})=>(
-    <div style={{background:'#fff',borderRadius:16,boxShadow:A.shadowMd,border:'1px solid rgba(0,0,0,0.06)',padding:'14px 16px',overflow:'hidden',...s}}>{children}</div>
+    <div style={{background:D.card,borderRadius:16,border:`1px solid ${D.border}`,padding:'16px 18px',overflow:'hidden',...s}}>{children}</div>
   );
   const WLabel=({children})=>(
-    <div style={{fontSize:12,fontWeight:700,color:A.label4,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:10}}>{children}</div>
+    <div style={{fontSize:10,fontWeight:700,color:D.t3,textTransform:'uppercase',letterSpacing:'.10em',marginBottom:12}}>{children}</div>
   );
 
   return(
-    <div onClick={resetIdle} onMouseMove={resetIdle} style={{width:'100vw',height:'100vh',background:A.systemBg,overflow:'hidden',padding:28,display:'flex',flexDirection:'column',gap:16,position:'relative'}}>
+    <div onClick={resetIdle} onMouseMove={resetIdle} style={{width:'100vw',height:'100vh',background:D.bg,overflow:'hidden',padding:'24px 28px',display:'flex',flexDirection:'column',gap:14,position:'relative'}}>
       {ssActive&&photos&&photos.length>0&&(
         <div onClick={resetIdle} style={{position:'absolute',inset:0,zIndex:50,background:'#000',cursor:'pointer',animation:'fadeIn .8s ease',display:'flex',alignItems:'center',justifyContent:'center'}}>
           <img src={`/photos/${photos[ssIdx%photos.length]?.filename}`} style={{width:'100%',height:'100%',objectFit:'cover',opacity:.95}} alt=""/>
           <div style={{position:'absolute',bottom:24,left:'50%',transform:'translateX(-50%)',display:'flex',gap:6}}>
-            {photos.map((_,i)=><div key={i} style={{width:7,height:7,borderRadius:'50%',background:i===ssIdx%photos.length?'#fff':'rgba(255,255,255,0.35)'}}/>)}
+            {photos.map((_,i)=><div key={i} style={{width:7,height:7,borderRadius:'50%',background:i===ssIdx%photos.length?'#fff':'rgba(255,255,255,0.30)'}}/>)}
           </div>
         </div>
       )}
+
+      {/* Header — clock + date */}
       <div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-between',flexShrink:0}}>
-        <div style={{display:'flex',alignItems:'baseline',gap:10}}>
-          <span style={{fontSize:86,fontWeight:700,color:A.label1,lineHeight:1,letterSpacing:'-0.04em',fontVariantNumeric:'tabular-nums'}}>{h12}:{min}</span>
-          <span style={{fontSize:30,color:A.label4,fontWeight:300,marginBottom:6}}>{ampm}</span>
+        <div style={{display:'flex',alignItems:'baseline',gap:8}}>
+          <span style={{fontSize:108,fontWeight:800,color:D.t1,lineHeight:1,letterSpacing:'-0.04em',fontVariantNumeric:'tabular-nums'}}>{h12}:{min}</span>
+          <span style={{fontSize:28,color:D.t3,fontWeight:400,marginBottom:10}}>{ampm}</span>
         </div>
-        <div style={{textAlign:'right'}}>
-          <div style={{fontSize:22,color:A.label3,fontWeight:400,letterSpacing:'-.01em'}}>{dateStr}</div>
-          <div style={{fontSize:13,color:A.label5,marginTop:4,display:'flex',alignItems:'center',gap:5,justifyContent:'flex-end'}}>
-            <div style={{width:6,height:6,borderRadius:'50%',background:A.green}}/>Synced · 192.168.1.42
+        <div style={{textAlign:'right',paddingBottom:8}}>
+          <div style={{fontSize:20,color:D.t2,fontWeight:400,letterSpacing:'-.01em'}}>{dateStr}</div>
+          <div style={{fontSize:12,color:D.t4,marginTop:5,display:'flex',alignItems:'center',gap:5,justifyContent:'flex-end',fontFamily:'JetBrains Mono,monospace'}}>
+            <div style={{width:5,height:5,borderRadius:'50%',background:A.green}}/>synced
           </div>
         </div>
       </div>
 
-      <div style={{flex:1,display:'grid',gridTemplateColumns:'1fr 1.6fr 1fr',gridTemplateRows:'1fr 1fr',gap:14,minHeight:0}}>
-        {/* Calendar — left, full height */}
+      {/* Widget grid */}
+      <div style={{flex:1,display:'grid',gridTemplateColumns:'1fr 1.6fr 1fr',gridTemplateRows:'1fr 1fr',gap:12,minHeight:0}}>
+
+        {/* Upcoming — left, full height */}
         <Widget style={{gridRow:'1/3',display:'flex',flexDirection:'column',overflow:'hidden'}}>
           <WLabel>Upcoming</WLabel>
-          <div style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:16,WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
+          <div style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:14,WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
             {agendaDays.map(({label,date})=>{
               const evs=events.filter(e=>e.date===date);
               return(
                 <div key={date}>
-                  <div style={{fontSize:12,fontWeight:600,color:A.label4,marginBottom:6,textTransform:'uppercase',letterSpacing:'.05em'}}>{label}</div>
-                  {evs.length===0&&<div style={{fontSize:13,color:A.label5,fontStyle:'normal'}}>Free</div>}
+                  <div style={{fontSize:10,fontWeight:700,color:D.t3,marginBottom:6,textTransform:'uppercase',letterSpacing:'.08em'}}>{label}</div>
+                  {evs.length===0&&<div style={{fontSize:13,color:D.t4}}>Free</div>}
                   {evs.map(ev=>(
-                    <div key={ev.id} style={{background:ev.color+'12',borderRadius:10,padding:'9px 12px',marginBottom:5,borderLeft:`3px solid ${ev.color}`}}>
-                      <div style={{fontSize:14,color:A.label1,fontWeight:600}}>{ev.title}</div>
-                      <div style={{fontSize:12,color:A.label4,fontVariantNumeric:'tabular-nums',marginTop:1}}>{fmtTime(ev.time,clockFormat)}</div>
+                    <div key={ev.id} style={{background:ev.color+'18',borderRadius:8,padding:'8px 11px',marginBottom:4,borderLeft:`3px solid ${ev.color}`}}>
+                      <div style={{fontSize:14,color:D.t1,fontWeight:600}}>{ev.title}</div>
+                      <div style={{fontSize:12,color:D.t3,fontVariantNumeric:'tabular-nums',marginTop:1}}>{fmtTime(ev.time,clockFormat)}</div>
                     </div>
                   ))}
                 </div>
@@ -516,36 +526,40 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
         <Widget style={{display:'flex',flexDirection:'column',overflow:'hidden'}}>
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
             <WLabel>Chores</WLabel>
-            <Badge color={A.amber}>{chores.filter(c=>(c.status==='due'||c.status==='overdue')&&!c.done).length} due</Badge>
+            {chores.filter(c=>(c.status==='due'||c.status==='overdue')&&!c.done).length>0&&(
+              <span style={{fontSize:11,fontWeight:700,color:A.amber}}>{chores.filter(c=>(c.status==='due'||c.status==='overdue')&&!c.done).length} due</span>
+            )}
           </div>
           <div style={{flex:1,overflowY:'auto',WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
+            {chores.length===0&&<div style={{fontSize:13,color:D.t4}}>No chores</div>}
             {chores.map(c=>(
-              <div key={c.id} onClick={()=>toggleChore(c.id)} style={{display:'flex',alignItems:'center',gap:12,padding:'9px 0',borderBottom:`1px solid ${A.sep}`,cursor:'pointer',opacity:c.done?.38:1,transition:'opacity .2s'}}>
-                <div style={{width:24,height:24,borderRadius:'50%',flexShrink:0,background:c.done?A.green:'transparent',border:`2px solid ${c.done?A.green:A.sepOpaque}`,display:'flex',alignItems:'center',justifyContent:'center',transition:'all .2s',animation:c.done?'checkPop .3s ease':undefined}}>
-                  {c.done&&<svg width="12" height="9" viewBox="0 0 12 9" fill="none"><path d="M1 4.5L4.5 8L11 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+              <div key={c.id} onClick={()=>toggleChore(c.id)} style={{display:'flex',alignItems:'center',gap:12,padding:'9px 0',borderBottom:`1px solid ${D.sep}`,cursor:'pointer',opacity:c.done?.3:1,transition:'opacity .2s'}}>
+                <div style={{width:22,height:22,borderRadius:'50%',flexShrink:0,background:c.done?A.green:'transparent',border:`1.5px solid ${c.done?A.green:D.t4}`,display:'flex',alignItems:'center',justifyContent:'center',transition:'all .2s',animation:c.done?'checkPop .3s ease':undefined}}>
+                  {c.done&&<svg width="11" height="8" viewBox="0 0 12 9" fill="none"><path d="M1 4.5L4.5 8L11 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                 </div>
-                <span style={{flex:1,fontSize:15,color:A.label1,textDecoration:c.done?'line-through':undefined,fontWeight:500}}>{c.name}</span>
-                {(c.status==='due'||c.status==='overdue')&&!c.done&&<span style={{fontSize:12,color:c.status==='overdue'?A.red:A.amber,fontWeight:700}}>{c.status==='overdue'?'Overdue':'Today'}</span>}
+                <span style={{flex:1,fontSize:14,color:D.t2,textDecoration:c.done?'line-through':undefined,fontWeight:500}}>{c.name}</span>
+                {(c.status==='due'||c.status==='overdue')&&!c.done&&(
+                  <span style={{fontSize:11,color:c.status==='overdue'?A.red:A.amber,fontWeight:700}}>{c.status==='overdue'?'Overdue':'Today'}</span>
+                )}
               </div>
             ))}
           </div>
         </Widget>
 
-        {/* Meals — bottom center */}
+        {/* Dinner — bottom center */}
         <Widget style={{display:'flex',flexDirection:'column'}}>
           <WLabel>Dinner tonight</WLabel>
           <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center'}}>
-            <div style={{fontSize:26,fontWeight:700,color:A.label1,letterSpacing:'-.02em',lineHeight:1.2,marginBottom:16}}>{todayDinner()||'—'}</div>
-            <div style={{display:'flex',gap:16}}>
+            <div style={{fontSize:28,fontWeight:700,color:D.t1,letterSpacing:'-.02em',lineHeight:1.2,marginBottom:14}}>{todayDinner()||'—'}</div>
+            <div style={{display:'flex',gap:10}}>
               {[1,2].map(offset=>{
                 const d=new Date(); d.setDate(d.getDate()+offset);
                 const dayName=DAYS[d.getDay()];
                 const meal=(meals||[]).find(m=>m.day===dayName)?.meal||'—';
-                const label=offset===1?'Tomorrow':dayName;
                 return(
-                  <div key={offset} style={{flex:1,background:`rgba(0,0,0,0.04)`,borderRadius:A.rXs,padding:'8px 10px'}}>
-                    <div style={{fontSize:10,fontWeight:700,color:A.label4,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:4}}>{label}</div>
-                    <div style={{fontSize:13,color:meal!=='—'?A.label1:A.label5,fontWeight:meal!=='—'?500:400}}>{meal}</div>
+                  <div key={offset} style={{flex:1,background:'rgba(255,255,255,0.05)',borderRadius:8,padding:'8px 10px'}}>
+                    <div style={{fontSize:10,fontWeight:700,color:D.t3,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>{offset===1?'Tomorrow':dayName}</div>
+                    <div style={{fontSize:13,color:meal!=='—'?D.t2:D.t4,fontWeight:500}}>{meal}</div>
                   </div>
                 );
               })}
@@ -559,50 +573,48 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
           {weather?(
             <div style={{display:'flex',flexDirection:'column',flex:1,minHeight:0}}>
               <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center'}}>
-                <div style={{display:'flex',alignItems:'baseline',gap:10,marginBottom:4}}>
-                  <span style={{fontSize:52,fontWeight:700,color:A.label1,lineHeight:1,letterSpacing:'-.04em',fontVariantNumeric:'tabular-nums'}}>{weather.temp}°</span>
-                </div>
-                <div style={{fontSize:15,color:A.label2,fontWeight:500,marginBottom:4}}>{weather.condition}</div>
-                <div style={{fontSize:12,color:A.label4}}>H:{weather.hi}° · L:{weather.lo}°</div>
+                <span style={{fontSize:64,fontWeight:800,color:D.t1,lineHeight:1,letterSpacing:'-.05em',fontVariantNumeric:'tabular-nums'}}>{weather.temp}°</span>
+                <div style={{fontSize:15,color:D.t2,fontWeight:500,marginTop:6,marginBottom:3}}>{weather.condition}</div>
+                <div style={{fontSize:12,color:D.t3}}>H:{weather.hi}° · L:{weather.lo}°</div>
               </div>
-              <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:2,borderTop:`1px solid ${A.sep}`,paddingTop:10,flexShrink:0}}>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:2,borderTop:`1px solid ${D.sep}`,paddingTop:10,flexShrink:0}}>
                 {weather.forecast.map(f=>(
                   <div key={f.day} style={{textAlign:'center'}}>
-                    <div style={{fontSize:10,color:A.label4,fontWeight:600,marginBottom:3}}>{f.day}</div>
-                    <div style={{fontSize:18,marginBottom:2}}>{f.icon}</div>
-                    <div style={{fontSize:12,color:A.label1,fontWeight:600}}>{f.hi}°</div>
-                    <div style={{fontSize:11,color:A.label5}}>{f.lo}°</div>
+                    <div style={{fontSize:10,color:D.t3,fontWeight:600,marginBottom:3}}>{f.day}</div>
+                    <div style={{fontSize:17,marginBottom:3}}>{f.icon}</div>
+                    <div style={{fontSize:12,color:D.t1,fontWeight:700}}>{f.hi}°</div>
+                    <div style={{fontSize:11,color:D.t4}}>{f.lo}°</div>
                   </div>
                 ))}
               </div>
             </div>
           ):(
-            <div style={{fontSize:13,color:A.label5}}>Loading…</div>
+            <div style={{fontSize:13,color:D.t4}}>Loading…</div>
           )}
         </Widget>
 
-        {/* Grocery + HA status — bottom right */}
-        <div style={{display:'flex',flexDirection:'column',gap:14}}>
+        {/* Grocery + Countdowns — bottom right */}
+        <div style={{display:'flex',flexDirection:'column',gap:12}}>
           <Widget style={{flex:1}}>
             <WLabel>Grocery</WLabel>
-            {(grocery||[]).filter(g=>!g.checked).slice(0,5).map(item=>(
-              <div key={item.id} style={{display:'flex',alignItems:'center',gap:9,padding:'5px 0',borderBottom:`1px solid ${A.sep}`}}>
-                <div style={{width:7,height:7,borderRadius:'50%',background:A.green,flexShrink:0}}/>
-                <span style={{fontSize:13,color:A.label1}}>{item.name}</span>
+            {(grocery||[]).filter(g=>!g.checked).length===0&&<div style={{fontSize:13,color:D.t4}}>Nothing on the list</div>}
+            {(grocery||[]).filter(g=>!g.checked).slice(0,5).map((item,i)=>(
+              <div key={item.id} style={{display:'flex',alignItems:'center',gap:9,padding:'6px 0',borderBottom:i>0?`1px solid ${D.sep}`:'none'}}>
+                <div style={{width:6,height:6,borderRadius:'50%',background:'rgba(255,255,255,0.30)',flexShrink:0}}/>
+                <span style={{fontSize:13,color:D.t2}}>{item.name}</span>
               </div>
             ))}
-            {(grocery||[]).filter(g=>!g.checked).length===0&&<div style={{fontSize:13,color:A.label5,fontStyle:'normal'}}>Nothing on the list</div>}
           </Widget>
           <Widget>
             <WLabel>Countdowns</WLabel>
-            {(!countdowns||countdowns.length===0)&&<div style={{fontSize:13,color:A.label5,fontStyle:'normal'}}>No countdowns set</div>}
+            {(!countdowns||countdowns.length===0)&&<div style={{fontSize:13,color:D.t4}}>None set</div>}
             {(countdowns||[]).filter(c=>daysUntil(c.date)>=0).slice(0,3).map((c,i)=>{
               const days=daysUntil(c.date);
               return(
-                <div key={c.id} style={{display:'flex',alignItems:'center',gap:10,padding:'6px 0',borderTop:i>0?`1px solid ${A.sep}`:'none'}}>
-                  <span style={{fontSize:18}}>{c.emoji}</span>
-                  <span style={{flex:1,fontSize:13,color:A.label1,fontWeight:500}}>{c.label}</span>
-                  <span style={{fontSize:16,fontWeight:800,color:A.indigo}}>{days===0?'Today!':days+'d'}</span>
+                <div key={c.id} style={{display:'flex',alignItems:'center',gap:10,padding:'6px 0',borderTop:i>0?`1px solid ${D.sep}`:'none'}}>
+                  <span style={{fontSize:16}}>{c.emoji}</span>
+                  <span style={{flex:1,fontSize:13,color:D.t2,fontWeight:500}}>{c.label}</span>
+                  <span style={{fontSize:15,fontWeight:800,color:D.t1}}>{days===0?'Today':days+'d'}</span>
                 </div>
               );
             })}
@@ -610,16 +622,17 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
         </div>
       </div>
 
+      {/* Footer */}
       <div style={{flexShrink:0,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
         <div style={{display:'flex',gap:20}}>
-          {['Last sync: 2m ago','Uptime: 14d 6h','v0.1.0'].map(s=>(
-            <span key={s} style={{fontSize:11,color:A.label5,fontFamily:'JetBrains Mono,monospace'}}>{s}</span>
+          {['v0.1.0'].map(s=>(
+            <span key={s} style={{fontSize:11,color:D.t4,fontFamily:'JetBrains Mono,monospace'}}>{s}</span>
           ))}
         </div>
-        <button onClick={onManage} style={{background:A.blue,color:'#fff',border:'none',borderRadius:A.rPill,padding:'10px 22px',fontSize:14,fontWeight:600,cursor:'pointer',boxShadow:`0 4px 18px ${A.blue}44`,transition:'opacity .15s,transform .12s',letterSpacing:'-.01em'}}
-          onMouseEnter={e=>{e.currentTarget.style.opacity='.85';e.currentTarget.style.transform='scale(.97)';}}
-          onMouseLeave={e=>{e.currentTarget.style.opacity='1';e.currentTarget.style.transform='scale(1)';}}
-        >Manage →</button>
+        <button onClick={onManage} style={{background:'rgba(255,255,255,0.08)',color:D.t2,border:'1px solid rgba(255,255,255,0.12)',borderRadius:A.rPill,padding:'9px 20px',fontSize:13,fontWeight:500,cursor:'pointer',transition:'background .15s'}}
+          onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.13)'}
+          onMouseLeave={e=>e.currentTarget.style.background='rgba(255,255,255,0.08)'}
+        >Manage</button>
       </div>
     </div>
   );

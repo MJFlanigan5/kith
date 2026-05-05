@@ -234,6 +234,8 @@ app.get('/api/weather', async (req, res) => {
   }
 });
 
+app.get('/api/uptime', (req, res) => res.json({ seconds: Math.floor(process.uptime()) }));
+
 // ── Routes: Auth ──────────────────────────────────────────────────────────────
 
 app.get('/api/auth/setup-status', (req, res) => {

@@ -1953,6 +1953,13 @@ function ManageMode({onDisplay,events,setEvents,chores,setChores,grocery,setGroc
   const [screen,setScreen]=useState('dashboard');
   const {toasts,add:toastAdd}=useToast();
   const [scrolled,setScrolled]=useState(false);
+  const [uptime,setUptime]=useState(null);
+  useEffect(()=>{
+    const fetchUptime=()=>api.get('/api/uptime').then(d=>setUptime(d.seconds)).catch(()=>{});
+    fetchUptime();
+    const id=setInterval(fetchUptime,60000);
+    return()=>clearInterval(id);
+  },[]);
 
   const nav=[
     {id:'dashboard',label:'Dashboard',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="1" y="1" width="6" height="6" rx="2" fill="currentColor" opacity=".9"/><rect x="10" y="1" width="6" height="6" rx="2" fill="currentColor" opacity=".9"/><rect x="1" y="10" width="6" height="6" rx="2" fill="currentColor" opacity=".9"/><rect x="10" y="10" width="6" height="6" rx="2" fill="currentColor" opacity=".9"/></svg>},
@@ -2041,7 +2048,7 @@ function ManageMode({onDisplay,events,setEvents,chores,setChores,grocery,setGroc
             Display Mode
           </button>
           <div style={{fontSize:11,color:A.label5,fontFamily:'JetBrains Mono,monospace',lineHeight:1.8,paddingLeft:2}}>
-            <div>uptime: —</div><div>v0.1.0</div>
+            <div>uptime: {uptime==null?'—':(()=>{const h=Math.floor(uptime/3600),m=Math.floor((uptime%3600)/60);return h>0?`${h}h ${m}m`:`${m}m`;})()}</div><div>v0.1.0</div>
           </div>
         </div>
       </div>
@@ -2050,9 +2057,6 @@ function ManageMode({onDisplay,events,setEvents,chores,setChores,grocery,setGroc
         <div className="hdr" style={{height:54,background:'#fff',borderBottom:'1px solid rgba(0,0,0,0.07)',boxShadow:scrolled?'0 1px 12px rgba(0,0,0,0.06)':'none',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 26px',flexShrink:0}}>
           <span style={{fontSize:17,fontWeight:700,letterSpacing:'-.03em',color:A.label1}}>{nav.find(n=>n.id===screen)?.label}</span>
           <div style={{display:'flex',alignItems:'center',gap:14}}>
-            <div style={{display:'flex',alignItems:'center',gap:6,fontSize:13,color:A.label4}}>
-              <div style={{width:7,height:7,borderRadius:'50%',background:A.green}}/>Google Calendar synced
-            </div>
             <button onClick={()=>setScreen('settings')} style={{width:30,height:30,borderRadius:'50%',background:A.inputBg,border:'none',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',color:A.label3}}>
               <svg width="15" height="15" viewBox="0 0 17 17" fill="none"><circle cx="8.5" cy="8.5" r="2.5" stroke="currentColor" strokeWidth="1.5"/><path d="M8.5 1v2M8.5 14v2M1 8.5h2M14 8.5h2M3.05 3.05l1.42 1.42M12.53 12.53l1.42 1.42M12.53 3.05l-1.42 1.42M4.47 12.53l-1.42 1.42" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
             </button>

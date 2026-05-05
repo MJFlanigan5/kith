@@ -1668,7 +1668,7 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,toastAdd}){
 }
 
 /* ── Settings ────────────────────────────────────────────────────────── */
-function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setPhotos,clockFormat,setClockFormat,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd}){
+function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setPhotos,clockFormat,setClockFormat,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd,setRefreshMs,parseRefreshMs}){
   const [weatherCity,setWeatherCity]=useState('');
   const [weatherLat,setWeatherLat]=useState('33.749');
   const [weatherLon,setWeatherLon]=useState('-84.388');
@@ -1682,6 +1682,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
       if(st.weather_city){setWeatherCity(st.weather_city);setWeatherDisplay(st.weather_city);}
       if(st.forwarding_address) setFwdAddress(st.forwarding_address);
       if(st.temperature_unit) setTemp(st.temperature_unit==='C'?'°C':'°F');
+      if(st.refresh_interval) setRefresh(st.refresh_interval);
     }).catch(()=>{});
   },[]);
   const geocodeCity=async()=>{
@@ -1867,7 +1868,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
       <FormGroup label="Display">
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px'}}>
           <span style={{fontSize:15,color:A.label1}}>Refresh interval</span>
-          <select value={refresh} onChange={e=>setRefresh(e.target.value)} style={{background:A.inputBg,border:'none',borderRadius:A.rXs,padding:'6px 10px',fontSize:14,color:A.label1,cursor:'pointer'}}>
+          <select value={refresh} onChange={e=>{const v=e.target.value;setRefresh(v);saveSetting('refresh_interval',v);if(setRefreshMs)setRefreshMs(parseRefreshMs(v));}} style={{background:A.inputBg,border:'none',borderRadius:A.rXs,padding:'6px 10px',fontSize:14,color:A.label1,cursor:'pointer'}}>
             <option value="30s">30 seconds</option><option value="1min">1 minute</option><option value="5min">5 minutes</option>
           </select>
         </div>
@@ -1953,7 +1954,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
 }
 
 /* ── Manage Shell ────────────────────────────────────────────────────── */
-function ManageMode({onDisplay,events,setEvents,chores,setChores,grocery,setGrocery,meals,setMeals,icsSources,setIcsSources,inboxCount,setInboxCount,countdowns,setCountdowns,members,setMembers,photos,setPhotos,clockFormat,setClockFormat,weather,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd}){
+function ManageMode({onDisplay,events,setEvents,chores,setChores,grocery,setGrocery,meals,setMeals,icsSources,setIcsSources,inboxCount,setInboxCount,countdowns,setCountdowns,members,setMembers,photos,setPhotos,clockFormat,setClockFormat,weather,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd,setRefreshMs,parseRefreshMs}){
   const isMobile=useIsMobile();
   const [screen,setScreen]=useState('dashboard');
   const {toasts,add:toastAdd}=useToast();
@@ -1978,7 +1979,7 @@ function ManageMode({onDisplay,events,setEvents,chores,setChores,grocery,setGroc
     countdowns: <CountdownsScreen countdowns={countdowns} setCountdowns={setCountdowns} toastAdd={toastAdd}/>,
     family:     <FamilyScreen members={members} setMembers={setMembers} toastAdd={toastAdd}/>,
     inbox:      <InboxScreen toastAdd={toastAdd} events={events} setEvents={setEvents} setInboxCount={setInboxCount}/>,
-    settings:   <SettingsScreen toastAdd={toastAdd} icsSources={icsSources} setIcsSources={setIcsSources} onDisplay={onDisplay} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd}/>,
+    settings:   <SettingsScreen toastAdd={toastAdd} icsSources={icsSources} setIcsSources={setIcsSources} onDisplay={onDisplay} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs}/>,
   };
 
   if(isMobile){
@@ -2217,8 +2218,10 @@ function App(){
   const [clockFormat,setClockFormat]=useState('12h');
   const [nightModeStart,setNightModeStart]=useState('23:00');
   const [nightModeEnd,setNightModeEnd]=useState('06:00');
+  const [refreshMs,setRefreshMs]=useState(60000);
   const [weather,setWeather]=useState(null);
   const [loading,setLoading]=useState(true);
+  const parseRefreshMs=v=>({'30s':30000,'1min':60000,'5min':300000}[v]||60000);
 
   const handleLogin=(token,member)=>{
     localStorage.setItem('hearth_token',token);
@@ -2270,10 +2273,31 @@ function App(){
       if(st.clock_format) setClockFormat(st.clock_format);
       if(st.night_mode_start) setNightModeStart(st.night_mode_start);
       if(st.night_mode_end) setNightModeEnd(st.night_mode_end);
+      if(st.refresh_interval) setRefreshMs(parseRefreshMs(st.refresh_interval));
       setLoading(false);
     }).catch(()=>setLoading(false));
     api.get('/api/weather').then(w=>{if(!w.error) setWeather(w);}).catch(()=>{});
   },[authChecked,auth,kiosk]);
+
+  // Background poll — keeps wall display live
+  useEffect(()=>{
+    if(loading||(!auth&&!kiosk)) return;
+    const poll=()=>{
+      Promise.all([
+        api.get('/api/events'),
+        api.get('/api/chores'),
+        api.get('/api/grocery'),
+        api.get('/api/countdowns'),
+        api.get('/api/inbox'),
+      ]).then(([ev,ch,gr,cd,inb])=>{
+        setEvents(ev); setChores(ch); setGrocery(gr); setCountdowns(cd);
+        setInboxCount(inb.pending.length);
+      }).catch(()=>{});
+      api.get('/api/weather').then(w=>{if(!w.error) setWeather(w);}).catch(()=>{});
+    };
+    const id=setInterval(poll,refreshMs);
+    return()=>clearInterval(id);
+  },[loading,auth,kiosk,refreshMs]);
 
   if(!authChecked) return(
     <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',background:A.systemBg}}>
@@ -2290,7 +2314,7 @@ function App(){
 
   return mode==='display'
     ?<DisplayMode onManage={()=>setMode('manage')} events={events} chores={chores} setChores={setChores} meals={meals} grocery={grocery} countdowns={countdowns} photos={photos} clockFormat={clockFormat} weather={weather} nightModeStart={nightModeStart} nightModeEnd={nightModeEnd}/>
-    :<ManageMode onDisplay={()=>setMode('display')} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources} inboxCount={inboxCount} setInboxCount={setInboxCount} countdowns={countdowns} setCountdowns={setCountdowns} members={members} setMembers={setMembers} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} weather={weather} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd}/>;
+    :<ManageMode onDisplay={()=>setMode('display')} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources} inboxCount={inboxCount} setInboxCount={setInboxCount} countdowns={countdowns} setCountdowns={setCountdowns} members={members} setMembers={setMembers} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} weather={weather} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs}/>;
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);

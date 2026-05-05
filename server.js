@@ -539,9 +539,10 @@ app.post('/api/push/test', requireAuth, async (req, res) => {
 });
 
 // ── Routes: Settings ──────────────────────────────────────────────────────────
+const SETTINGS_SENSITIVE = new Set(['email_webhook_secret','anthropic_api_key','jwt_secret','vapid_public','vapid_private','admin_pin_hash','smtp_pass']);
 app.get('/api/settings', (req, res) => {
   const rows = db.prepare('SELECT key,value FROM settings').all();
-  res.json(Object.fromEntries(rows.map(r => [r.key, r.value])));
+  res.json(Object.fromEntries(rows.filter(r=>!SETTINGS_SENSITIVE.has(r.key)).map(r=>[r.key,r.value])));
 });
 
 app.put('/api/settings', requireAdmin, (req, res) => {

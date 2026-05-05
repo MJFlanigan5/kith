@@ -609,8 +609,8 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
             <div style={{flex:1,overflowY:'auto',WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
               {chores.length===0&&<div style={{fontSize:13,color:D.t4}}>No chores</div>}
               {chores.map(c=>(
-                <div key={c.id} onClick={()=>toggleChore(c.id)} style={{display:'flex',alignItems:'center',gap:12,padding:'9px 0',borderBottom:`1px solid ${D.sep}`,cursor:'pointer',opacity:c.done?.3:1,transition:'opacity .2s'}}>
-                  <div style={{width:22,height:22,borderRadius:'50%',flexShrink:0,background:c.done?A.green:'transparent',border:`1.5px solid ${c.done?A.green:D.t4}`,display:'flex',alignItems:'center',justifyContent:'center',transition:'all .2s',animation:c.done?'checkPop .3s ease':undefined}}>
+                <div key={c.id} onClick={()=>toggleChore(c.id)} style={{display:'flex',alignItems:'center',gap:12,padding:'9px 0',borderBottom:`1px solid ${D.sep}`,cursor:'pointer',opacity:c.done?.25:1,transition:'opacity .4s'}}>
+                  <div style={{width:22,height:22,borderRadius:'50%',flexShrink:0,background:c.done?A.green:'transparent',border:`1.5px solid ${c.done?A.green:D.t4}`,display:'flex',alignItems:'center',justifyContent:'center',transition:'all .3s'}}>
                     {c.done&&<svg width="11" height="8" viewBox="0 0 12 9" fill="none"><path d="M1 4.5L4.5 8L11 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                   </div>
                   <span style={{flex:1,fontSize:14,color:D.t2,textDecoration:c.done?'line-through':undefined,fontWeight:500}}>{c.name}</span>

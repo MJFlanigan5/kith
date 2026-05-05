@@ -962,7 +962,7 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
   const miniFirstDay=new Date(refDate.getFullYear(),refDate.getMonth(),1).getDay();
   const miniDIM=new Date(refDate.getFullYear(),refDate.getMonth()+1,0).getDate();
   const miniCal=[...Array(miniFirstDay).fill(null),...Array.from({length:miniDIM},(_,i)=>i+1)];
-  const filteredEvents=events.filter(e=>calFilters[e.calendar]!==false);
+  const filteredEvents=events.filter(e=>{const cal=calMap[e.calendar]!==undefined?e.calendar:'hearth';return calFilters[cal]!==false;});
 
   const navBtnStyle={background:A.inputBg,border:'none',borderRadius:A.rXs,color:A.label2,padding:'5px 11px',fontSize:16,cursor:'pointer'};
   const goBack=()=>calView==='month'?setMonthOffset(p=>p-1):setWeekOffset(p=>p-1);

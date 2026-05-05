@@ -115,6 +115,21 @@ function parseICS(text) {
   }).filter(e => e.date);
 }
 
+// ── Time normalizer — canonical "H:MM AM/PM" for push matching ────────────────
+function normalizeTime(t) {
+  if (!t || t === 'All day') return 'All day';
+  const s = t.trim();
+  const canonical = s.match(/^(\d{1,2}):(\d{2})\s+(AM|PM)$/i);
+  if (canonical) return `${parseInt(canonical[1])}:${canonical[2]} ${canonical[3].toUpperCase()}`;
+  const h24 = s.match(/^(\d{1,2}):(\d{2})$/);
+  if (h24) { let h=parseInt(h24[1]),m=h24[2],ap=h>=12?'PM':'AM'; if(h>12)h-=12; if(h===0)h=12; return `${h}:${m} ${ap}`; }
+  const nospace = s.match(/^(\d{1,2}):(\d{2})(am|pm)$/i);
+  if (nospace) return `${parseInt(nospace[1])}:${nospace[2]} ${nospace[3].toUpperCase()}`;
+  const compact = s.match(/^(\d{1,2})(am|pm)$/i);
+  if (compact) return `${parseInt(compact[1])}:00 ${compact[2].toUpperCase()}`;
+  return s;
+}
+
 // ── ICS sync helper ───────────────────────────────────────────────────────────
 async function syncICSSource(source) {
   const text = await fetch(source.url).then(r => {
@@ -317,7 +332,7 @@ app.post('/api/events', requireAuth, (req, res) => {
   const col = color || calColors[calendar] || '#34C759';
   const r = db.prepare(
     'INSERT INTO events (title,date,time,end_time,duration,calendar,color,notes,member_id,recurring_rule) VALUES (?,?,?,?,?,?,?,?,?,?)'
-  ).run(title.trim(), date, time||'All day', end_time||'', duration||'1h', calendar||'hearth', col, notes||'', member_id||null, recurring_rule||'');
+  ).run(title.trim(), date, normalizeTime(time)||'All day', end_time||'', duration||'1h', calendar||'hearth', col, notes||'', member_id||null, recurring_rule||'');
   const seriesId = r.lastInsertRowid;
 
   // Generate recurring occurrences
@@ -357,7 +372,7 @@ app.put('/api/events/:id', requireAuth, (req, res) => {
     .run(
       title?.trim() || existing.title,
       date || existing.date,
-      time !== undefined ? (time || 'All day') : existing.time,
+      time !== undefined ? (normalizeTime(time) || 'All day') : existing.time,
       end_time !== undefined ? end_time : existing.end_time,
       duration || existing.duration,
       calendar || existing.calendar,
@@ -371,7 +386,19 @@ app.put('/api/events/:id', requireAuth, (req, res) => {
 });
 
 app.delete('/api/events/:id', requireAuth, (req, res) => {
-  db.prepare('DELETE FROM events WHERE id=?').run(req.params.id);
+  const ev = db.prepare('SELECT * FROM events WHERE id=?').get(Number(req.params.id));
+  if (!ev) return res.status(404).json({ ok: true });
+  const scope = req.query.scope || 'one';
+  if (scope === 'one' || !ev.recurring_rule) {
+    db.prepare('DELETE FROM events WHERE id=?').run(ev.id);
+  } else {
+    const seriesId = ev.external_id || ev.id;
+    if (scope === 'all') {
+      db.prepare('DELETE FROM events WHERE id=? OR external_id=?').run(seriesId, seriesId);
+    } else if (scope === 'future') {
+      db.prepare('DELETE FROM events WHERE (id=? OR external_id=?) AND date>=?').run(seriesId, seriesId, ev.date);
+    }
+  }
   res.json({ ok: true });
 });
 

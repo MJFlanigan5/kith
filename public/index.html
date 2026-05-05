@@ -948,6 +948,7 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
   const [weekOffset,setWeekOffset]=useState(0);
   const [monthOffset,setMonthOffset]=useState(0);
   const [selectedEvent,setSelectedEvent]=useState(null);
+  const [deleteConfirm,setDeleteConfirm]=useState(false);
 
   const calMap={hearth:A.green};
   icsSources.forEach(s=>{calMap[`ics:${s.name}`]=s.color;});
@@ -1011,11 +1012,18 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
       toastAdd('Failed to save event','red');
     }
   };
-  const deleteEvent=async id=>{
-    await api.del(`/api/events/${id}`);
-    setEvents(p=>p.filter(e=>e.id!==id));
+  const deleteEvent=async(id,scope='one')=>{
+    await api.del(`/api/events/${id}?scope=${scope}`);
+    if(scope==='one') setEvents(p=>p.filter(e=>e.id!==id));
+    else if(scope==='all'){ const ev=events.find(e=>e.id===id); const sid=ev?.external_id||id; setEvents(p=>p.filter(e=>e.id!==sid&&e.external_id!==sid)); }
+    else if(scope==='future'){ const ev=events.find(e=>e.id===id); const sid=ev?.external_id||id; setEvents(p=>p.filter(e=>!(( e.id===sid||e.external_id===sid)&&e.date>=ev.date))); }
     setSelectedEvent(null);
+    setDeleteConfirm(false);
     toastAdd('Event deleted','blue');
+  };
+  const confirmDelete=ev=>{
+    if(!ev.recurring_rule){deleteEvent(ev.id);return;}
+    setDeleteConfirm(true);
   };
 
   const sharedHeader=(
@@ -1191,7 +1199,7 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
         </div>
         {/* Event detail */}
         {selectedEvent&&(
-          <Modal open={!!selectedEvent} onClose={()=>setSelectedEvent(null)} title="" width={460}>
+          <Modal open={!!selectedEvent} onClose={()=>{setSelectedEvent(null);setDeleteConfirm(false);}} title="" width={460}>
             <div style={{marginBottom:16}}>
               <div style={{height:4,borderRadius:'2px 2px 0 0',background:selectedEvent.color,margin:'-20px -24px 20px'}}/>
               <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
@@ -1205,9 +1213,23 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
               </div>
               {selectedEvent.notes&&<div style={{fontSize:14,color:A.label2,background:A.systemBg,borderRadius:A.rXs,padding:'10px 12px'}}>{selectedEvent.notes}</div>}
             </div>
-            <div style={{display:'flex',gap:8,paddingTop:16,borderTop:`1px solid ${A.sep}`}}>
-              <Btn sm onClick={()=>openEdit(selectedEvent)} full>Edit</Btn>
-              <Btn sm variant="red" onClick={()=>deleteEvent(selectedEvent.id)} full>Delete</Btn>
+            <div style={{paddingTop:16,borderTop:`1px solid ${A.sep}`}}>
+              {deleteConfirm?(
+                <div>
+                  <div style={{fontSize:13,color:A.label3,marginBottom:10,fontWeight:500}}>Delete recurring event:</div>
+                  <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                    <Btn sm variant="red" onClick={()=>deleteEvent(selectedEvent.id,'one')} full>Just this event</Btn>
+                    <Btn sm variant="red" onClick={()=>deleteEvent(selectedEvent.id,'future')} full>This and all future events</Btn>
+                    <Btn sm variant="red" onClick={()=>deleteEvent(selectedEvent.id,'all')} full>All events in series</Btn>
+                    <Btn sm variant="ghost" onClick={()=>setDeleteConfirm(false)} full>Cancel</Btn>
+                  </div>
+                </div>
+              ):(
+                <div style={{display:'flex',gap:8}}>
+                  <Btn sm onClick={()=>openEdit(selectedEvent)} full>Edit</Btn>
+                  <Btn sm variant="red" onClick={()=>confirmDelete(selectedEvent)} full>Delete</Btn>
+                </div>
+              )}
             </div>
           </Modal>
         )}
@@ -1311,7 +1333,7 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
 
       {/* Event detail modal */}
       {selectedEvent&&(
-        <Modal open={!!selectedEvent} onClose={()=>setSelectedEvent(null)} title="" width={460}>
+        <Modal open={!!selectedEvent} onClose={()=>{setSelectedEvent(null);setDeleteConfirm(false);}} title="" width={460}>
           <div style={{marginBottom:16}}>
             <div style={{height:4,borderRadius:'2px 2px 0 0',background:selectedEvent.color,margin:'-20px -24px 20px'}}/>
             <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
@@ -1326,9 +1348,23 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
             {selectedEvent.recurring_rule&&<div style={{fontSize:13,color:A.purple,marginBottom:8,fontWeight:500}}>↻ {selectedEvent.recurring_rule}</div>}
             {selectedEvent.notes&&<div style={{fontSize:14,color:A.label2,background:A.systemBg,borderRadius:A.rXs,padding:'10px 12px',marginBottom:4}}>{selectedEvent.notes}</div>}
           </div>
-          <div style={{display:'flex',gap:8,paddingTop:16,borderTop:`1px solid ${A.sep}`}}>
-            <Btn sm onClick={()=>openEdit(selectedEvent)} full>Edit</Btn>
-            <Btn sm variant="red" onClick={()=>deleteEvent(selectedEvent.id)} full>Delete</Btn>
+          <div style={{paddingTop:16,borderTop:`1px solid ${A.sep}`}}>
+            {deleteConfirm?(
+              <div>
+                <div style={{fontSize:13,color:A.label3,marginBottom:10,fontWeight:500}}>Delete recurring event:</div>
+                <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                  <Btn sm variant="red" onClick={()=>deleteEvent(selectedEvent.id,'one')} full>Just this event</Btn>
+                  <Btn sm variant="red" onClick={()=>deleteEvent(selectedEvent.id,'future')} full>This and all future events</Btn>
+                  <Btn sm variant="red" onClick={()=>deleteEvent(selectedEvent.id,'all')} full>All events in series</Btn>
+                  <Btn sm variant="ghost" onClick={()=>setDeleteConfirm(false)} full>Cancel</Btn>
+                </div>
+              </div>
+            ):(
+              <div style={{display:'flex',gap:8}}>
+                <Btn sm onClick={()=>openEdit(selectedEvent)} full>Edit</Btn>
+                <Btn sm variant="red" onClick={()=>confirmDelete(selectedEvent)} full>Delete</Btn>
+              </div>
+            )}
           </div>
         </Modal>
       )}

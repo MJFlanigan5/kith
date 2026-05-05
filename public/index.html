@@ -107,7 +107,7 @@ function fmtTime(t, fmt='12h'){
 }
 
 /* ── Calendar color mapping ──────────────────────────────────────────── */
-const CAL_COLORS={personal:A.blue,work:A.indigo,family:A.teal,hearth:A.green};
+const CAL_COLORS={hearth:A.green};
 function calColor(cal,events){
   if(CAL_COLORS[cal]) return CAL_COLORS[cal];
   // Find color from first event with this calendar
@@ -754,8 +754,7 @@ function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weath
   const submitQuickAdd=async()=>{
     if(!qaForm.title.trim()||qaLoading) return;
     setQaLoading(true);
-    const calColors={personal:A.blue,work:A.indigo,family:A.teal,hearth:A.green};
-    await api.post('/api/events',{title:qaForm.title,date:qaForm.date,time:qaForm.time||'All day',calendar:qaForm.cal,color:calColors[qaForm.cal]||A.green,duration:'1h',notes:'',source:'manual'});
+    await api.post('/api/events',{title:qaForm.title,date:qaForm.date,time:qaForm.time||'All day',calendar:qaForm.cal,color:A.green,duration:'1h',notes:'',source:'manual'});
     const updated=await api.get('/api/events');
     setEvents(updated);
     setQaOpen(false);
@@ -916,9 +915,6 @@ function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weath
           </div>
           <Sel value={qaForm.cal} onChange={e=>setQaForm(p=>({...p,cal:e.target.value}))}>
             <option value="hearth">Hearth</option>
-            <option value="personal">Personal</option>
-            <option value="work">Work</option>
-            <option value="family">Family</option>
           </Sel>
           <Btn onClick={submitQuickAdd} full>{qaLoading?'Adding…':'Add Event'}</Btn>
         </div>
@@ -939,20 +935,16 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
   const [monthOffset,setMonthOffset]=useState(0);
   const [selectedEvent,setSelectedEvent]=useState(null);
 
-  const knownCals={personal:A.blue,work:A.indigo,family:A.teal,hearth:A.green};
   const calMap={hearth:A.green};
-  const activeCals=useMemo(()=>{
-    const s=new Set(['hearth']);
-    events.forEach(e=>{if(e.calendar) s.add(e.calendar);});
-    icsSources.forEach(src=>s.add(`ics:${src.name}`));
-    return s;
-  },[events,icsSources]);
-  activeCals.forEach(k=>{if(knownCals[k]) calMap[k]=knownCals[k];});
   icsSources.forEach(s=>{calMap[`ics:${s.name}`]=s.color;});
   useEffect(()=>{
-    setCalFilters(prev=>{const next={...prev};activeCals.forEach(k=>{if(!(k in next))next[k]=true;});return next;});
-  },[events,icsSources]);
-  const calLabels={personal:'Personal',work:'Work',family:'Family',hearth:'Hearth'};
+    setCalFilters(prev=>{
+      const next={hearth:prev.hearth??true};
+      icsSources.forEach(s=>{const k=`ics:${s.name}`;next[k]=prev[k]??true;});
+      return next;
+    });
+  },[icsSources]);
+  const calLabels={hearth:'Hearth'};
   icsSources.forEach(s=>{calLabels[`ics:${s.name}`]=s.name;});
 
   const weekStart=useMemo(()=>{
@@ -1249,9 +1241,6 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
           <div style={{padding:'12px 16px'}}>
             <Sel value={form.cal} onChange={e=>setForm(p=>({...p,cal:e.target.value}))}>
               <option value="hearth">Hearth</option>
-              <option value="personal">Personal</option>
-              <option value="work">Work</option>
-              <option value="family">Family</option>
               {icsSources.map(s=><option key={s.id} value={`ics:${s.name}`}>{s.name}</option>)}
             </Sel>
           </div>

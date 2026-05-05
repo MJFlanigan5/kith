@@ -1022,7 +1022,7 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
   const times=['7 AM','8 AM','9 AM','10 AM','11 AM','12 PM','1 PM','2 PM','3 PM','4 PM','5 PM','6 PM','7 PM','8 PM'];
 
   const WeekView=()=>{
-    const allDayEvs=weekDays.flatMap(d=>filteredEvents.filter(e=>e.date===d.date&&e.time==='All day'));
+    const allDayEvs=weekDays.flatMap(d=>filteredEvents.filter(e=>e.date===d.date&&(!e.time||e.time==='All day')));
     return(
       <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
         {sharedHeader}
@@ -1033,7 +1033,7 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
                 <div style={{padding:'5px 8px',textAlign:'right'}}><span style={{fontSize:10,color:A.label5,letterSpacing:'.02em'}}>All day</span></div>
                 {weekDays.map(d=>(
                   <div key={d.date} style={{padding:'3px 4px',borderLeft:`1px solid ${A.sep}`,background:d.today?'rgba(0,122,255,0.02)':'transparent'}}>
-                    {filteredEvents.filter(e=>e.date===d.date&&e.time==='All day').map(ev=>(
+                    {filteredEvents.filter(e=>e.date===d.date&&(!e.time||e.time==='All day')).map(ev=>(
                       <div key={ev.id} onClick={()=>setSelectedEvent(ev)} style={{background:ev.color+'22',borderLeft:`2.5px solid ${ev.color}`,borderRadius:'0 6px 6px 0',padding:'3px 7px',fontSize:11,color:ev.color,fontWeight:600,cursor:'pointer',marginBottom:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{ev.title}</div>
                     ))}
                   </div>
@@ -1056,7 +1056,7 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
                   {weekDays.map(d=>{
                     const slotH=parseInt(t)+(t.includes('PM')&&!t.startsWith('12')?12:0);
                     const evs=filteredEvents.filter(e=>{
-                      if(e.date!==d.date||e.time==='All day') return false;
+                      if(e.date!==d.date||!e.time||e.time==='All day') return false;
                       const eh=parseInt(e.time),epm=e.time.includes('PM')&&!e.time.startsWith('12');
                       return(eh+(epm?12:0))===slotH;
                     });

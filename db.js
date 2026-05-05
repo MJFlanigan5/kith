@@ -130,6 +130,7 @@ try { db.exec(`ALTER TABLE events ADD COLUMN recurring_rule TEXT DEFAULT ''`); }
 try { db.exec('ALTER TABLE family_members ADD COLUMN pin_hash TEXT'); } catch {}
 try { db.exec('ALTER TABLE chores ADD COLUMN points INTEGER DEFAULT 1'); } catch {}
 db.prepare("UPDATE events SET calendar='hearth' WHERE calendar IN ('personal','work','family')").run();
+db.prepare("UPDATE events SET time='All day' WHERE time IS NULL OR time=''").run();
 // Update old default forwarding address
 const _fwd = db.prepare("SELECT value FROM settings WHERE key='forwarding_address'").get();
 if (_fwd?.value === 'hearth@local.home') {

@@ -754,12 +754,15 @@ function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weath
   const submitQuickAdd=async()=>{
     if(!qaForm.title.trim()||qaLoading) return;
     setQaLoading(true);
-    await api.post('/api/events',{title:qaForm.title,date:qaForm.date,time:qaForm.time||'All day',calendar:qaForm.cal,color:A.green,duration:'1h',notes:'',source:'manual'});
-    const updated=await api.get('/api/events');
-    setEvents(updated);
-    setQaOpen(false);
-    setQaForm({title:'',date:localDate(),time:'',cal:'hearth'});
-    setQaLoading(false);
+    try {
+      await api.post('/api/events',{title:qaForm.title,date:qaForm.date,time:qaForm.time||'All day',calendar:qaForm.cal,color:A.green,duration:'1h',notes:'',source:'manual'});
+      const updated=await api.get('/api/events');
+      setEvents(updated);
+      setQaOpen(false);
+      setQaForm({title:'',date:localDate(),time:'',cal:'hearth'});
+    } finally {
+      setQaLoading(false);
+    }
   };
 
   const getMeal=dayName=>((meals||[]).find(m=>m.day===dayName)?.meal||'');
@@ -784,7 +787,7 @@ function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weath
           <h1 style={{fontSize:isMobile?34:44,fontWeight:800,letterSpacing:'-.05em',color:A.label1,lineHeight:1.05}}>{greeting}</h1>
           <p style={{color:A.label4,fontSize:15,marginTop:6,fontWeight:400}}>{DAYS[now.getDay()]}, {MONTHS[now.getMonth()]} {now.getDate()} · {now.toLocaleTimeString('en-US',clockOpts)}</p>
         </div>
-        <Btn onClick={()=>{setQaForm(p=>({...p,date:localDate()}));setQaOpen(true);}} style={{flexShrink:0,marginTop:10}}>+ Add Event</Btn>
+        <Btn onClick={()=>{setQaForm({title:'',date:localDate(),time:'',cal:'hearth'});setQaOpen(true);}} style={{flexShrink:0,marginTop:10}}>+ Add Event</Btn>
       </div>
 
       {/* Stats — individual cards with big colored numbers */}
@@ -990,16 +993,20 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
     const member=form.memberId?members?.find(m=>m.id===Number(form.memberId)):null;
     const color=member?.color||calMap[form.cal]||A.green;
     const payload={title:form.title,date:form.date,time:form.time||'All day',end_time:form.endTime,duration:form.duration,calendar:form.cal,color,notes:form.notes,member_id:form.memberId||null,recurring_rule:form.recurring};
-    if(editEvent){
-      const updated=await api.put(`/api/events/${editEvent.id}`,payload);
-      setEvents(p=>p.map(e=>e.id===editEvent.id?updated:e));
-      toastAdd('Event updated');
-    } else {
-      await api.post('/api/events',payload);
-      api.get('/api/events').then(setEvents);
-      toastAdd('Event saved');
+    try {
+      if(editEvent){
+        const updated=await api.put(`/api/events/${editEvent.id}`,payload);
+        setEvents(p=>p.map(e=>e.id===editEvent.id?updated:e));
+        toastAdd('Event updated');
+      } else {
+        await api.post('/api/events',payload);
+        api.get('/api/events').then(setEvents);
+        toastAdd('Event saved');
+      }
+      setDrawerOpen(false);
+    } catch(err) {
+      toastAdd('Failed to save event','red');
     }
-    setDrawerOpen(false);
   };
   const deleteEvent=async id=>{
     await api.del(`/api/events/${id}`);
@@ -1065,8 +1072,10 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
                     const slotH=parseInt(t)+(t.includes('PM')&&!t.startsWith('12')?12:0);
                     const evs=filteredEvents.filter(e=>{
                       if(e.date!==d.date||!e.time||e.time==='All day') return false;
-                      const eh=parseInt(e.time),epm=e.time.includes('PM')&&!e.time.startsWith('12');
-                      return(eh+(epm?12:0))===slotH;
+                      const eh=parseInt(e.time);
+                      const eam=e.time.toUpperCase().includes('AM');
+                      const epm=e.time.toUpperCase().includes('PM')&&!e.time.startsWith('12');
+                      return((eam&&eh===12?0:eh)+(epm?12:0))===slotH;
                     });
                     return(
                       <div key={d.date} style={{minHeight:54,padding:'3px 4px',background:d.today?'rgba(0,122,255,0.02)':'transparent',borderLeft:`1px solid ${A.sep}`}}>
@@ -1117,7 +1126,8 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
   );
 
   const AgendaView=()=>{
-    const upcoming=filteredEvents.filter(e=>e.date>=localDate()).sort((a,b)=>a.date.localeCompare(b.date)||a.time.localeCompare(b.time));
+    const timeSort=t=>(!t||t==='All day')?'00:00':t.replace(/(\d+):(\d+)\s*(AM|PM)/i,(_,h,m,ap)=>{let hr=parseInt(h);if(ap.toUpperCase()==='PM'&&hr!==12)hr+=12;if(ap.toUpperCase()==='AM'&&hr===12)hr=0;return String(hr).padStart(2,'0')+':'+m;});
+    const upcoming=filteredEvents.filter(e=>e.date>=localDate()).sort((a,b)=>a.date.localeCompare(b.date)||timeSort(a.time).localeCompare(timeSort(b.time)));
     const byDate={};
     upcoming.forEach(e=>{if(!byDate[e.date])byDate[e.date]=[];byDate[e.date].push(e);});
     return(
@@ -1154,6 +1164,7 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
   };
 
   if(isMobile){
+    if(calView==='week') setCalView('agenda');
     return(
       <div style={{display:'flex',flexDirection:'column',height:'100%'}}>
         {/* Mobile header */}
@@ -1206,6 +1217,19 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
               <Inp value={form.endTime} onChange={e=>setForm(p=>({...p,endTime:e.target.value}))} placeholder="End" style={{flex:1}}/>
             </div>
           </FormGroup>
+          <FormGroup label="Repeat">
+            <div style={{padding:'12px 16px'}}>
+              <Sel value={form.recurring} onChange={e=>setForm(p=>({...p,recurring:e.target.value}))}>
+                <option value="">Does not repeat</option>
+                <option value="Daily">Daily</option>
+                <option value="Weekdays">Every weekday (Mon–Fri)</option>
+                <option value="Weekly">Weekly</option>
+                <option value="Bi-weekly">Every 2 weeks</option>
+                <option value="Monthly">Monthly</option>
+                <option value="Annually">Annually</option>
+              </Sel>
+            </div>
+          </FormGroup>
           <FormGroup label="Calendar">
             <div style={{padding:'12px 16px'}}>
               <Sel value={form.cal} onChange={e=>setForm(p=>({...p,cal:e.target.value}))}>
@@ -1249,8 +1273,9 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
               <div key={i} style={{fontSize:11,color:A.label4,fontWeight:600,padding:'3px 0'}}>{d}</div>
             ))}
             {miniCal.map((d,i)=>{
-              const isToday=d===new Date().getDate();
-              const hasEv=d&&events.some(e=>e.date===`${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`);
+              const cellDate=d?`${refDate.getFullYear()}-${String(refDate.getMonth()+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`:null;
+              const isToday=cellDate===localDate();
+              const hasEv=cellDate&&events.some(e=>e.date===cellDate);
               return(
                 <div key={i} style={{position:'relative',padding:'4px 0'}}>
                   <div style={{width:28,height:28,borderRadius:'50%',margin:'0 auto',display:'flex',alignItems:'center',justifyContent:'center',background:isToday?A.blue:'transparent',fontSize:13,color:isToday?'#fff':d?A.label1:'transparent',fontWeight:isToday?600:400}}>{d||''}</div>
@@ -1699,7 +1724,7 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,toastAdd}){
                 return(
                   <div key={item.id} className="tap"
                     onTouchStart={e=>{_tx=e.touches[0].clientX;}}
-                    onTouchEnd={e=>{if(e.changedTouches[0].clientX-_tx>60) toggle(item.id);}}
+                    onTouchEnd={e=>{if(e.changedTouches[0].clientX-_tx>60){e.preventDefault();toggle(item.id);}}}
                     onClick={()=>toggle(item.id)}
                     style={{display:'flex',alignItems:'center',gap:14,padding:'13px 16px',borderTop:idx>0?`1px solid ${A.sep}`:'none',cursor:'pointer'}}
                     onMouseEnter={e=>e.currentTarget.style.background=A.systemBg}

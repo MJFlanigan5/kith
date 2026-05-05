@@ -15,7 +15,7 @@ const PHOTOS_DIR = path.join(process.env.DATA_DIR || path.join(__dirname, 'data'
 fs.mkdirSync(PHOTOS_DIR, { recursive: true });
 app.use('/photos', express.static(PHOTOS_DIR));
 
-app.use(express.json());
+app.use(express.json({ limit: '20mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ── Auth helpers ──────────────────────────────────────────────────────────────
@@ -303,8 +303,9 @@ app.post('/api/events', requireAuth, (req, res) => {
   if (rule && rule !== 'Does not repeat') {
     const ins2 = db.prepare('INSERT INTO events (title,date,time,end_time,duration,calendar,color,notes,member_id,recurring_rule,source,external_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
     const cur = new Date(date + 'T12:00:00');
-    // Annual events get 5 years; all others get 365 days
-    const limit = new Date(cur.getTime() + (rule === 'Annually' ? 5 * 365 : 365) * 86400000);
+    const limit = rule === 'Annually'
+      ? new Date(new Date(date + 'T12:00:00').setFullYear(new Date(date + 'T12:00:00').getFullYear() + 5))
+      : new Date(cur.getTime() + 365 * 86400000);
     while (true) {
       if (rule === 'Daily')          cur.setDate(cur.getDate() + 1);
       else if (rule === 'Weekly')    cur.setDate(cur.getDate() + 7);
@@ -469,7 +470,9 @@ app.get('/api/inbox', (req, res) => {
 app.post('/api/inbox/:id/accept', requireAuth, (req, res) => {
   const item = db.prepare('SELECT * FROM inbox WHERE id=?').get(req.params.id);
   if (!item) return res.status(404).json({ error: 'Not found' });
-  const date = req.body?.date || item.event_date;
+  const rawDate = req.body?.date || item.event_date;
+  const date = rawDate && /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : null;
+  if (!date) return res.status(400).json({ error: 'Valid date (YYYY-MM-DD) required' });
   const time = item.event_time || 'All day';
   db.prepare('INSERT INTO events (title,date,time,calendar,color,source) VALUES (?,?,?,?,?,?)')
     .run(item.event_name, date, time, 'hearth', '#34C759', 'email');
@@ -549,7 +552,9 @@ app.get('/api/settings', (req, res) => {
 
 app.put('/api/settings', requireAdmin, (req, res) => {
   const upd = db.prepare('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)');
-  for (const [k, v] of Object.entries(req.body)) upd.run(k, String(v));
+  for (const [k, v] of Object.entries(req.body)) {
+    if (!SETTINGS_SENSITIVE.has(k)) upd.run(k, String(v));
+  }
   if ('weather_lat' in req.body || 'weather_lon' in req.body || 'temperature_unit' in req.body) _weatherCache = null;
   if ('news_feed' in req.body) { _newsCache = null; _newsCacheAt = 0; }
   if ('sports_leagues' in req.body) { for (const k of Object.keys(_sportsCache)) delete _sportsCache[k]; }

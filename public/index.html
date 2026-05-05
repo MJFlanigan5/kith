@@ -1765,6 +1765,7 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,toastAdd}){
 
 /* ── Settings ────────────────────────────────────────────────────────── */
 function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setPhotos,clockFormat,setClockFormat,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd,setRefreshMs,parseRefreshMs}){
+  const isMobile=useIsMobile();
   const [weatherCity,setWeatherCity]=useState('');
   const [weatherLat,setWeatherLat]=useState('33.749');
   const [weatherLon,setWeatherLon]=useState('-84.388');
@@ -1961,7 +1962,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
           </div>
         </div>
         <div style={{padding:'12px 16px',borderTop:`1px solid ${A.sep}`}}>
-          <Btn onClick={onDisplay}>Open Display Mode ↗</Btn>
+          {!isMobile&&<Btn onClick={onDisplay}>Open Display Mode ↗</Btn>}
         </div>
       </FormGroup>
 
@@ -2074,7 +2075,6 @@ function ManageMode({onDisplay,events,setEvents,chores,setChores,grocery,setGroc
                   {item.icon}
                 </div>
                 {active&&<span style={{fontSize:10,fontWeight:700,color:A.label1,letterSpacing:'-.01em',lineHeight:1}}>{item.label}</span>}
-                {item.badge&&!active&&<span style={{position:'absolute',top:2,right:'50%',transform:'translateX(14px)',background:A.red,color:'#fff',fontSize:9,fontWeight:700,padding:'1px 4px',borderRadius:99,lineHeight:1.4}}>{item.badge}</span>}
               </button>
             );
           })}

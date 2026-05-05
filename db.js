@@ -152,6 +152,8 @@ const defaults = {
   weather_lat: '33.8533', weather_lon: '-84.2201', weather_city: '',
   sports_leagues: 'nba,nfl,mlb,nhl',
   news_feed: 'https://feeds.npr.org/1001/rss.xml',
+  night_mode_start: '23:00',
+  night_mode_end: '06:00',
 };
 const insSetting = db.prepare('INSERT OR IGNORE INTO settings (key,value) VALUES (?,?)');
 for (const [k, v] of Object.entries(defaults)) insSetting.run(k, v);

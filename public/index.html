@@ -419,7 +419,7 @@ function FamilyScreen({members,setMembers,toastAdd}){
 }
 
 /* ── Display Mode ────────────────────────────────────────────────────── */
-function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,photos,weather,clockFormat='12h'}){
+function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,photos,weather,clockFormat='12h',nightModeStart='23:00',nightModeEnd='06:00'}){
   const isMobile=useIsMobile();
   const now=useClock();
   const h12=now.getHours()%12||12;
@@ -442,6 +442,22 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
     const id=setInterval(()=>setSsIdx(p=>(p+1)%photos.length),10000);
     return()=>clearInterval(id);
   },[ssActive,photos]);
+
+  // Night mode
+  const [nightDismissed,setNightDismissed]=useState(false);
+  const nightDismissTimer=useRef(null);
+  const parseMins=t=>{const[h,m]=(t||'00:00').split(':').map(Number);return h*60+m;};
+  const nowMins=now.getHours()*60+now.getMinutes();
+  const nmStart=parseMins(nightModeStart);
+  const nmEnd=parseMins(nightModeEnd);
+  const isNightTime=nmStart>nmEnd?nowMins>=nmStart||nowMins<nmEnd:nowMins>=nmStart&&nowMins<nmEnd;
+  const isNightMode=isNightTime&&!nightDismissed;
+  const dismissNight=()=>{
+    setNightDismissed(true);
+    clearTimeout(nightDismissTimer.current);
+    nightDismissTimer.current=setTimeout(()=>setNightDismissed(false),5*60*1000);
+  };
+  useEffect(()=>()=>clearTimeout(nightDismissTimer.current),[]);
 
   const todayStr=localDate();
   const agendaDays=[0,1,2,3].map(offset=>{
@@ -471,6 +487,18 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
   );
   const WLabel=({children})=>(
     <div style={{fontSize:10,fontWeight:700,color:D.t3,textTransform:'uppercase',letterSpacing:'.10em',marginBottom:12}}>{children}</div>
+  );
+
+  if(isNightMode) return(
+    <div onClick={dismissNight} style={{width:'100vw',height:'100vh',background:D.bg,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',cursor:'pointer',userSelect:'none',position:'relative'}}>
+      <div style={{display:'flex',alignItems:'baseline',gap:10}}>
+        <span style={{fontSize:isMobile?80:148,fontWeight:800,color:'rgba(255,255,255,0.82)',lineHeight:1,letterSpacing:'-0.04em',fontVariantNumeric:'tabular-nums'}}>{h12}:{min}</span>
+        <span style={{fontSize:isMobile?24:38,color:'rgba(255,255,255,0.32)',fontWeight:400}}>{ampm}</span>
+      </div>
+      <div style={{fontSize:isMobile?15:20,color:'rgba(255,255,255,0.32)',fontWeight:400,letterSpacing:'-.01em',marginTop:10}}>{dateStr}</div>
+      {weather&&<div style={{fontSize:isMobile?13:16,color:'rgba(255,255,255,0.22)',marginTop:10}}>{weather.temp}° · {weather.condition}</div>}
+      <div style={{position:'absolute',bottom:28,fontSize:11,color:'rgba(255,255,255,0.14)',fontFamily:'JetBrains Mono,monospace',letterSpacing:'.10em',textTransform:'uppercase'}}>tap to wake</div>
+    </div>
   );
 
   return(
@@ -1640,7 +1668,7 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,toastAdd}){
 }
 
 /* ── Settings ────────────────────────────────────────────────────────── */
-function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setPhotos,clockFormat,setClockFormat}){
+function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setPhotos,clockFormat,setClockFormat,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd}){
   const [weatherCity,setWeatherCity]=useState('');
   const [weatherLat,setWeatherLat]=useState('33.749');
   const [weatherLon,setWeatherLon]=useState('-84.388');
@@ -1851,6 +1879,17 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
           <span style={{fontSize:15,color:A.label1}}>Temperature</span>
           <SegControl value={temp} onChange={v=>{setTemp(v);saveSetting('temperature_unit',v==='°C'?'C':'F');}} options={['°F','°C']}/>
         </div>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px',borderTop:`1px solid ${A.sep}`}}>
+          <div>
+            <div style={{fontSize:15,color:A.label1}}>Night mode</div>
+            <div style={{fontSize:12,color:A.label4,marginTop:2}}>Minimal clock display</div>
+          </div>
+          <div style={{display:'flex',alignItems:'center',gap:8}}>
+            <input type="time" value={nightModeStart} onChange={e=>{setNightModeStart(e.target.value);saveSetting('night_mode_start',e.target.value);}} style={{background:A.inputBg,border:`1px solid ${A.sep}`,borderRadius:A.rXs,padding:'6px 10px',fontSize:14,color:A.label1,cursor:'pointer'}}/>
+            <span style={{fontSize:12,color:A.label4}}>to</span>
+            <input type="time" value={nightModeEnd} onChange={e=>{setNightModeEnd(e.target.value);saveSetting('night_mode_end',e.target.value);}} style={{background:A.inputBg,border:`1px solid ${A.sep}`,borderRadius:A.rXs,padding:'6px 10px',fontSize:14,color:A.label1,cursor:'pointer'}}/>
+          </div>
+        </div>
         <div style={{padding:'12px 16px',borderTop:`1px solid ${A.sep}`}}>
           <Btn onClick={onDisplay}>Open Display Mode ↗</Btn>
         </div>
@@ -1914,7 +1953,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
 }
 
 /* ── Manage Shell ────────────────────────────────────────────────────── */
-function ManageMode({onDisplay,events,setEvents,chores,setChores,grocery,setGrocery,meals,setMeals,icsSources,setIcsSources,inboxCount,setInboxCount,countdowns,setCountdowns,members,setMembers,photos,setPhotos,clockFormat,setClockFormat,weather}){
+function ManageMode({onDisplay,events,setEvents,chores,setChores,grocery,setGrocery,meals,setMeals,icsSources,setIcsSources,inboxCount,setInboxCount,countdowns,setCountdowns,members,setMembers,photos,setPhotos,clockFormat,setClockFormat,weather,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd}){
   const isMobile=useIsMobile();
   const [screen,setScreen]=useState('dashboard');
   const {toasts,add:toastAdd}=useToast();
@@ -1939,7 +1978,7 @@ function ManageMode({onDisplay,events,setEvents,chores,setChores,grocery,setGroc
     countdowns: <CountdownsScreen countdowns={countdowns} setCountdowns={setCountdowns} toastAdd={toastAdd}/>,
     family:     <FamilyScreen members={members} setMembers={setMembers} toastAdd={toastAdd}/>,
     inbox:      <InboxScreen toastAdd={toastAdd} events={events} setEvents={setEvents} setInboxCount={setInboxCount}/>,
-    settings:   <SettingsScreen toastAdd={toastAdd} icsSources={icsSources} setIcsSources={setIcsSources} onDisplay={onDisplay} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat}/>,
+    settings:   <SettingsScreen toastAdd={toastAdd} icsSources={icsSources} setIcsSources={setIcsSources} onDisplay={onDisplay} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd}/>,
   };
 
   if(isMobile){
@@ -2176,6 +2215,8 @@ function App(){
   const [members,setMembers]=useState([]);
   const [photos,setPhotos]=useState([]);
   const [clockFormat,setClockFormat]=useState('12h');
+  const [nightModeStart,setNightModeStart]=useState('23:00');
+  const [nightModeEnd,setNightModeEnd]=useState('06:00');
   const [weather,setWeather]=useState(null);
   const [loading,setLoading]=useState(true);
 
@@ -2227,6 +2268,8 @@ function App(){
       setMembers(mb);
       setPhotos(ph);
       if(st.clock_format) setClockFormat(st.clock_format);
+      if(st.night_mode_start) setNightModeStart(st.night_mode_start);
+      if(st.night_mode_end) setNightModeEnd(st.night_mode_end);
       setLoading(false);
     }).catch(()=>setLoading(false));
     api.get('/api/weather').then(w=>{if(!w.error) setWeather(w);}).catch(()=>{});
@@ -2246,8 +2289,8 @@ function App(){
   );
 
   return mode==='display'
-    ?<DisplayMode onManage={()=>setMode('manage')} events={events} chores={chores} setChores={setChores} meals={meals} grocery={grocery} countdowns={countdowns} photos={photos} clockFormat={clockFormat} weather={weather}/>
-    :<ManageMode onDisplay={()=>setMode('display')} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources} inboxCount={inboxCount} setInboxCount={setInboxCount} countdowns={countdowns} setCountdowns={setCountdowns} members={members} setMembers={setMembers} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} weather={weather}/>;
+    ?<DisplayMode onManage={()=>setMode('manage')} events={events} chores={chores} setChores={setChores} meals={meals} grocery={grocery} countdowns={countdowns} photos={photos} clockFormat={clockFormat} weather={weather} nightModeStart={nightModeStart} nightModeEnd={nightModeEnd}/>
+    :<ManageMode onDisplay={()=>setMode('display')} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources} inboxCount={inboxCount} setInboxCount={setInboxCount} countdowns={countdowns} setCountdowns={setCountdowns} members={members} setMembers={setMembers} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} weather={weather} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd}/>;
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);

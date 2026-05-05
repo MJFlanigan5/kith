@@ -427,21 +427,13 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
   const ampm=now.getHours()>=12?'PM':'AM';
   const dateStr=`${DAYS[now.getDay()]}, ${MONTHS[now.getMonth()]} ${now.getDate()}`;
 
-  // Photo screensaver — idle after 2 min
-  const [ssActive,setSsActive]=useState(false);
-  const [ssIdx,setSsIdx]=useState(0);
-  const idleRef=useRef(null);
-  const resetIdle=useCallback(()=>{
-    setSsActive(false);
-    clearTimeout(idleRef.current);
-    if(photos&&photos.length>0) idleRef.current=setTimeout(()=>setSsActive(true),120000);
-  },[photos]);
-  useEffect(()=>{resetIdle();return()=>clearTimeout(idleRef.current);},[photos.length]);
+  // Photo frame — cycles every 12s when photos are present
+  const [photoIdx,setPhotoIdx]=useState(0);
   useEffect(()=>{
-    if(!ssActive||!photos||photos.length===0) return;
-    const id=setInterval(()=>setSsIdx(p=>(p+1)%photos.length),10000);
+    if(!photos||photos.length<=1) return;
+    const id=setInterval(()=>setPhotoIdx(p=>(p+1)%photos.length),12000);
     return()=>clearInterval(id);
-  },[ssActive,photos]);
+  },[photos]);
 
   // Night mode
   const [nightDismissed,setNightDismissed]=useState(false);
@@ -502,15 +494,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
   );
 
   return(
-    <div onClick={resetIdle} onMouseMove={resetIdle} style={{width:'100vw',height:'100vh',background:D.bg,overflow:'hidden',padding:isMobile?'16px 16px':' 24px 28px',display:'flex',flexDirection:'column',gap:isMobile?10:14,position:'relative'}}>
-      {ssActive&&photos&&photos.length>0&&(
-        <div onClick={resetIdle} style={{position:'absolute',inset:0,zIndex:50,background:'#000',cursor:'pointer',animation:'fadeIn .8s ease',display:'flex',alignItems:'center',justifyContent:'center'}}>
-          <img src={`/photos/${photos[ssIdx%photos.length]?.filename}`} style={{width:'100%',height:'100%',objectFit:'cover',opacity:.95}} alt=""/>
-          <div style={{position:'absolute',bottom:24,left:'50%',transform:'translateX(-50%)',display:'flex',gap:6}}>
-            {photos.map((_,i)=><div key={i} style={{width:7,height:7,borderRadius:'50%',background:i===ssIdx%photos.length?'#fff':'rgba(255,255,255,0.30)'}}/>)}
-          </div>
-        </div>
-      )}
+    <div style={{width:'100vw',height:'100vh',background:D.bg,overflow:'hidden',padding:isMobile?'16px 16px':'24px 28px',display:'flex',flexDirection:'column',gap:isMobile?10:14,position:'relative'}}>
 
       {/* Header — clock + date */}
       <div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-between',flexShrink:0}}>
@@ -685,18 +669,34 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
             )}
           </Widget>
 
-          {/* Grocery + Countdowns — bottom right */}
+          {/* Grocery + Countdowns + Photos — bottom right */}
           <div style={{display:'flex',flexDirection:'column',gap:12}}>
-            <Widget style={{flex:1}}>
-              <WLabel>Grocery</WLabel>
-              {(grocery||[]).filter(g=>!g.checked).length===0&&<div style={{fontSize:13,color:D.t4}}>Nothing on the list</div>}
-              {(grocery||[]).filter(g=>!g.checked).slice(0,5).map((item,i)=>(
-                <div key={item.id} style={{display:'flex',alignItems:'center',gap:9,padding:'6px 0',borderBottom:i>0?`1px solid ${D.sep}`:'none'}}>
-                  <div style={{width:6,height:6,borderRadius:'50%',background:'rgba(255,255,255,0.30)',flexShrink:0}}/>
-                  <span style={{fontSize:13,color:D.t2}}>{item.name}</span>
-                </div>
-              ))}
-            </Widget>
+            {photos&&photos.length>0?(
+              <Widget style={{flex:1,padding:0,overflow:'hidden',position:'relative',minHeight:0}}>
+                <img
+                  key={photoIdx}
+                  src={`/photos/${photos[photoIdx%photos.length]?.filename}`}
+                  style={{width:'100%',height:'100%',objectFit:'cover',display:'block',animation:'fadeIn .6s ease'}}
+                  alt=""
+                />
+                {photos.length>1&&(
+                  <div style={{position:'absolute',bottom:8,left:'50%',transform:'translateX(-50%)',display:'flex',gap:5}}>
+                    {photos.map((_,i)=><div key={i} style={{width:5,height:5,borderRadius:'50%',background:i===photoIdx%photos.length?'#fff':'rgba(255,255,255,0.35)'}}/>)}
+                  </div>
+                )}
+              </Widget>
+            ):(
+              <Widget style={{flex:1}}>
+                <WLabel>Grocery</WLabel>
+                {(grocery||[]).filter(g=>!g.checked).length===0&&<div style={{fontSize:13,color:D.t4}}>Nothing on the list</div>}
+                {(grocery||[]).filter(g=>!g.checked).slice(0,5).map((item,i)=>(
+                  <div key={item.id} style={{display:'flex',alignItems:'center',gap:9,padding:'6px 0',borderBottom:i>0?`1px solid ${D.sep}`:'none'}}>
+                    <div style={{width:6,height:6,borderRadius:'50%',background:'rgba(255,255,255,0.30)',flexShrink:0}}/>
+                    <span style={{fontSize:13,color:D.t2}}>{item.name}</span>
+                  </div>
+                ))}
+              </Widget>
+            )}
             <Widget>
               <WLabel>Countdowns</WLabel>
               {(!countdowns||countdowns.length===0)&&<div style={{fontSize:13,color:D.t4}}>None set</div>}
@@ -1697,7 +1697,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
       await api.put('/api/settings',{weather_lat:String(r.lat),weather_lon:String(r.lon),weather_city:r.name});
       toastAdd(`Location set to ${r.name}`);
     }catch(e){
-      toastAdd('City not found','red');
+      toastAdd(e.message||'City not found','red');
     }finally{setGeoLoading(false);}
   };
   const [codeModal,setCodeModal]=useState(false);
@@ -1709,7 +1709,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [temp,setTemp]=useState('°F');
   const [refresh,setRefresh]=useState('1min');
 
-  const saveSetting=(key,value)=>api.put('/api/settings',{[key]:value});
+  const saveSetting=(key,value)=>api.put('/api/settings',{[key]:value}).then(r=>{if(r.error)toastAdd(r.error,'red');else toastAdd('Saved');}).catch(()=>toastAdd('Save failed','red'));
   const [pushStatus,setPushStatus]=useState('idle'); // idle | requesting | subscribed | error
   const [icsForm,setIcsForm]=useState({name:'',url:'',color:'#3B82F6'});
   const [icsLoading,setIcsLoading]=useState(false);
@@ -1769,18 +1769,12 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
       <h1 style={{fontSize:28,fontWeight:800,letterSpacing:'-.03em',marginBottom:24}}>Settings</h1>
 
       <FormGroup label="Google Calendar">
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px'}}>
-          <div>
-            <div style={{fontSize:15,color:A.label1}}>Connected account</div>
-            <div style={{fontSize:13,color:A.label4,marginTop:2}}>mike@gmail.com</div>
+        <div style={{padding:'14px 16px'}}>
+          <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:10}}>
+            <div style={{width:8,height:8,borderRadius:'50%',background:A.label5,flexShrink:0}}/>
+            <span style={{fontSize:14,color:A.label3,fontWeight:500}}>Not connected</span>
           </div>
-          <div style={{display:'flex',alignItems:'center',gap:5}}><div style={{width:8,height:8,borderRadius:'50%',background:A.green}}/><span style={{fontSize:13,color:A.green,fontWeight:600}}>Connected</span></div>
-        </div>
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px',borderTop:`1px solid ${A.sep}`}}>
-          <span style={{fontSize:15,color:A.label1}}>Synced calendars</span>
-          <div style={{display:'flex',gap:6}}>
-            <Btn sm variant="ghost" onClick={()=>{toastAdd('Syncing...','blue');setTimeout(()=>toastAdd('Synced'),1400);}}>Sync now</Btn>
-          </div>
+          <p style={{fontSize:13,color:A.label3,marginBottom:12,lineHeight:1.5}}>Add Google Calendar via its secret ICS link: open Google Calendar → Settings → select your calendar → "Integrate calendar" → copy the <em>Secret address in iCal format</em>. Paste it in ICS Calendars below.</p>
         </div>
       </FormGroup>
 
@@ -1904,7 +1898,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
         {weatherDisplay&&<div style={{padding:'0 16px 14px',fontSize:13,color:A.green}}>Current: {weatherDisplay}</div>}
       </FormGroup>
 
-      <FormGroup label="Screensaver Photos" footer="Photos cycle every 10 seconds when the display is idle for 2 minutes.">
+      <FormGroup label="Display Photos" footer="Photos rotate every 12 seconds in the top-right panel of the wall display.">
         <div style={{padding:'14px 16px'}}>
           <label style={{display:'inline-flex',alignItems:'center',gap:10,cursor:'pointer',background:A.blue,color:'#fff',padding:'9px 18px',borderRadius:A.rPill,fontSize:14,fontWeight:600}}>
             + Upload Photo
@@ -1932,7 +1926,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
               ))}
             </div>
           )}
-          {(!photos||photos.length===0)&&<p style={{fontSize:13,color:A.label5,marginTop:10,fontStyle:'normal'}}>No photos yet — display stays awake when idle</p>}
+          {(!photos||photos.length===0)&&<p style={{fontSize:13,color:A.label5,marginTop:10,fontStyle:'normal'}}>No photos yet — upload some to show a rotating frame on the wall display</p>}
         </div>
       </FormGroup>
 

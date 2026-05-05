@@ -716,12 +716,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
       )}
 
       {/* Footer */}
-      <div style={{flexShrink:0,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-        <div style={{display:'flex',gap:20}}>
-          {['v0.1.0'].map(s=>(
-            <span key={s} style={{fontSize:11,color:D.t4,fontFamily:'JetBrains Mono,monospace'}}>{s}</span>
-          ))}
-        </div>
+      <div style={{flexShrink:0,display:'flex',alignItems:'center',justifyContent:'flex-end'}}>
         <button onClick={onManage} style={{background:'rgba(255,255,255,0.08)',color:D.t2,border:'1px solid rgba(255,255,255,0.12)',borderRadius:A.rPill,padding:'9px 20px',fontSize:13,fontWeight:500,cursor:'pointer',transition:'background .15s'}}
           onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.13)'}
           onMouseLeave={e=>e.currentTarget.style.background='rgba(255,255,255,0.08)'}
@@ -2047,8 +2042,8 @@ function ManageMode({onDisplay,events,setEvents,chores,setChores,grocery,setGroc
             <svg width="15" height="12" viewBox="0 0 15 12" fill="none"><rect x=".75" y=".75" width="13.5" height="9" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M4 11.25h7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M7.5 9.75v1.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
             Display Mode
           </button>
-          <div style={{fontSize:11,color:A.label5,fontFamily:'JetBrains Mono,monospace',lineHeight:1.8,paddingLeft:2}}>
-            <div>uptime: {uptime==null?'—':(()=>{const h=Math.floor(uptime/3600),m=Math.floor((uptime%3600)/60);return h>0?`${h}h ${m}m`:`${m}m`;})()}</div><div>v0.1.0</div>
+          <div style={{fontSize:11,color:A.label5,fontFamily:'JetBrains Mono,monospace',paddingLeft:2}}>
+            uptime: {uptime==null?'—':(()=>{const h=Math.floor(uptime/3600),m=Math.floor((uptime%3600)/60);return h>0?`${h}h ${m}m`:`${m}m`;})()}
           </div>
         </div>
       </div>

@@ -524,7 +524,17 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                 <>
                   <div style={{fontSize:44,fontWeight:800,color:D.t1,lineHeight:1,letterSpacing:'-.05em',fontVariantNumeric:'tabular-nums'}}>{weather.temp}°</div>
                   <div style={{fontSize:13,color:D.t2,fontWeight:500,marginTop:4}}>{weather.condition}</div>
-                  <div style={{fontSize:11,color:D.t3,marginTop:2}}>H:{weather.hi}° · L:{weather.lo}°</div>
+                  <div style={{fontSize:11,color:D.t3,marginTop:2,marginBottom:10}}>H:{weather.hi}° · L:{weather.lo}°</div>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:2,borderTop:`1px solid ${D.sep}`,paddingTop:8}}>
+                    {weather.forecast.slice(0,3).map(f=>(
+                      <div key={f.day} style={{textAlign:'center'}}>
+                        <div style={{fontSize:9,color:D.t3,fontWeight:600,marginBottom:2}}>{f.day.slice(0,3)}</div>
+                        <div style={{fontSize:14,marginBottom:2}}>{f.icon}</div>
+                        <div style={{fontSize:11,color:D.t1,fontWeight:700}}>{f.hi}°</div>
+                        <div style={{fontSize:10,color:D.t4}}>{f.lo}°</div>
+                      </div>
+                    ))}
+                  </div>
                 </>
               ):<div style={{fontSize:13,color:D.t4}}>Loading…</div>}
             </Widget>
@@ -799,13 +809,35 @@ function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weath
           {n:todayEvs.length,label:'Events Today'},
           {n:dueChores.length,label:'Chores Due'},
           {n:groceryRemaining,label:'On List'},
-          weather?{n:`${weather.temp}°`,label:weather.condition}:{n:'—',label:'Weather'},
         ].map(s=>(
           <Card key={s.label} style={{padding:'18px 20px'}}>
             <div style={{fontSize:isMobile?38:52,fontWeight:800,letterSpacing:'-.05em',color:A.label1,lineHeight:1,marginBottom:8,fontVariantNumeric:'tabular-nums'}}>{s.n}</div>
             <div style={{fontSize:11,fontWeight:600,color:A.label4,textTransform:'uppercase',letterSpacing:'.07em'}}>{s.label}</div>
           </Card>
         ))}
+        <Card style={{padding:'18px 20px'}}>
+          {weather?(
+            <>
+              <div style={{fontSize:isMobile?38:52,fontWeight:800,letterSpacing:'-.05em',color:A.label1,lineHeight:1,fontVariantNumeric:'tabular-nums'}}>{weather.temp}°</div>
+              <div style={{fontSize:11,fontWeight:600,color:A.label4,textTransform:'uppercase',letterSpacing:'.07em',margin:'6px 0 10px'}}>{weather.condition}</div>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:2,borderTop:`1px solid ${A.sep}`,paddingTop:8}}>
+                {(weather.forecast||[]).slice(1,4).map(f=>(
+                  <div key={f.day} style={{textAlign:'center'}}>
+                    <div style={{fontSize:9,color:A.label4,fontWeight:600,marginBottom:2}}>{f.day.slice(0,3)}</div>
+                    <div style={{fontSize:13,marginBottom:1}}>{f.icon}</div>
+                    <div style={{fontSize:10,color:A.label1,fontWeight:700}}>{f.hi}°</div>
+                    <div style={{fontSize:9,color:A.label4}}>{f.lo}°</div>
+                  </div>
+                ))}
+              </div>
+            </>
+          ):(
+            <>
+              <div style={{fontSize:isMobile?38:52,fontWeight:800,letterSpacing:'-.05em',color:A.label1,lineHeight:1,marginBottom:8}}>—</div>
+              <div style={{fontSize:11,fontWeight:600,color:A.label4,textTransform:'uppercase',letterSpacing:'.07em'}}>Weather</div>
+            </>
+          )}
+        </Card>
       </div>
 
       {/* 7-day week strip */}

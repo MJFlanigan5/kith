@@ -144,7 +144,6 @@ if (!db.prepare('SELECT COUNT(*) as c FROM meals').get().c) {
 
 const defaults = {
   clock_format: '12h', temperature_unit: 'F', refresh_interval: '1min',
-  google_email: 'mike@gmail.com', google_connected: '1',
   smtp_host: '', smtp_port: '587', smtp_user: '', smtp_pass: '',
   forwarding_address: 'hearth@mjflanigan.com',
   email_webhook_secret: require('crypto').randomBytes(24).toString('hex'),

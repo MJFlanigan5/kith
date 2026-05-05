@@ -960,8 +960,8 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
   const firstDayOfMonth=new Date(mYear,mMonth,1).getDay();
   const daysInMonth=new Date(mYear,mMonth+1,0).getDate();
   const monthCells=[...Array(firstDayOfMonth).fill(null),...Array.from({length:daysInMonth},(_,i)=>i+1)];
-  const miniFirstDay=new Date(new Date().getFullYear(),new Date().getMonth(),1).getDay();
-  const miniDIM=new Date(new Date().getFullYear(),new Date().getMonth()+1,0).getDate();
+  const miniFirstDay=new Date(refDate.getFullYear(),refDate.getMonth(),1).getDay();
+  const miniDIM=new Date(refDate.getFullYear(),refDate.getMonth()+1,0).getDate();
   const miniCal=[...Array(miniFirstDay).fill(null),...Array.from({length:miniDIM},(_,i)=>i+1)];
   const filteredEvents=events.filter(e=>calFilters[e.calendar]!==false);
 
@@ -1695,12 +1695,6 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
       toastAdd(e.message||'City not found','red');
     }finally{setGeoLoading(false);}
   };
-  const [codeModal,setCodeModal]=useState(false);
-  const [codeVal,setCodeVal]=useState(`<div style="font-family:sans-serif;padding:16px">
-  <div style="color:#34C759;font-weight:700;font-size:18px">All Systems Clear</div>
-  <div style="color:#636366;margin-top:8px;font-size:14px">12 devices online · 0 alerts</div>
-</div>`);
-  const [widgets,setWidgets]=useState({Calendar:true,Chores:true,Weather:true,Grocery:true,Meals:true,'Custom HTML':true});
   const [temp,setTemp]=useState('°F');
   const [refresh,setRefresh]=useState('1min');
 
@@ -1830,28 +1824,6 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
             <button onClick={()=>{navigator.clipboard.writeText(fwdAddress);toastAdd('Copied','blue');}} style={{background:'rgba(255,255,255,0.1)',border:'none',color:'rgba(255,255,255,0.7)',borderRadius:6,padding:'4px 10px',fontSize:12,cursor:'pointer'}}>Copy</button>
           </div>
         </div>
-        <details style={{padding:'0 16px 14px'}}>
-          <summary style={{fontSize:14,color:A.label4,cursor:'pointer',fontWeight:500,borderTop:`1px solid ${A.sep}`,paddingTop:12,paddingBottom:2,listStyle:'none',display:'flex',alignItems:'center',gap:6}}>
-            <span style={{fontSize:12}}>›</span>SMTP Settings
-          </summary>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginTop:12}}>
-            {[['Host','smtp.example.com'],['Port','587'],['Username','user@example.com'],['Password','']].map(([l,ph])=>(
-              <div key={l}><label style={{fontSize:12,color:A.label4,display:'block',marginBottom:4}}>{l}</label><Inp value="" onChange={()=>{}} placeholder={ph}/></div>
-            ))}
-          </div>
-        </details>
-      </FormGroup>
-
-      <FormGroup label="Widgets">
-        {Object.entries(widgets).map(([name,on],i)=>(
-          <div key={name} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px',borderTop:i>0?`1px solid ${A.sep}`:'none'}}>
-            <span style={{fontSize:15,color:A.label1}}>{name}</span>
-            <Toggle checked={on} onChange={v=>setWidgets(p=>({...p,[name]:v}))}/>
-          </div>
-        ))}
-        <div style={{padding:'12px 16px',borderTop:`1px solid ${A.sep}`}}>
-          <Btn variant="ghost" sm onClick={()=>setCodeModal(true)}>Edit Custom HTML Widget</Btn>
-        </div>
       </FormGroup>
 
       <FormGroup label="Display">
@@ -1899,16 +1871,21 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
             + Upload Photo
             <input type="file" accept="image/*" multiple style={{display:'none'}} onChange={async e=>{
               const files=[...e.target.files];
-              for(const file of files){
+              e.target.value='';
+              let ok=0;
+              await Promise.all(files.map(file=>new Promise(resolve=>{
                 const reader=new FileReader();
                 reader.onload=async ev=>{
-                  const r=await api.post('/api/photos',{filename:file.name,data:ev.target.result});
-                  if(!r.error) setPhotos(p=>[r,...p]);
+                  try{
+                    const r=await api.post('/api/photos',{filename:file.name,data:ev.target.result});
+                    if(!r.error){setPhotos(p=>[r,...p]);ok++;}
+                  }catch{}
+                  resolve();
                 };
                 reader.readAsDataURL(file);
-              }
-              e.target.value='';
-              toastAdd(`${files.length} photo${files.length>1?'s':''} uploaded`);
+              })));
+              if(ok>0) toastAdd(`${ok} photo${ok>1?'s':''} uploaded`);
+              else toastAdd('Upload failed','red');
             }}/>
           </label>
           {photos&&photos.length>0&&(
@@ -1925,19 +1902,6 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
         </div>
       </FormGroup>
 
-      <Modal open={codeModal} onClose={()=>setCodeModal(false)} title="Custom HTML Widget" width={640}>
-        <div style={{background:'#1C1C1E',borderRadius:A.r,overflow:'hidden',marginBottom:16}}>
-          <div style={{background:'#2C2C2E',padding:'10px 16px',display:'flex',gap:6,alignItems:'center'}}>
-            {['#FF5F57','#FEBC2E','#28C840'].map(c=><div key={c} style={{width:12,height:12,borderRadius:'50%',background:c}}/>)}
-            <span style={{marginLeft:8,fontSize:12,color:'rgba(255,255,255,0.25)',fontFamily:'monospace'}}>custom-widget.html</span>
-          </div>
-          <textarea value={codeVal} onChange={e=>setCodeVal(e.target.value)} rows={10} style={{width:'100%',background:'transparent',border:'none',outline:'none',color:'#98C379',fontFamily:'JetBrains Mono,monospace',fontSize:13,padding:'16px 20px',resize:'vertical',lineHeight:1.7}}/>
-        </div>
-        <div style={{display:'flex',gap:8}}>
-          <Btn onClick={()=>{setCodeModal(false);toastAdd('Widget saved');}}>Save</Btn>
-          <Btn variant="ghost" onClick={()=>setCodeModal(false)}>Cancel</Btn>
-        </div>
-      </Modal>
     </div>
   );
 }
@@ -2281,9 +2245,12 @@ function App(){
         api.get('/api/grocery'),
         api.get('/api/countdowns'),
         api.get('/api/inbox'),
-      ]).then(([ev,ch,gr,cd,inb])=>{
+        api.get('/api/meals'),
+        api.get('/api/members'),
+        api.get('/api/photos'),
+      ]).then(([ev,ch,gr,cd,inb,ml,mb,ph])=>{
         setEvents(ev); setChores(ch); setGrocery(gr); setCountdowns(cd);
-        setInboxCount(inb.pending.length);
+        setInboxCount(inb.pending.length); setMeals(ml); setMembers(mb); setPhotos(ph);
       }).catch(()=>{});
       api.get('/api/weather').then(w=>{if(!w.error) setWeather(w);}).catch(()=>{});
     };

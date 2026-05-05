@@ -404,7 +404,7 @@ app.put('/api/chores/:id/done', requireAuth, (req, res) => {
   const nextDue = done ? computeNextDue(c.recurrence) : todayISO;
   const lastDone = done ? todayDisplay : c.last_done;
   db.prepare('UPDATE chores SET done=?,last_done=?,next_due=? WHERE id=?').run(done, lastDone, nextDue, c.id);
-  if (done && req.user.role === 'member') {
+  if (done) {
     const member = db.prepare('SELECT * FROM family_members WHERE id=?').get(Number(req.user.sub));
     if (member) {
       db.prepare('INSERT INTO chore_completions (chore_id,member_id,member_name,points) VALUES (?,?,?,?)')

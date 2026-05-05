@@ -113,7 +113,7 @@ async function syncICSSource(source) {
   for (const ev of events) {
     ins.run(ev.title, ev.date, ev.time, cal, source.color, `ics-${source.id}`, ev.external_id);
   }
-  db.prepare('UPDATE ics_sources SET last_synced=datetime("now") WHERE id=?').run(source.id);
+  db.prepare("UPDATE ics_sources SET last_synced=datetime('now') WHERE id=?").run(source.id);
   return events.length;
 }
 

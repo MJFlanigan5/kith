@@ -1948,11 +1948,11 @@ function ManageMode({onDisplay,events,setEvents,chores,setChores,grocery,setGroc
   const [screen,setScreen]=useState('dashboard');
   const {toasts,add:toastAdd}=useToast();
   const [scrolled,setScrolled]=useState(false);
-  const [uptime,setUptime]=useState(null);
+  const [serverUp,setServerUp]=useState(null);
   useEffect(()=>{
-    const fetchUptime=()=>api.get('/api/uptime').then(d=>setUptime(d.seconds)).catch(()=>{});
-    fetchUptime();
-    const id=setInterval(fetchUptime,60000);
+    const ping=()=>api.get('/api/uptime').then(()=>setServerUp(true)).catch(()=>setServerUp(false));
+    ping();
+    const id=setInterval(ping,60000);
     return()=>clearInterval(id);
   },[]);
 
@@ -2042,9 +2042,8 @@ function ManageMode({onDisplay,events,setEvents,chores,setChores,grocery,setGroc
             <svg width="15" height="12" viewBox="0 0 15 12" fill="none"><rect x=".75" y=".75" width="13.5" height="9" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M4 11.25h7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M7.5 9.75v1.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
             Display Mode
           </button>
-          <div style={{fontSize:11,color:A.label5,fontFamily:'JetBrains Mono,monospace',paddingLeft:2}}>
-            uptime: {uptime==null?'—':(()=>{const h=Math.floor(uptime/3600),m=Math.floor((uptime%3600)/60);return h>0?`${h}h ${m}m`:`${m}m`;})()}
-          </div>
+          <div style={{width:8,height:8,borderRadius:'50%',background:serverUp===null?A.label5:serverUp?A.green:A.red,transition:'background .3s'}}/>
+
         </div>
       </div>
 

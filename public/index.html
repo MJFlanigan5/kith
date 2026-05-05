@@ -905,20 +905,28 @@ function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weath
 
       <Confetti active={showConfetti}/>
 
-      {/* Quick-add event modal */}
-      <Modal open={qaOpen} onClose={()=>setQaOpen(false)} title="Add Event" width={420}>
-        <div style={{display:'flex',flexDirection:'column',gap:12}}>
-          <Inp value={qaForm.title} onChange={e=>setQaForm(p=>({...p,title:e.target.value}))} placeholder="Event title" onKeyDown={e=>e.key==='Enter'&&submitQuickAdd()} inputRef={r=>r&&r.focus()}/>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+      {/* Quick-add event — Drawer on mobile (avoids iOS fixed-modal date picker issues), Modal on desktop */}
+      {isMobile?(
+        <Drawer open={qaOpen} onClose={()=>setQaOpen(false)} title="Add Event">
+          <div style={{display:'flex',flexDirection:'column',gap:12}}>
+            <Inp value={qaForm.title} onChange={e=>setQaForm(p=>({...p,title:e.target.value}))} placeholder="Event title" onKeyDown={e=>e.key==='Enter'&&submitQuickAdd()}/>
             <Inp type="date" value={qaForm.date} onChange={e=>setQaForm(p=>({...p,date:e.target.value}))}/>
             <Inp value={qaForm.time} onChange={e=>setQaForm(p=>({...p,time:e.target.value}))} placeholder="Time (e.g. 3:00 PM)"/>
+            <Btn onClick={submitQuickAdd} full>{qaLoading?'Adding…':'Add Event'}</Btn>
           </div>
-          <Sel value={qaForm.cal} onChange={e=>setQaForm(p=>({...p,cal:e.target.value}))}>
-            <option value="hearth">Hearth</option>
-          </Sel>
-          <Btn onClick={submitQuickAdd} full>{qaLoading?'Adding…':'Add Event'}</Btn>
-        </div>
-      </Modal>
+        </Drawer>
+      ):(
+        <Modal open={qaOpen} onClose={()=>setQaOpen(false)} title="Add Event" width={420}>
+          <div style={{display:'flex',flexDirection:'column',gap:12}}>
+            <Inp value={qaForm.title} onChange={e=>setQaForm(p=>({...p,title:e.target.value}))} placeholder="Event title" onKeyDown={e=>e.key==='Enter'&&submitQuickAdd()} inputRef={r=>r&&r.focus()}/>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+              <Inp type="date" value={qaForm.date} onChange={e=>setQaForm(p=>({...p,date:e.target.value}))}/>
+              <Inp value={qaForm.time} onChange={e=>setQaForm(p=>({...p,time:e.target.value}))} placeholder="Time (e.g. 3:00 PM)"/>
+            </div>
+            <Btn onClick={submitQuickAdd} full>{qaLoading?'Adding…':'Add Event'}</Btn>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
@@ -930,7 +938,7 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
   const [editEvent,setEditEvent]=useState(null);
   const [form,setForm]=useState({title:'',date:localDate(),time:'',endTime:'',duration:'1h',cal:'hearth',notes:'',memberId:'',recurring:''});
   const [calFilters,setCalFilters]=useState({hearth:true});
-  const [calView,setCalView]=useState(()=>window.innerWidth<768?'month':'week');
+  const [calView,setCalView]=useState(()=>window.innerWidth<768?'agenda':'week');
   const [weekOffset,setWeekOffset]=useState(0);
   const [monthOffset,setMonthOffset]=useState(0);
   const [selectedEvent,setSelectedEvent]=useState(null);
@@ -1144,6 +1152,89 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
       </div>
     );
   };
+
+  if(isMobile){
+    return(
+      <div style={{display:'flex',flexDirection:'column',height:'100%'}}>
+        {/* Mobile header */}
+        <div style={{padding:'10px 16px',display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:`1px solid ${A.sep}`,background:A.cardBg,flexShrink:0}}>
+          <div style={{display:'flex',alignItems:'center',gap:4}}>
+            <button onClick={goBack} style={{background:A.inputBg,border:'none',borderRadius:A.rXs,color:A.label2,padding:'5px 10px',fontSize:17,cursor:'pointer',lineHeight:1}}>‹</button>
+            <span style={{fontSize:15,fontWeight:700,letterSpacing:'-.02em',minWidth:130,textAlign:'center'}}>{headerLabel}</span>
+            <button onClick={goFwd} style={{background:A.inputBg,border:'none',borderRadius:A.rXs,color:A.label2,padding:'5px 10px',fontSize:17,cursor:'pointer',lineHeight:1}}>›</button>
+          </div>
+          <div style={{display:'flex',gap:8,alignItems:'center'}}>
+            <button onClick={()=>setCalView(v=>v==='agenda'?'month':'agenda')} style={{background:A.inputBg,border:'none',borderRadius:A.rXs,padding:'7px 12px',fontSize:13,color:A.label2,cursor:'pointer',fontWeight:500}}>
+              {calView==='agenda'?'Month':'List'}
+            </button>
+            <Btn sm onClick={openNew}>+ Add</Btn>
+          </div>
+        </div>
+        {/* View — no week view on mobile */}
+        <div style={{flex:1,overflowY:'auto'}}>
+          {calView==='month'&&<MonthView/>}
+          {calView==='agenda'&&<AgendaView/>}
+        </div>
+        {/* Event detail */}
+        {selectedEvent&&(
+          <Modal open={!!selectedEvent} onClose={()=>setSelectedEvent(null)} title="" width={460}>
+            <div style={{marginBottom:16}}>
+              <div style={{height:4,borderRadius:'2px 2px 0 0',background:selectedEvent.color,margin:'-20px -24px 20px'}}/>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+                <div style={{width:10,height:10,borderRadius:3,background:calMap[selectedEvent.calendar]||A.blue,flexShrink:0}}/>
+                <span style={{fontSize:13,color:A.label4,fontWeight:500}}>{calLabels[selectedEvent.calendar]||selectedEvent.calendar}</span>
+              </div>
+              <div style={{fontSize:19,fontWeight:700,color:A.label1,marginBottom:10,letterSpacing:'-.01em'}}>{selectedEvent.title}</div>
+              <div style={{fontSize:14,color:A.label3,marginBottom:4}}>{selectedEvent.date}</div>
+              <div style={{fontSize:14,color:A.label3,fontVariantNumeric:'tabular-nums',marginBottom:selectedEvent.notes?12:0}}>
+                {selectedEvent.time==='All day'?'All day':`${fmtTime(selectedEvent.time,clockFormat)}${selectedEvent.end_time?` – ${fmtTime(selectedEvent.end_time,clockFormat)}`:''}`}
+              </div>
+              {selectedEvent.notes&&<div style={{fontSize:14,color:A.label2,background:A.systemBg,borderRadius:A.rXs,padding:'10px 12px'}}>{selectedEvent.notes}</div>}
+            </div>
+            <div style={{display:'flex',gap:8,paddingTop:16,borderTop:`1px solid ${A.sep}`}}>
+              <Btn sm onClick={()=>openEdit(selectedEvent)} full>Edit</Btn>
+              <Btn sm variant="red" onClick={()=>deleteEvent(selectedEvent.id)} full>Delete</Btn>
+            </div>
+          </Modal>
+        )}
+        <Drawer open={drawerOpen} onClose={()=>setDrawerOpen(false)} title={editEvent?'Edit Event':'New Event'}>
+          <FormGroup label="Event Details">
+            <div style={{padding:'12px 16px'}}><Inp value={form.title} onChange={e=>setForm(p=>({...p,title:e.target.value}))} placeholder="Title"/></div>
+            <div style={{padding:'12px 16px',borderTop:`1px solid ${A.sep}`}}><Inp type="date" value={form.date} onChange={e=>setForm(p=>({...p,date:e.target.value}))}/></div>
+            <div style={{padding:'12px 16px',borderTop:`1px solid ${A.sep}`,display:'flex',gap:8}}>
+              <Inp value={form.time} onChange={e=>setForm(p=>({...p,time:e.target.value}))} placeholder="Start (e.g. 3:00 PM)" style={{flex:1}}/>
+              <Inp value={form.endTime} onChange={e=>setForm(p=>({...p,endTime:e.target.value}))} placeholder="End" style={{flex:1}}/>
+            </div>
+          </FormGroup>
+          <FormGroup label="Calendar">
+            <div style={{padding:'12px 16px'}}>
+              <Sel value={form.cal} onChange={e=>setForm(p=>({...p,cal:e.target.value}))}>
+                <option value="hearth">Hearth</option>
+                {icsSources.map(s=><option key={s.id} value={`ics:${s.name}`}>{s.name}</option>)}
+              </Sel>
+            </div>
+          </FormGroup>
+          {members&&members.length>0&&(
+            <FormGroup label="Person (optional)">
+              <div style={{padding:'12px 16px'}}>
+                <Sel value={form.memberId} onChange={e=>setForm(p=>({...p,memberId:e.target.value}))}>
+                  <option value="">No person</option>
+                  {members.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}
+                </Sel>
+              </div>
+            </FormGroup>
+          )}
+          <FormGroup label="Notes">
+            <div style={{padding:'12px 16px'}}><textarea value={form.notes} onChange={e=>setForm(p=>({...p,notes:e.target.value}))} placeholder="Optional notes..." rows={3} style={{width:'100%',background:'transparent',border:'none',outline:'none',resize:'vertical',fontSize:15,color:A.label1}}/></div>
+          </FormGroup>
+          <div style={{display:'flex',gap:8}}>
+            <Btn onClick={saveEvent} full>{editEvent?'Update':'Save'} Event</Btn>
+            <Btn variant="ghost" onClick={()=>setDrawerOpen(false)} full>Cancel</Btn>
+          </div>
+        </Drawer>
+      </div>
+    );
+  }
 
   return(
     <div style={{display:'flex',gap:0,height:'100%'}}>
@@ -1812,7 +1903,12 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
 
       <FormGroup label="Push Notifications">
         <div style={{padding:'14px 16px'}}>
-          <div style={{fontSize:14,color:A.label3,marginBottom:12}}>Get reminders for due chores and upcoming events. Requires HTTPS for non-localhost access.</div>
+          <div style={{fontSize:14,color:A.label3,marginBottom:12}}>Get reminders for due chores and upcoming events. Requires HTTPS.</div>
+          {/iphone|ipad|ipod/i.test(navigator.userAgent)&&/safari/i.test(navigator.userAgent)&&!/chrome/i.test(navigator.userAgent)&&(
+            <div style={{fontSize:13,color:A.amber,background:A.amberFill,padding:'9px 12px',borderRadius:A.rXs,marginBottom:12,lineHeight:1.5}}>
+              Safari on iOS 16.4+ supports Web Push. Add Hearth to your Home Screen first, then enable notifications from the installed app.
+            </div>
+          )}
           {pushStatus==='subscribed'?(
             <div style={{display:'flex',gap:8}}>
               <div style={{display:'flex',alignItems:'center',gap:6,fontSize:14,color:A.green,fontWeight:600}}><div style={{width:8,height:8,borderRadius:'50%',background:A.green}}/>Notifications enabled</div>
@@ -1828,11 +1924,13 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
 
       <FormGroup label="Email Forwarding">
         <div style={{padding:'14px 16px'}}>
-          <div style={{fontSize:14,color:A.label3,marginBottom:10}}>Forward emails with dates here. They'll appear in your Inbox for review.</div>
-          <div style={{background:'#1C1C1E',borderRadius:A.rSm,padding:'11px 14px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-            <span style={{fontFamily:'JetBrains Mono,monospace',fontSize:14,color:'#30D158'}}>{fwdAddress}</span>
-            <button onClick={()=>{navigator.clipboard.writeText(fwdAddress);toastAdd('Copied','blue');}} style={{background:'rgba(255,255,255,0.1)',border:'none',color:'rgba(255,255,255,0.7)',borderRadius:6,padding:'4px 10px',fontSize:12,cursor:'pointer'}}>Copy</button>
+          <div style={{fontSize:14,color:A.label3,marginBottom:10}}>Forward emails with dates here. They&apos;ll appear in your Inbox for review.</div>
+          <Inp value={fwdAddress} onChange={e=>setFwdAddress(e.target.value)} placeholder="hearth@yourdomain.com"/>
+          <div style={{display:'flex',gap:8,marginTop:8}}>
+            <Btn sm onClick={()=>saveSetting('forwarding_address',fwdAddress)}>Save</Btn>
+            <Btn sm variant="ghost" onClick={()=>{navigator.clipboard.writeText(fwdAddress);toastAdd('Copied','blue');}}>Copy</Btn>
           </div>
+          <div style={{fontSize:12,color:A.label5,marginTop:8}}>Changing this address requires updating your email routing rules.</div>
         </div>
       </FormGroup>
 
@@ -1963,18 +2061,20 @@ function ManageMode({onDisplay,events,setEvents,chores,setChores,grocery,setGroc
           </button>
         </div>
         {/* Content */}
-        <div key={screen} className="screen fade-scroll" onScroll={e=>setScrolled(e.currentTarget.scrollTop>12)} style={{flex:1,overflowY:'auto',padding:screen==='calendar'?0:'16px',paddingBottom:`calc(90px + env(safe-area-inset-bottom))`}}>
+        <div key={screen} className="screen fade-scroll" onScroll={e=>setScrolled(e.currentTarget.scrollTop>12)} style={{flex:1,overflowY:'auto',padding:screen==='calendar'?0:'16px 20px',paddingBottom:`calc(96px + env(safe-area-inset-bottom))`}}>
           {screens[screen]}
         </div>
         {/* Bottom tab bar */}
-        <div style={{position:'fixed',bottom:'max(16px, env(safe-area-inset-bottom))',left:'50%',transform:'translateX(-50%)',width:'calc(100% - 32px)',maxWidth:560,background:'#fff',border:'1px solid rgba(0,0,0,0.07)',borderRadius:28,boxShadow:'0 2px 20px rgba(0,0,0,0.10)',display:'flex',padding:'0 4px',zIndex:50,height:56,alignItems:'center'}}>
+        <div style={{position:'fixed',bottom:'max(12px, env(safe-area-inset-bottom))',left:'50%',transform:'translateX(-50%)',width:'calc(100% - 32px)',maxWidth:560,background:'#fff',border:'1px solid rgba(0,0,0,0.07)',borderRadius:28,boxShadow:'0 2px 20px rgba(0,0,0,0.10)',display:'flex',padding:'0 2px',zIndex:50,height:58,alignItems:'center'}}>
           {nav.map(item=>{
             const active=screen===item.id;
             return(
-              <button key={item.id} onClick={()=>setScreen(item.id)} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'8px 2px',border:'none',background:'none',color:active?A.label1:A.label4,fontSize:9,fontWeight:active?700:400,gap:3,position:'relative',cursor:'pointer'}}>
-                <span style={{opacity:active?1:.7}}>{item.icon}</span>
-                <span>{item.label}</span>
-                {item.badge&&!active&&<span style={{position:'absolute',top:6,right:'50%',transform:'translateX(12px)',background:A.red,color:'#fff',fontSize:9,fontWeight:700,padding:'1px 4px',borderRadius:99,lineHeight:1.4}}>{item.badge}</span>}
+              <button key={item.id} onClick={()=>setScreen(item.id)} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',border:'none',background:'none',cursor:'pointer',gap:2,position:'relative',padding:'4px 0'}}>
+                <div style={{width:active?42:32,height:active?28:28,display:'flex',alignItems:'center',justifyContent:'center',borderRadius:10,background:active?A.inputBg:'transparent',transition:'width .15s,background .15s',color:active?A.label1:A.label4}}>
+                  {item.icon}
+                </div>
+                {active&&<span style={{fontSize:10,fontWeight:700,color:A.label1,letterSpacing:'-.01em',lineHeight:1}}>{item.label}</span>}
+                {item.badge&&!active&&<span style={{position:'absolute',top:2,right:'50%',transform:'translateX(14px)',background:A.red,color:'#fff',fontSize:9,fontWeight:700,padding:'1px 4px',borderRadius:99,lineHeight:1.4}}>{item.badge}</span>}
               </button>
             );
           })}

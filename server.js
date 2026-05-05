@@ -85,15 +85,30 @@ function parseICS(text) {
     }
   }
   return events.map(e => {
-    const raw = (e.DTSTART || '').replace(/[^0-9]/g, '');
+    const dtRaw = e.DTSTART || '';
+    const isUtc = dtRaw.endsWith('Z');
+    const raw = dtRaw.replace(/[^0-9]/g, '');
     let date = '', time = 'All day';
     if (raw.length >= 8) {
-      date = `${raw.slice(0,4)}-${raw.slice(4,6)}-${raw.slice(6,8)}`;
-      if (raw.length >= 14) {
-        const h = parseInt(raw.slice(8,10));
-        const m = raw.slice(10,12);
+      if (raw.length >= 14 && isUtc) {
+        // Convert UTC datetime to server-local datetime
+        const utcMs = Date.UTC(
+          parseInt(raw.slice(0,4)), parseInt(raw.slice(4,6))-1, parseInt(raw.slice(6,8)),
+          parseInt(raw.slice(8,10)), parseInt(raw.slice(10,12)), 0
+        );
+        const local = new Date(utcMs);
+        date = localDate(local);
+        const h = local.getHours(), m = local.getMinutes();
         const ampm = h >= 12 ? 'PM' : 'AM';
-        time = `${h > 12 ? h - 12 : h === 0 ? 12 : h}:${m} ${ampm}`;
+        time = `${h > 12 ? h - 12 : h === 0 ? 12 : h}:${String(m).padStart(2,'0')} ${ampm}`;
+      } else {
+        date = `${raw.slice(0,4)}-${raw.slice(4,6)}-${raw.slice(6,8)}`;
+        if (raw.length >= 14) {
+          const h = parseInt(raw.slice(8,10));
+          const m = raw.slice(10,12);
+          const ampm = h >= 12 ? 'PM' : 'AM';
+          time = `${h > 12 ? h - 12 : h === 0 ? 12 : h}:${m} ${ampm}`;
+        }
       }
     }
     return { title: e.SUMMARY || 'Untitled', date, time, external_id: e.UID || null };
@@ -108,11 +123,11 @@ async function syncICSSource(source) {
   });
   const events = parseICS(text);
   const cal = `ics:${source.name}`;
-  db.prepare('DELETE FROM events WHERE source=?').run(`ics-${source.id}`);
   const ins = db.prepare('INSERT INTO events (title,date,time,calendar,color,source,external_id) VALUES (?,?,?,?,?,?,?)');
-  for (const ev of events) {
-    ins.run(ev.title, ev.date, ev.time, cal, source.color, `ics-${source.id}`, ev.external_id);
-  }
+  db.transaction(() => {
+    db.prepare('DELETE FROM events WHERE source=?').run(`ics-${source.id}`);
+    for (const ev of events) ins.run(ev.title, ev.date, ev.time, cal, source.color, `ics-${source.id}`, ev.external_id);
+  })();
   db.prepare("UPDATE ics_sources SET last_synced=datetime('now') WHERE id=?").run(source.id);
   return events.length;
 }
@@ -131,11 +146,18 @@ function updateChoreStatuses() {
 }
 updateChoreStatuses();
 
+function addMonths(d) {
+  const day = d.getDate();
+  d.setDate(1);
+  d.setMonth(d.getMonth() + 1);
+  d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()));
+}
+
 function computeNextDue(recurrence) {
   const d = new Date();
   if (recurrence.startsWith('Daily'))      d.setDate(d.getDate() + 1);
   else if (recurrence.startsWith('Bi-w'))  d.setDate(d.getDate() + 14);
-  else if (recurrence.startsWith('Month')) d.setMonth(d.getMonth() + 1);
+  else if (recurrence.startsWith('Month')) addMonths(d);
   else                                     d.setDate(d.getDate() + 7); // Weekly
   return localDate(d);
 }
@@ -303,6 +325,7 @@ app.post('/api/events', requireAuth, (req, res) => {
   if (rule && rule !== 'Does not repeat') {
     const ins2 = db.prepare('INSERT INTO events (title,date,time,end_time,duration,calendar,color,notes,member_id,recurring_rule,source,external_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
     const cur = new Date(date + 'T12:00:00');
+    const origDay = cur.getDate();
     const limit = rule === 'Annually'
       ? new Date(new Date(date + 'T12:00:00').setFullYear(new Date(date + 'T12:00:00').getFullYear() + 5))
       : new Date(cur.getTime() + 365 * 86400000);
@@ -310,7 +333,7 @@ app.post('/api/events', requireAuth, (req, res) => {
       if (rule === 'Daily')          cur.setDate(cur.getDate() + 1);
       else if (rule === 'Weekly')    cur.setDate(cur.getDate() + 7);
       else if (rule === 'Bi-weekly') cur.setDate(cur.getDate() + 14);
-      else if (rule === 'Monthly')   cur.setMonth(cur.getMonth() + 1);
+      else if (rule === 'Monthly')   { cur.setDate(1); cur.setMonth(cur.getMonth() + 1); cur.setDate(Math.min(origDay, new Date(cur.getFullYear(), cur.getMonth()+1, 0).getDate())); }
       else if (rule === 'Annually')  cur.setFullYear(cur.getFullYear() + 1);
       else if (rule === 'Weekdays') {
         cur.setDate(cur.getDate() + 1);
@@ -405,7 +428,7 @@ app.put('/api/chores/:id/done', requireAuth, (req, res) => {
   const nextDue = done ? computeNextDue(c.recurrence) : todayISO;
   const lastDone = done ? todayDisplay : c.last_done;
   db.prepare('UPDATE chores SET done=?,last_done=?,next_due=? WHERE id=?').run(done, lastDone, nextDue, c.id);
-  if (done) {
+  if (done && req.user.role !== 'admin') {
     const member = db.prepare('SELECT * FROM family_members WHERE id=?').get(Number(req.user.sub));
     if (member) {
       db.prepare('INSERT INTO chore_completions (chore_id,member_id,member_name,points) VALUES (?,?,?,?)')
@@ -493,7 +516,8 @@ app.get('/api/ics/sources', (req, res) => {
 });
 
 app.post('/api/ics/sources', requireAdmin, async (req, res) => {
-  const { name, url, color } = req.body;
+  const { name, color } = req.body;
+  const url = (req.body.url || '').replace(/^webcal:\/\//i, 'https://');
   try {
     const r = db.prepare('INSERT INTO ics_sources (name,url,color) VALUES (?,?,?)').run(name, url, color||'#3B82F6');
     const source = db.prepare('SELECT * FROM ics_sources WHERE id=?').get(r.lastInsertRowid);
@@ -714,7 +738,10 @@ app.post('/api/members', requireAdmin, (req, res) => {
 });
 
 app.delete('/api/members/:id', requireAdmin, (req, res) => {
-  db.prepare('DELETE FROM family_members WHERE id=?').run(Number(req.params.id));
+  const id = Number(req.params.id);
+  db.prepare('UPDATE events SET member_id=NULL WHERE member_id=?').run(id);
+  db.prepare('DELETE FROM chore_completions WHERE member_id=?').run(id);
+  db.prepare('DELETE FROM family_members WHERE id=?').run(id);
   res.json({ ok: true });
 });
 

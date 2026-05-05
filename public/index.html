@@ -459,8 +459,11 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
   });
 
   const toggleChore=async id=>{
-    const result=await api.put(`/api/chores/${id}/done`);
-    setChores(p=>p.map(c=>c.id===id?{...c,done:result.done,next_due:result.next_due}:c));
+    try{
+      const result=await api.put(`/api/chores/${id}/done`);
+      if(result.error) return;
+      setChores(p=>p.map(c=>c.id===id?{...c,done:result.done,next_due:result.next_due}:c));
+    }catch(e){}
   };
 
   const todayDinner=()=>{
@@ -1404,11 +1407,14 @@ function InboxScreen({toastAdd,events,setEvents,setInboxCount}){
   const accept=async id=>{
     const item=pending.find(i=>i.id===id);
     const date=editDates[id]??item.event_date;
-    await api.post(`/api/inbox/${id}/accept`,{date});
-    setPending(p=>{const next=p.filter(i=>i.id!==id);setInboxCount(next.length);return next;});
-    setRecent(p=>[{event_name:item.event_name,event_date:date,source:'Email'},...p]);
-    api.get('/api/events').then(setEvents);
-    toastAdd('Added to Hearth Calendar');
+    try{
+      const result=await api.post(`/api/inbox/${id}/accept`,{date});
+      if(result.error){toastAdd(result.error,'red');return;}
+      setPending(p=>{const next=p.filter(i=>i.id!==id);setInboxCount(next.length);return next;});
+      setRecent(p=>[{event_name:item.event_name,event_date:date,source:'Email'},...p]);
+      api.get('/api/events').then(setEvents);
+      toastAdd('Added to Hearth Calendar');
+    }catch(e){toastAdd('Failed to add event','red');}
   };
   const discard=async id=>{
     await api.del(`/api/inbox/${id}`);
@@ -2171,11 +2177,9 @@ function PinPad({title,subtitle,onSubmit,onBack,error,loading}){
   const press=(d)=>{
     if(loading) return;
     const next=pin+d;
-    if(next.length<=4){
-      setPin(next);
-      if(next.length===4) onSubmit(next).then(ok=>{if(!ok) setPin('');});
-    }
+    if(next.length<=8) setPin(next);
   };
+  const submit=()=>{if(pin.length>=4&&!loading) onSubmit(pin).then(ok=>{if(!ok) setPin('');});};
   const del=()=>setPin(p=>p.slice(0,-1));
   return(
     <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:28,animation:'slideUp .2s ease'}}>
@@ -2183,17 +2187,17 @@ function PinPad({title,subtitle,onSubmit,onBack,error,loading}){
         <div style={{fontSize:22,fontWeight:600,color:A.label1}}>{title}</div>
         {subtitle&&<div style={{fontSize:14,color:A.label3,marginTop:5}}>{subtitle}</div>}
       </div>
-      <div style={{display:'flex',gap:18,alignItems:'center'}}>
-        {[0,1,2,3].map(i=>(
-          <div key={i} style={{width:14,height:14,borderRadius:'50%',background:pin.length>i?A.blue:A.sep,transition:'background .12s'}}/>
+      <div style={{display:'flex',gap:12,alignItems:'center',flexWrap:'wrap',justifyContent:'center',maxWidth:160}}>
+        {Array.from({length:8},(_,i)=>(
+          <div key={i} style={{width:12,height:12,borderRadius:'50%',background:pin.length>i?A.blue:A.sep,transition:'background .12s'}}/>
         ))}
       </div>
       {error&&<div style={{fontSize:13,color:A.red,fontWeight:500,marginTop:-8}}>{error}</div>}
       <div style={{display:'grid',gridTemplateColumns:'repeat(3,76px)',gap:12}}>
-        {[1,2,3,4,5,6,7,8,9,'',0,'⌫'].map((d,i)=>(
+        {[1,2,3,4,5,6,7,8,9,pin.length>=4?'✓':'',0,'⌫'].map((d,i)=>(
           d===''?<div key={i}/>:
-          <button key={i} onClick={()=>d==='⌫'?del():press(String(d))}
-            style={{width:76,height:76,borderRadius:'50%',border:'none',background:d==='⌫'?'transparent':A.inputBg,fontSize:d==='⌫'?22:24,fontWeight:500,color:A.label1,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',opacity:loading?.5:1,transition:'opacity .1s'}}>
+          <button key={i} onClick={()=>d==='⌫'?del():d==='✓'?submit():press(String(d))}
+            style={{width:76,height:76,borderRadius:'50%',border:'none',background:d==='⌫'||d==='✓'?'transparent':A.inputBg,fontSize:d==='⌫'?22:d==='✓'?28:24,fontWeight:500,color:d==='✓'?A.blue:A.label1,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',opacity:loading?.5:1,transition:'opacity .1s'}}>
             {d}
           </button>
         ))}
@@ -2340,7 +2344,7 @@ function App(){
     if('serviceWorker' in navigator){
       navigator.serviceWorker.register('/sw.js').catch(()=>{});
     }
-    Promise.all([
+    Promise.allSettled([
       api.get('/api/events'),
       api.get('/api/chores'),
       api.get('/api/grocery'),
@@ -2352,21 +2356,24 @@ function App(){
       api.get('/api/photos'),
       api.get('/api/settings'),
     ]).then(([ev,ch,gr,ml,ics,inb,cd,mb,ph,st])=>{
-      setEvents(ev);
-      setChores(ch);
-      setGrocery(gr);
-      setMeals(ml);
-      setIcsSources(ics);
-      setInboxCount(inb.pending.length);
-      setCountdowns(cd);
-      setMembers(mb);
-      setPhotos(ph);
-      if(st.clock_format) setClockFormat(st.clock_format);
-      if(st.night_mode_start) setNightModeStart(st.night_mode_start);
-      if(st.night_mode_end) setNightModeEnd(st.night_mode_end);
-      if(st.refresh_interval) setRefreshMs(parseRefreshMs(st.refresh_interval));
+      if(ev.status==='fulfilled') setEvents(ev.value);
+      if(ch.status==='fulfilled') setChores(ch.value);
+      if(gr.status==='fulfilled') setGrocery(gr.value);
+      if(ml.status==='fulfilled') setMeals(ml.value);
+      if(ics.status==='fulfilled') setIcsSources(ics.value);
+      if(inb.status==='fulfilled') setInboxCount(inb.value.pending.length);
+      if(cd.status==='fulfilled') setCountdowns(cd.value);
+      if(mb.status==='fulfilled') setMembers(mb.value);
+      if(ph.status==='fulfilled') setPhotos(ph.value);
+      if(st.status==='fulfilled'){
+        const s=st.value;
+        if(s.clock_format) setClockFormat(s.clock_format);
+        if(s.night_mode_start) setNightModeStart(s.night_mode_start);
+        if(s.night_mode_end) setNightModeEnd(s.night_mode_end);
+        if(s.refresh_interval) setRefreshMs(parseRefreshMs(s.refresh_interval));
+      }
       setLoading(false);
-    }).catch(()=>setLoading(false));
+    });
     api.get('/api/weather').then(w=>{if(!w.error) setWeather(w);}).catch(()=>{});
   },[authChecked,auth,kiosk]);
 
@@ -2374,7 +2381,7 @@ function App(){
   useEffect(()=>{
     if(loading||(!auth&&!kiosk)) return;
     const poll=()=>{
-      Promise.all([
+      Promise.allSettled([
         api.get('/api/events'),
         api.get('/api/chores'),
         api.get('/api/grocery'),
@@ -2384,9 +2391,15 @@ function App(){
         api.get('/api/members'),
         api.get('/api/photos'),
       ]).then(([ev,ch,gr,cd,inb,ml,mb,ph])=>{
-        setEvents(ev); setChores(ch); setGrocery(gr); setCountdowns(cd);
-        setInboxCount(inb.pending.length); setMeals(ml); setMembers(mb); setPhotos(ph);
-      }).catch(()=>{});
+        if(ev.status==='fulfilled') setEvents(ev.value);
+        if(ch.status==='fulfilled') setChores(ch.value);
+        if(gr.status==='fulfilled') setGrocery(gr.value);
+        if(cd.status==='fulfilled') setCountdowns(cd.value);
+        if(inb.status==='fulfilled') setInboxCount(inb.value.pending.length);
+        if(ml.status==='fulfilled') setMeals(ml.value);
+        if(mb.status==='fulfilled') setMembers(mb.value);
+        if(ph.status==='fulfilled') setPhotos(ph.value);
+      });
       api.get('/api/weather').then(w=>{if(!w.error) setWeather(w);}).catch(()=>{});
     };
     const id=setInterval(poll,refreshMs);

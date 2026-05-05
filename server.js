@@ -469,10 +469,11 @@ app.get('/api/inbox', (req, res) => {
 app.post('/api/inbox/:id/accept', requireAuth, (req, res) => {
   const item = db.prepare('SELECT * FROM inbox WHERE id=?').get(req.params.id);
   if (!item) return res.status(404).json({ error: 'Not found' });
+  const date = req.body?.date || item.event_date;
   db.prepare('INSERT INTO events (title,date,time,calendar,color,source) VALUES (?,?,?,?,?,?)')
-    .run(item.event_name, item.event_date, item.event_time, 'hearth', '#34C759', 'email');
+    .run(item.event_name, date, item.event_time, 'hearth', '#34C759', 'email');
   db.prepare('INSERT INTO recently_added (event_name,event_date,source) VALUES (?,?,?)')
-    .run(item.event_name, item.event_date, 'Email');
+    .run(item.event_name, date, 'Email');
   db.prepare('DELETE FROM inbox WHERE id=?').run(req.params.id);
   res.json({ ok: true });
 });

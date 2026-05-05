@@ -933,18 +933,25 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
   const [drawerOpen,setDrawerOpen]=useState(false);
   const [editEvent,setEditEvent]=useState(null);
   const [form,setForm]=useState({title:'',date:localDate(),time:'',endTime:'',duration:'1h',cal:'hearth',notes:'',memberId:'',recurring:''});
-  const [calFilters,setCalFilters]=useState({personal:true,work:true,family:true,hearth:true});
+  const [calFilters,setCalFilters]=useState({hearth:true});
   const [calView,setCalView]=useState(()=>window.innerWidth<768?'month':'week');
   const [weekOffset,setWeekOffset]=useState(0);
   const [monthOffset,setMonthOffset]=useState(0);
   const [selectedEvent,setSelectedEvent]=useState(null);
 
   const knownCals={personal:A.blue,work:A.indigo,family:A.teal,hearth:A.green};
-  const calMap={...knownCals};
+  const calMap={hearth:A.green};
+  const activeCals=useMemo(()=>{
+    const s=new Set(['hearth']);
+    events.forEach(e=>{if(e.calendar) s.add(e.calendar);});
+    icsSources.forEach(src=>s.add(`ics:${src.name}`));
+    return s;
+  },[events,icsSources]);
+  activeCals.forEach(k=>{if(knownCals[k]) calMap[k]=knownCals[k];});
   icsSources.forEach(s=>{calMap[`ics:${s.name}`]=s.color;});
   useEffect(()=>{
-    setCalFilters(prev=>{const next={...prev};Object.keys(calMap).forEach(k=>{if(!(k in next))next[k]=true;});return next;});
-  },[icsSources]);
+    setCalFilters(prev=>{const next={...prev};activeCals.forEach(k=>{if(!(k in next))next[k]=true;});return next;});
+  },[events,icsSources]);
   const calLabels={personal:'Personal',work:'Work',family:'Family',hearth:'Hearth'};
   icsSources.forEach(s=>{calLabels[`ics:${s.name}`]=s.name;});
 
@@ -1272,10 +1279,13 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
 }
 
 /* ── Inbox ───────────────────────────────────────────────────────────── */
+const isValidDate=d=>/^\d{4}-\d{2}-\d{2}$/.test(d);
+
 function InboxScreen({toastAdd,events,setEvents,setInboxCount}){
   const [pending,setPending]=useState([]);
   const [recent,setRecent]=useState([]);
   const [fwdAddress,setFwdAddress]=useState('hearth@mjflanigan.com');
+  const [editDates,setEditDates]=useState({});
 
   useEffect(()=>{
     api.get('/api/inbox').then(d=>{
@@ -1287,10 +1297,11 @@ function InboxScreen({toastAdd,events,setEvents,setInboxCount}){
   },[]);
 
   const accept=async id=>{
-    await api.post(`/api/inbox/${id}/accept`);
     const item=pending.find(i=>i.id===id);
+    const date=editDates[id]??item.event_date;
+    await api.post(`/api/inbox/${id}/accept`,{date});
     setPending(p=>{const next=p.filter(i=>i.id!==id);setInboxCount(next.length);return next;});
-    setRecent(p=>[{event_name:item.event_name,event_date:item.event_date,source:'Email'},...p]);
+    setRecent(p=>[{event_name:item.event_name,event_date:date,source:'Email'},...p]);
     api.get('/api/events').then(setEvents);
     toastAdd('Added to Hearth Calendar');
   };
@@ -1327,11 +1338,21 @@ function InboxScreen({toastAdd,events,setEvents,setInboxCount}){
                 <div style={{fontSize:11,color:A.label4,marginBottom:6,textTransform:'uppercase',letterSpacing:'.04em',fontWeight:500}}>Forwarded email</div>
                 <div style={{fontSize:16,fontWeight:600,color:A.label1,marginBottom:14}}>{item.subject}</div>
                 <div style={{background:A.systemBg,borderRadius:A.rSm,padding:'14px 16px',marginBottom:14}}>
-                  <div style={{fontSize:17,fontWeight:700,color:A.label1,marginBottom:6,letterSpacing:'-.01em'}}>{item.event_name}</div>
-                  <div style={{display:'flex',gap:16,flexWrap:'wrap'}}>
-                    {[`${item.event_date}`,`${item.event_time}`,`${item.recurrence}`].map(s=>(
-                      <span key={s} style={{fontSize:13,color:A.label3}}>{s}</span>
-                    ))}
+                  <div style={{fontSize:17,fontWeight:700,color:A.label1,marginBottom:10,letterSpacing:'-.01em'}}>{item.event_name}</div>
+                  <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}>
+                    <div style={{display:'flex',flexDirection:'column',gap:3}}>
+                      <span style={{fontSize:11,fontWeight:600,color:A.label4,textTransform:'uppercase',letterSpacing:'.05em'}}>Date</span>
+                      <input type="date"
+                        value={editDates[item.id]??(isValidDate(item.event_date)?item.event_date:localDate())}
+                        onChange={e=>setEditDates(p=>({...p,[item.id]:e.target.value}))}
+                        style={{fontSize:13,color:A.label1,background:'#fff',border:`1px solid ${!isValidDate(item.event_date)&&!editDates[item.id]?A.amber:A.sep}`,borderRadius:A.rXs,padding:'5px 8px',cursor:'pointer'}}
+                      />
+                      {!isValidDate(item.event_date)&&!editDates[item.id]&&(
+                        <span style={{fontSize:11,color:A.amber}}>AI returned "{item.event_date}" — pick a date</span>
+                      )}
+                    </div>
+                    <span style={{fontSize:13,color:A.label3}}>{item.event_time}</span>
+                    <span style={{fontSize:13,color:A.label3}}>{item.recurrence}</span>
                   </div>
                 </div>
                 <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:16}}>

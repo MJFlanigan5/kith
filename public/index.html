@@ -420,6 +420,7 @@ function FamilyScreen({members,setMembers,toastAdd}){
 
 /* ── Display Mode ────────────────────────────────────────────────────── */
 function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,photos,weather,clockFormat='12h'}){
+  const isMobile=useIsMobile();
   const now=useClock();
   const h12=now.getHours()%12||12;
   const min=String(now.getMinutes()).padStart(2,'0');
@@ -473,7 +474,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
   );
 
   return(
-    <div onClick={resetIdle} onMouseMove={resetIdle} style={{width:'100vw',height:'100vh',background:D.bg,overflow:'hidden',padding:'24px 28px',display:'flex',flexDirection:'column',gap:14,position:'relative'}}>
+    <div onClick={resetIdle} onMouseMove={resetIdle} style={{width:'100vw',height:'100vh',background:D.bg,overflow:'hidden',padding:isMobile?'16px 16px':' 24px 28px',display:'flex',flexDirection:'column',gap:isMobile?10:14,position:'relative'}}>
       {ssActive&&photos&&photos.length>0&&(
         <div onClick={resetIdle} style={{position:'absolute',inset:0,zIndex:50,background:'#000',cursor:'pointer',animation:'fadeIn .8s ease',display:'flex',alignItems:'center',justifyContent:'center'}}>
           <img src={`/photos/${photos[ssIdx%photos.length]?.filename}`} style={{width:'100%',height:'100%',objectFit:'cover',opacity:.95}} alt=""/>
@@ -486,31 +487,57 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
       {/* Header — clock + date */}
       <div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-between',flexShrink:0}}>
         <div style={{display:'flex',alignItems:'baseline',gap:8}}>
-          <span style={{fontSize:108,fontWeight:800,color:D.t1,lineHeight:1,letterSpacing:'-0.04em',fontVariantNumeric:'tabular-nums'}}>{h12}:{min}</span>
-          <span style={{fontSize:28,color:D.t3,fontWeight:400,marginBottom:10}}>{ampm}</span>
+          <span style={{fontSize:isMobile?64:108,fontWeight:800,color:D.t1,lineHeight:1,letterSpacing:'-0.04em',fontVariantNumeric:'tabular-nums'}}>{h12}:{min}</span>
+          <span style={{fontSize:isMobile?18:28,color:D.t3,fontWeight:400,marginBottom:isMobile?6:10}}>{ampm}</span>
         </div>
         <div style={{textAlign:'right',paddingBottom:8}}>
-          <div style={{fontSize:20,color:D.t2,fontWeight:400,letterSpacing:'-.01em'}}>{dateStr}</div>
+          <div style={{fontSize:isMobile?14:20,color:D.t2,fontWeight:400,letterSpacing:'-.01em'}}>{dateStr}</div>
           <div style={{fontSize:12,color:D.t4,marginTop:5,display:'flex',alignItems:'center',gap:5,justifyContent:'flex-end',fontFamily:'JetBrains Mono,monospace'}}>
             <div style={{width:5,height:5,borderRadius:'50%',background:A.green}}/>synced
           </div>
         </div>
       </div>
 
-      {/* Widget grid */}
-      <div style={{flex:1,display:'grid',gridTemplateColumns:'1fr 1.6fr 1fr',gridTemplateRows:'1fr 1fr',gap:12,minHeight:0}}>
-
-        {/* Upcoming — left, full height */}
-        <Widget style={{gridRow:'1/3',display:'flex',flexDirection:'column',overflow:'hidden'}}>
-          <WLabel>Upcoming</WLabel>
-          <div style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:14,WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
-            {agendaDays.map(({label,date})=>{
+      {/* Widget grid — desktop: 3-col, mobile: stacked */}
+      {isMobile?(
+        <div style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:12,minHeight:0}}>
+          {/* Mobile: weather + dinner side-by-side */}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+            <Widget>
+              <WLabel>Weather</WLabel>
+              {weather?(
+                <>
+                  <div style={{fontSize:44,fontWeight:800,color:D.t1,lineHeight:1,letterSpacing:'-.05em',fontVariantNumeric:'tabular-nums'}}>{weather.temp}°</div>
+                  <div style={{fontSize:13,color:D.t2,fontWeight:500,marginTop:4}}>{weather.condition}</div>
+                  <div style={{fontSize:11,color:D.t3,marginTop:2}}>H:{weather.hi}° · L:{weather.lo}°</div>
+                </>
+              ):<div style={{fontSize:13,color:D.t4}}>Loading…</div>}
+            </Widget>
+            <Widget>
+              <WLabel>Dinner tonight</WLabel>
+              <div style={{fontSize:18,fontWeight:700,color:D.t1,letterSpacing:'-.01em',lineHeight:1.3,marginBottom:10}}>{todayDinner()||'—'}</div>
+              {[1].map(offset=>{
+                const d=new Date(); d.setDate(d.getDate()+offset);
+                const meal=(meals||[]).find(m=>m.day===DAYS[d.getDay()])?.meal||'—';
+                return(
+                  <div key={offset} style={{background:'rgba(255,255,255,0.05)',borderRadius:6,padding:'6px 9px'}}>
+                    <div style={{fontSize:10,fontWeight:700,color:D.t3,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:2}}>Tomorrow</div>
+                    <div style={{fontSize:12,color:meal!=='—'?D.t2:D.t4,fontWeight:500}}>{meal}</div>
+                  </div>
+                );
+              })}
+            </Widget>
+          </div>
+          {/* Mobile: upcoming events */}
+          <Widget style={{flex:1}}>
+            <WLabel>Upcoming</WLabel>
+            {agendaDays.slice(0,2).map(({label,date})=>{
               const evs=events.filter(e=>e.date===date);
               return(
-                <div key={date}>
+                <div key={date} style={{marginBottom:10}}>
                   <div style={{fontSize:10,fontWeight:700,color:D.t3,marginBottom:6,textTransform:'uppercase',letterSpacing:'.08em'}}>{label}</div>
                   {evs.length===0&&<div style={{fontSize:13,color:D.t4}}>Free</div>}
-                  {evs.map(ev=>(
+                  {evs.slice(0,3).map(ev=>(
                     <div key={ev.id} style={{background:ev.color+'18',borderRadius:8,padding:'8px 11px',marginBottom:4,borderLeft:`3px solid ${ev.color}`}}>
                       <div style={{fontSize:14,color:D.t1,fontWeight:600}}>{ev.title}</div>
                       <div style={{fontSize:12,color:D.t3,fontVariantNumeric:'tabular-nums',marginTop:1}}>{fmtTime(ev.time,clockFormat)}</div>
@@ -519,108 +546,146 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                 </div>
               );
             })}
-          </div>
-        </Widget>
-
-        {/* Chores — top center */}
-        <Widget style={{display:'flex',flexDirection:'column',overflow:'hidden'}}>
-          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
-            <WLabel>Chores</WLabel>
-            {chores.filter(c=>(c.status==='due'||c.status==='overdue')&&!c.done).length>0&&(
-              <span style={{fontSize:11,fontWeight:700,color:A.amber}}>{chores.filter(c=>(c.status==='due'||c.status==='overdue')&&!c.done).length} due</span>
-            )}
-          </div>
-          <div style={{flex:1,overflowY:'auto',WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
-            {chores.length===0&&<div style={{fontSize:13,color:D.t4}}>No chores</div>}
-            {chores.map(c=>(
-              <div key={c.id} onClick={()=>toggleChore(c.id)} style={{display:'flex',alignItems:'center',gap:12,padding:'9px 0',borderBottom:`1px solid ${D.sep}`,cursor:'pointer',opacity:c.done?.3:1,transition:'opacity .2s'}}>
-                <div style={{width:22,height:22,borderRadius:'50%',flexShrink:0,background:c.done?A.green:'transparent',border:`1.5px solid ${c.done?A.green:D.t4}`,display:'flex',alignItems:'center',justifyContent:'center',transition:'all .2s',animation:c.done?'checkPop .3s ease':undefined}}>
-                  {c.done&&<svg width="11" height="8" viewBox="0 0 12 9" fill="none"><path d="M1 4.5L4.5 8L11 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                </div>
-                <span style={{flex:1,fontSize:14,color:D.t2,textDecoration:c.done?'line-through':undefined,fontWeight:500}}>{c.name}</span>
-                {(c.status==='due'||c.status==='overdue')&&!c.done&&(
+          </Widget>
+          {/* Mobile: chores */}
+          {chores.filter(c=>!c.done).length>0&&(
+            <Widget>
+              <WLabel>Chores due</WLabel>
+              {chores.filter(c=>(c.status==='due'||c.status==='overdue')&&!c.done).slice(0,4).map((c,i)=>(
+                <div key={c.id} onClick={()=>toggleChore(c.id)} style={{display:'flex',alignItems:'center',gap:12,padding:'9px 0',borderBottom:`1px solid ${D.sep}`,cursor:'pointer'}}>
+                  <div style={{width:20,height:20,borderRadius:'50%',flexShrink:0,border:`1.5px solid ${D.t4}`,display:'flex',alignItems:'center',justifyContent:'center'}}/>
+                  <span style={{flex:1,fontSize:14,color:D.t2,fontWeight:500}}>{c.name}</span>
                   <span style={{fontSize:11,color:c.status==='overdue'?A.red:A.amber,fontWeight:700}}>{c.status==='overdue'?'Overdue':'Today'}</span>
-                )}
-              </div>
-            ))}
-          </div>
-        </Widget>
+                </div>
+              ))}
+            </Widget>
+          )}
+        </div>
+      ):(
+        <div style={{flex:1,display:'grid',gridTemplateColumns:'1fr 1.6fr 1fr',gridTemplateRows:'1fr 1fr',gap:12,minHeight:0}}>
 
-        {/* Dinner — bottom center */}
-        <Widget style={{display:'flex',flexDirection:'column'}}>
-          <WLabel>Dinner tonight</WLabel>
-          <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center'}}>
-            <div style={{fontSize:28,fontWeight:700,color:D.t1,letterSpacing:'-.02em',lineHeight:1.2,marginBottom:14}}>{todayDinner()||'—'}</div>
-            <div style={{display:'flex',gap:10}}>
-              {[1,2].map(offset=>{
-                const d=new Date(); d.setDate(d.getDate()+offset);
-                const dayName=DAYS[d.getDay()];
-                const meal=(meals||[]).find(m=>m.day===dayName)?.meal||'—';
+          {/* Upcoming — left, full height */}
+          <Widget style={{gridRow:'1/3',display:'flex',flexDirection:'column',overflow:'hidden'}}>
+            <WLabel>Upcoming</WLabel>
+            <div style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:14,WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
+              {agendaDays.map(({label,date})=>{
+                const evs=events.filter(e=>e.date===date);
                 return(
-                  <div key={offset} style={{flex:1,background:'rgba(255,255,255,0.05)',borderRadius:8,padding:'8px 10px'}}>
-                    <div style={{fontSize:10,fontWeight:700,color:D.t3,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>{offset===1?'Tomorrow':dayName}</div>
-                    <div style={{fontSize:13,color:meal!=='—'?D.t2:D.t4,fontWeight:500}}>{meal}</div>
+                  <div key={date}>
+                    <div style={{fontSize:10,fontWeight:700,color:D.t3,marginBottom:6,textTransform:'uppercase',letterSpacing:'.08em'}}>{label}</div>
+                    {evs.length===0&&<div style={{fontSize:13,color:D.t4}}>Free</div>}
+                    {evs.map(ev=>(
+                      <div key={ev.id} style={{background:ev.color+'18',borderRadius:8,padding:'8px 11px',marginBottom:4,borderLeft:`3px solid ${ev.color}`}}>
+                        <div style={{fontSize:14,color:D.t1,fontWeight:600}}>{ev.title}</div>
+                        <div style={{fontSize:12,color:D.t3,fontVariantNumeric:'tabular-nums',marginTop:1}}>{fmtTime(ev.time,clockFormat)}</div>
+                      </div>
+                    ))}
                   </div>
                 );
               })}
             </div>
-          </div>
-        </Widget>
+          </Widget>
 
-        {/* Weather — top right */}
-        <Widget style={{display:'flex',flexDirection:'column',overflow:'hidden'}}>
-          <WLabel>Weather</WLabel>
-          {weather?(
-            <div style={{display:'flex',flexDirection:'column',flex:1,minHeight:0}}>
-              <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center'}}>
-                <span style={{fontSize:64,fontWeight:800,color:D.t1,lineHeight:1,letterSpacing:'-.05em',fontVariantNumeric:'tabular-nums'}}>{weather.temp}°</span>
-                <div style={{fontSize:15,color:D.t2,fontWeight:500,marginTop:6,marginBottom:3}}>{weather.condition}</div>
-                <div style={{fontSize:12,color:D.t3}}>H:{weather.hi}° · L:{weather.lo}°</div>
-              </div>
-              <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:2,borderTop:`1px solid ${D.sep}`,paddingTop:10,flexShrink:0}}>
-                {weather.forecast.map(f=>(
-                  <div key={f.day} style={{textAlign:'center'}}>
-                    <div style={{fontSize:10,color:D.t3,fontWeight:600,marginBottom:3}}>{f.day}</div>
-                    <div style={{fontSize:17,marginBottom:3}}>{f.icon}</div>
-                    <div style={{fontSize:12,color:D.t1,fontWeight:700}}>{f.hi}°</div>
-                    <div style={{fontSize:11,color:D.t4}}>{f.lo}°</div>
+          {/* Chores — top center */}
+          <Widget style={{display:'flex',flexDirection:'column',overflow:'hidden'}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+              <WLabel>Chores</WLabel>
+              {chores.filter(c=>(c.status==='due'||c.status==='overdue')&&!c.done).length>0&&(
+                <span style={{fontSize:11,fontWeight:700,color:A.amber}}>{chores.filter(c=>(c.status==='due'||c.status==='overdue')&&!c.done).length} due</span>
+              )}
+            </div>
+            <div style={{flex:1,overflowY:'auto',WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
+              {chores.length===0&&<div style={{fontSize:13,color:D.t4}}>No chores</div>}
+              {chores.map(c=>(
+                <div key={c.id} onClick={()=>toggleChore(c.id)} style={{display:'flex',alignItems:'center',gap:12,padding:'9px 0',borderBottom:`1px solid ${D.sep}`,cursor:'pointer',opacity:c.done?.3:1,transition:'opacity .2s'}}>
+                  <div style={{width:22,height:22,borderRadius:'50%',flexShrink:0,background:c.done?A.green:'transparent',border:`1.5px solid ${c.done?A.green:D.t4}`,display:'flex',alignItems:'center',justifyContent:'center',transition:'all .2s',animation:c.done?'checkPop .3s ease':undefined}}>
+                    {c.done&&<svg width="11" height="8" viewBox="0 0 12 9" fill="none"><path d="M1 4.5L4.5 8L11 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                   </div>
-                ))}
+                  <span style={{flex:1,fontSize:14,color:D.t2,textDecoration:c.done?'line-through':undefined,fontWeight:500}}>{c.name}</span>
+                  {(c.status==='due'||c.status==='overdue')&&!c.done&&(
+                    <span style={{fontSize:11,color:c.status==='overdue'?A.red:A.amber,fontWeight:700}}>{c.status==='overdue'?'Overdue':'Today'}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </Widget>
+
+          {/* Dinner — bottom center */}
+          <Widget style={{display:'flex',flexDirection:'column'}}>
+            <WLabel>Dinner tonight</WLabel>
+            <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center'}}>
+              <div style={{fontSize:28,fontWeight:700,color:D.t1,letterSpacing:'-.02em',lineHeight:1.2,marginBottom:14}}>{todayDinner()||'—'}</div>
+              <div style={{display:'flex',gap:10}}>
+                {[1,2].map(offset=>{
+                  const d=new Date(); d.setDate(d.getDate()+offset);
+                  const dayName=DAYS[d.getDay()];
+                  const meal=(meals||[]).find(m=>m.day===dayName)?.meal||'—';
+                  return(
+                    <div key={offset} style={{flex:1,background:'rgba(255,255,255,0.05)',borderRadius:8,padding:'8px 10px'}}>
+                      <div style={{fontSize:10,fontWeight:700,color:D.t3,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>{offset===1?'Tomorrow':dayName}</div>
+                      <div style={{fontSize:13,color:meal!=='—'?D.t2:D.t4,fontWeight:500}}>{meal}</div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
-          ):(
-            <div style={{fontSize:13,color:D.t4}}>Loading…</div>
-          )}
-        </Widget>
+          </Widget>
 
-        {/* Grocery + Countdowns — bottom right */}
-        <div style={{display:'flex',flexDirection:'column',gap:12}}>
-          <Widget style={{flex:1}}>
-            <WLabel>Grocery</WLabel>
-            {(grocery||[]).filter(g=>!g.checked).length===0&&<div style={{fontSize:13,color:D.t4}}>Nothing on the list</div>}
-            {(grocery||[]).filter(g=>!g.checked).slice(0,5).map((item,i)=>(
-              <div key={item.id} style={{display:'flex',alignItems:'center',gap:9,padding:'6px 0',borderBottom:i>0?`1px solid ${D.sep}`:'none'}}>
-                <div style={{width:6,height:6,borderRadius:'50%',background:'rgba(255,255,255,0.30)',flexShrink:0}}/>
-                <span style={{fontSize:13,color:D.t2}}>{item.name}</span>
-              </div>
-            ))}
-          </Widget>
-          <Widget>
-            <WLabel>Countdowns</WLabel>
-            {(!countdowns||countdowns.length===0)&&<div style={{fontSize:13,color:D.t4}}>None set</div>}
-            {(countdowns||[]).filter(c=>daysUntil(c.date)>=0).slice(0,3).map((c,i)=>{
-              const days=daysUntil(c.date);
-              return(
-                <div key={c.id} style={{display:'flex',alignItems:'center',gap:10,padding:'6px 0',borderTop:i>0?`1px solid ${D.sep}`:'none'}}>
-                  <span style={{fontSize:16}}>{c.emoji}</span>
-                  <span style={{flex:1,fontSize:13,color:D.t2,fontWeight:500}}>{c.label}</span>
-                  <span style={{fontSize:15,fontWeight:800,color:D.t1}}>{days===0?'Today':days+'d'}</span>
+          {/* Weather — top right */}
+          <Widget style={{display:'flex',flexDirection:'column',overflow:'hidden'}}>
+            <WLabel>Weather</WLabel>
+            {weather?(
+              <div style={{display:'flex',flexDirection:'column',flex:1,minHeight:0}}>
+                <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center'}}>
+                  <span style={{fontSize:64,fontWeight:800,color:D.t1,lineHeight:1,letterSpacing:'-.05em',fontVariantNumeric:'tabular-nums'}}>{weather.temp}°</span>
+                  <div style={{fontSize:15,color:D.t2,fontWeight:500,marginTop:6,marginBottom:3}}>{weather.condition}</div>
+                  <div style={{fontSize:12,color:D.t3}}>H:{weather.hi}° · L:{weather.lo}°</div>
                 </div>
-              );
-            })}
+                <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:2,borderTop:`1px solid ${D.sep}`,paddingTop:10,flexShrink:0}}>
+                  {weather.forecast.map(f=>(
+                    <div key={f.day} style={{textAlign:'center'}}>
+                      <div style={{fontSize:10,color:D.t3,fontWeight:600,marginBottom:3}}>{f.day}</div>
+                      <div style={{fontSize:17,marginBottom:3}}>{f.icon}</div>
+                      <div style={{fontSize:12,color:D.t1,fontWeight:700}}>{f.hi}°</div>
+                      <div style={{fontSize:11,color:D.t4}}>{f.lo}°</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ):(
+              <div style={{fontSize:13,color:D.t4}}>Loading…</div>
+            )}
           </Widget>
+
+          {/* Grocery + Countdowns — bottom right */}
+          <div style={{display:'flex',flexDirection:'column',gap:12}}>
+            <Widget style={{flex:1}}>
+              <WLabel>Grocery</WLabel>
+              {(grocery||[]).filter(g=>!g.checked).length===0&&<div style={{fontSize:13,color:D.t4}}>Nothing on the list</div>}
+              {(grocery||[]).filter(g=>!g.checked).slice(0,5).map((item,i)=>(
+                <div key={item.id} style={{display:'flex',alignItems:'center',gap:9,padding:'6px 0',borderBottom:i>0?`1px solid ${D.sep}`:'none'}}>
+                  <div style={{width:6,height:6,borderRadius:'50%',background:'rgba(255,255,255,0.30)',flexShrink:0}}/>
+                  <span style={{fontSize:13,color:D.t2}}>{item.name}</span>
+                </div>
+              ))}
+            </Widget>
+            <Widget>
+              <WLabel>Countdowns</WLabel>
+              {(!countdowns||countdowns.length===0)&&<div style={{fontSize:13,color:D.t4}}>None set</div>}
+              {(countdowns||[]).filter(c=>daysUntil(c.date)>=0).slice(0,3).map((c,i)=>{
+                const days=daysUntil(c.date);
+                return(
+                  <div key={c.id} style={{display:'flex',alignItems:'center',gap:10,padding:'6px 0',borderTop:i>0?`1px solid ${D.sep}`:'none'}}>
+                    <span style={{fontSize:16}}>{c.emoji}</span>
+                    <span style={{flex:1,fontSize:13,color:D.t2,fontWeight:500}}>{c.label}</span>
+                    <span style={{fontSize:15,fontWeight:800,color:D.t1}}>{days===0?'Today':days+'d'}</span>
+                  </div>
+                );
+              })}
+            </Widget>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Footer */}
       <div style={{flexShrink:0,display:'flex',alignItems:'center',justifyContent:'space-between'}}>

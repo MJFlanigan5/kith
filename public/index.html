@@ -795,12 +795,12 @@ function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weath
 
   return(
     <div>
-      <div style={{marginBottom:20,display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:16}}>
-        <div>
-          <h1 style={{fontSize:isMobile?34:44,fontWeight:800,letterSpacing:'-.05em',color:A.label1,lineHeight:1.05}}>{greeting}</h1>
-          <p style={{color:A.label4,fontSize:15,marginTop:6,fontWeight:400}}>{DAYS[now.getDay()]}, {MONTHS[now.getMonth()]} {now.getDate()} · {now.toLocaleTimeString('en-US',clockOpts)}</p>
+      <div style={{marginBottom:20,display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:12,flexWrap:'wrap'}}>
+        <div style={{minWidth:0}}>
+          <h1 style={{fontSize:isMobile?28:44,fontWeight:800,letterSpacing:'-.05em',color:A.label1,lineHeight:1.05}}>{greeting}</h1>
+          <p style={{color:A.label4,fontSize:isMobile?13:15,marginTop:6,fontWeight:400}}>{DAYS[now.getDay()]}, {MONTHS[now.getMonth()]} {now.getDate()} · {now.toLocaleTimeString('en-US',clockOpts)}</p>
         </div>
-        <Btn onClick={()=>{setQaForm({title:'',date:localDate(),time:'',cal:'hearth'});setQaOpen(true);}} style={{flexShrink:0,marginTop:10}}>+ Add Event</Btn>
+        <Btn onClick={()=>{setQaForm({title:'',date:localDate(),time:'',cal:'hearth'});setQaOpen(true);}} style={{flexShrink:0,marginTop:4}}>+ Add Event</Btn>
       </div>
 
       {/* Stats — individual cards with big colored numbers */}
@@ -1058,7 +1058,24 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
     setDeleteConfirm(true);
   };
 
-  const sharedHeader=(
+  const sharedHeader=isMobile?(
+    <div style={{background:A.cardBg,flexShrink:0}}>
+      <div style={{padding:'10px 16px',borderBottom:`1px solid ${A.sep}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+        <div style={{display:'flex',alignItems:'center',gap:5}}>
+          <button onClick={goBack} style={navBtnStyle}>‹</button>
+          <button onClick={goToday} style={{...navBtnStyle,fontSize:12,padding:'5px 8px'}}>Today</button>
+          <button onClick={goFwd} style={navBtnStyle}>›</button>
+          <span style={{fontSize:13,fontWeight:600,marginLeft:6,color:A.label1}}>{headerLabel}</span>
+        </div>
+        <button onClick={openNew} style={{background:A.blue,border:'none',borderRadius:A.rPill,color:'#fff',fontSize:20,lineHeight:1,width:30,height:30,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>+</button>
+      </div>
+      <div style={{padding:'6px 16px 6px',borderBottom:`1px solid ${A.sep}`,display:'flex',background:A.inputBg,gap:2}}>
+        {['week','month','agenda'].map(v=>(
+          <button key={v} onClick={()=>setCalView(v)} style={{flex:1,padding:'5px 0',border:'none',borderRadius:6,background:calView===v?A.cardBg:'transparent',color:calView===v?A.label1:A.label3,fontSize:12,fontWeight:calView===v?600:400,cursor:'pointer',textTransform:'capitalize',boxShadow:calView===v?A.shadowSm:'none',transition:'all .15s'}}>{v}</button>
+        ))}
+      </div>
+    </div>
+  ):(
     <div style={{padding:'10px 20px',borderBottom:`1px solid ${A.sep}`,display:'flex',alignItems:'center',justifyContent:'space-between',background:A.cardBg,flexShrink:0}}>
       <div style={{display:'flex',alignItems:'center',gap:6}}>
         <button onClick={goBack} style={navBtnStyle}>‹</button>

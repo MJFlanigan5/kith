@@ -38,9 +38,33 @@ Settings → ICS Calendars → paste any `webcal://` or `https://` `.ics` URL. W
 
 ## Email Inbox
 
-Configure a forwarding address in Settings → Email. Forward calendar invites or event emails to that address and Kith drops them in an inbox for your review and approval. Requires a Cloudflare Email Worker or any webhook-compatible email router.
+Forward calendar invites or event emails to a custom address and Kith parses them into an inbox for approval. Setup takes about 15 minutes and requires a domain on Cloudflare (free).
 
-Optional: add an Anthropic or Gemini API key in Settings to enable AI parsing of unstructured event emails.
+**1. Enable Cloudflare Email Routing**
+
+In your Cloudflare dashboard → Email → Email Routing → enable for your domain. Add a catch-all rule that routes to a Worker (you'll create the Worker next).
+
+**2. Deploy the email Worker**
+
+```bash
+cd /opt/kith/email-worker
+# Edit wrangler.toml — set KITH_URL to your server's public URL
+npm install
+npx wrangler secret put KITH_WEBHOOK_SECRET   # enter any random string
+npx wrangler deploy
+```
+
+**3. Configure Kith**
+
+Settings → Email → set:
+- **Forwarding address** — the email address you'll forward from (e.g. `you@yourdomain.com`)
+- **Webhook secret** — same random string you used in step 2
+
+**4. Forward an email**
+
+Forward any calendar invite to your forwarding address. It will appear in Kith's inbox within seconds, ready to accept or dismiss.
+
+Optional: add an Anthropic or Gemini API key in Settings → Email to enable AI parsing of plain-text event emails (ICS attachments are parsed without an AI key).
 
 ## Push Notifications
 

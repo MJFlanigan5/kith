@@ -6,7 +6,12 @@ const fs = require('fs');
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
-const db = new Database(path.join(DATA_DIR, 'hearth.db'));
+// migrate DB filename from old "hearth" name
+const oldDb = path.join(DATA_DIR, 'hearth.db');
+const newDb = path.join(DATA_DIR, 'kith.db');
+if (fs.existsSync(oldDb) && !fs.existsSync(newDb)) fs.renameSync(oldDb, newDb);
+
+const db = new Database(newDb);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
@@ -17,7 +22,7 @@ CREATE TABLE IF NOT EXISTS events (
   date TEXT NOT NULL,
   time TEXT DEFAULT 'All day',
   duration TEXT DEFAULT '1h',
-  calendar TEXT DEFAULT 'hearth',
+  calendar TEXT DEFAULT 'kith',
   color TEXT DEFAULT '#34C759',
   notes TEXT DEFAULT '',
   source TEXT DEFAULT 'manual',
@@ -129,12 +134,12 @@ try { db.exec(`ALTER TABLE events ADD COLUMN end_time TEXT DEFAULT ''`); } catch
 try { db.exec(`ALTER TABLE events ADD COLUMN recurring_rule TEXT DEFAULT ''`); } catch {}
 try { db.exec('ALTER TABLE family_members ADD COLUMN pin_hash TEXT'); } catch {}
 try { db.exec('ALTER TABLE chores ADD COLUMN points INTEGER DEFAULT 1'); } catch {}
-db.prepare("UPDATE events SET calendar='hearth' WHERE calendar IN ('personal','work','family')").run();
+db.prepare("UPDATE events SET calendar='kith' WHERE calendar IN ('personal','work','family','hearth')").run();
 db.prepare("UPDATE events SET time='All day' WHERE time IS NULL OR time=''").run();
 // Update old default forwarding address
 const _fwd = db.prepare("SELECT value FROM settings WHERE key='forwarding_address'").get();
-if (_fwd?.value === 'hearth@local.home') {
-  db.prepare("UPDATE settings SET value='hearth@mjflanigan.com' WHERE key='forwarding_address'").run();
+if (_fwd?.value === 'hearth@local.home' || _fwd?.value === 'hearth@mjflanigan.com') {
+  db.prepare("UPDATE settings SET value='' WHERE key='forwarding_address'").run();
 }
 
 // ── Seed data removed — app starts empty for real use ────────────────────────
@@ -147,7 +152,7 @@ if (!db.prepare('SELECT COUNT(*) as c FROM meals').get().c) {
 const defaults = {
   clock_format: '12h', temperature_unit: 'F', refresh_interval: '1min',
   smtp_host: '', smtp_port: '587', smtp_user: '', smtp_pass: '',
-  forwarding_address: 'hearth@mjflanigan.com',
+  forwarding_address: '',
   email_webhook_secret: require('crypto').randomBytes(24).toString('hex'),
   anthropic_api_key: '',
   weather_lat: '33.8533', weather_lon: '-84.2201', weather_city: '',

@@ -1,59 +1,6 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>Hearth</title>
-<link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
-<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
-<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
-<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
-<style>
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html,body,#root{height:100%}
-body{font-family:'DM Sans',-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;background:#F5F3EF;color:#1A1A1A;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
-.fade-scroll{-webkit-mask-image:linear-gradient(to bottom,transparent 0px,black 10px,black calc(100% - 10px),transparent 100%);mask-image:linear-gradient(to bottom,transparent 0px,black 10px,black calc(100% - 10px),transparent 100%)}
-input,select,textarea,button{font-family:inherit}
-button{cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none}
-a{cursor:pointer;user-select:none}
-::-webkit-scrollbar{width:5px;height:5px}
-::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:rgba(0,0,0,.12);border-radius:10px}
-::-webkit-scrollbar-thumb:hover{background:rgba(0,0,0,.2)}
-@keyframes fadeIn{from{opacity:0}to{opacity:1}}
-@keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
-@keyframes checkPop{0%{transform:scale(.7)}55%{transform:scale(1.18)}100%{transform:scale(1)}}
-@keyframes toastIn{from{opacity:0;transform:translateY(10px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
-@keyframes spin{to{transform:rotate(360deg)}}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
-@keyframes confettiFall{0%{transform:translateY(-10px) rotate(0deg);opacity:1}100%{transform:translateY(105vh) rotate(540deg);opacity:0}}
-@keyframes springIn{0%{opacity:0;transform:scale(.94) translateY(6px)}60%{transform:scale(1.02) translateY(-1px)}100%{opacity:1;transform:scale(1) translateY(0)}}
-.screen{animation:springIn .32s cubic-bezier(.34,1.56,.64,1) both}
-.irow{transition:background .12s ease}
-.irow:hover{background:rgba(0,0,0,0.025)!important}
-.irow:active{background:rgba(0,0,0,0.045)!important}
-.tap{cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .08s ease,opacity .08s ease;}
-.tap:active{transform:scale(.97);opacity:.82;}
-.noise-layer{background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");background-size:256px 256px;opacity:.038;}
-.hdr{transition:background .25s ease,box-shadow .25s ease,backdrop-filter .25s ease;}
-</style>
-</head>
-<body>
-<div id="root"></div>
-<svg style="display:none" aria-hidden="true">
-  <defs>
-    <filter id="lg-filter" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur in="SourceGraphic" stdDeviation="1" result="blurred"/>
-      <feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" stitchTiles="stitch" result="noise"/>
-      <feDisplacementMap in="blurred" in2="noise" scale="30" xChannelSelector="R" yChannelSelector="G" result="displaced"/>
-      <feColorMatrix in="displaced" type="saturate" values="30"/>
-    </filter>
-  </defs>
-</svg>
-<script type="text/babel">
-const {useState,useEffect,useRef,useCallback,useMemo}=React;
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import ReactDOM from 'react-dom/client'
+
 
 /* ── Design tokens ───────────────────────────────────────────────────── */
 const A={
@@ -86,7 +33,7 @@ function daysUntil(dateStr){
 }
 
 /* ── API helper ──────────────────────────────────────────────────────── */
-const _authHdr=()=>{const t=localStorage.getItem('hearth_token');return t?{'Authorization':`Bearer ${t}`}:{};};
+const _authHdr=()=>{const t=localStorage.getItem('kith_token');return t?{'Authorization':`Bearer ${t}`}:{};};
 const api={
   get:(path)=>fetch(path).then(r=>r.json()),
   post:(path,data)=>fetch(path,{method:'POST',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify(data)}).then(r=>r.json()),
@@ -107,7 +54,7 @@ function fmtTime(t, fmt='12h'){
 }
 
 /* ── Calendar color mapping ──────────────────────────────────────────── */
-const CAL_COLORS={hearth:A.green};
+const CAL_COLORS={kith:A.green};
 function calColor(cal,events){
   if(CAL_COLORS[cal]) return CAL_COLORS[cal];
   // Find color from first event with this calendar
@@ -744,7 +691,7 @@ function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weath
   const isMobile=useIsMobile();
   const now=useClock();
   const [qaOpen,setQaOpen]=useState(false);
-  const [qaForm,setQaForm]=useState({title:'',date:localDate(),time:'',cal:'hearth'});
+  const [qaForm,setQaForm]=useState({title:'',date:localDate(),time:'',cal:'kith'});
   const [qaLoading,setQaLoading]=useState(false);
   const [leaderboard,setLeaderboard]=useState([]);
   const [showConfetti,setShowConfetti]=useState(false);
@@ -772,7 +719,7 @@ function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weath
       const updated=await api.get('/api/events');
       setEvents(updated);
       setQaOpen(false);
-      setQaForm({title:'',date:localDate(),time:'',cal:'hearth'});
+      setQaForm({title:'',date:localDate(),time:'',cal:'kith'});
     } finally {
       setQaLoading(false);
     }
@@ -800,7 +747,7 @@ function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weath
           <h1 style={{fontSize:isMobile?28:44,fontWeight:800,letterSpacing:'-.05em',color:A.label1,lineHeight:1.05}}>{greeting}</h1>
           <p style={{color:A.label4,fontSize:isMobile?13:15,marginTop:6,fontWeight:400}}>{DAYS[now.getDay()]}, {MONTHS[now.getMonth()]} {now.getDate()} · {now.toLocaleTimeString('en-US',clockOpts)}</p>
         </div>
-        <Btn onClick={()=>{setQaForm({title:'',date:localDate(),time:'',cal:'hearth'});setQaOpen(true);}} style={{flexShrink:0,marginTop:4}}>+ Add Event</Btn>
+        <Btn onClick={()=>{setQaForm({title:'',date:localDate(),time:'',cal:'kith'});setQaOpen(true);}} style={{flexShrink:0,marginTop:4}}>+ Add Event</Btn>
       </div>
 
       {/* Stats — individual cards with big colored numbers */}
@@ -974,24 +921,24 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
   const isMobile=useIsMobile();
   const [drawerOpen,setDrawerOpen]=useState(false);
   const [editEvent,setEditEvent]=useState(null);
-  const [form,setForm]=useState({title:'',date:localDate(),time:'',endTime:'',duration:'1h',cal:'hearth',notes:'',memberId:'',recurring:''});
-  const [calFilters,setCalFilters]=useState({hearth:true});
+  const [form,setForm]=useState({title:'',date:localDate(),time:'',endTime:'',duration:'1h',cal:'kith',notes:'',memberId:'',recurring:''});
+  const [calFilters,setCalFilters]=useState({kith:true});
   const [calView,setCalView]=useState(()=>window.innerWidth<768?'agenda':'week');
   const [weekOffset,setWeekOffset]=useState(0);
   const [monthOffset,setMonthOffset]=useState(0);
   const [selectedEvent,setSelectedEvent]=useState(null);
   const [deleteConfirm,setDeleteConfirm]=useState(false);
 
-  const calMap={hearth:A.green};
+  const calMap={kith:A.green};
   icsSources.forEach(s=>{calMap[`ics:${s.name}`]=s.color;});
   useEffect(()=>{
     setCalFilters(prev=>{
-      const next={hearth:prev.hearth??true};
+      const next={kith:prev.kith??true};
       icsSources.forEach(s=>{const k=`ics:${s.name}`;next[k]=prev[k]??true;});
       return next;
     });
   },[icsSources]);
-  const calLabels={hearth:'Hearth'};
+  const calLabels={kith:'Kith'};
   icsSources.forEach(s=>{calLabels[`ics:${s.name}`]=s.name;});
 
   const weekStart=useMemo(()=>{
@@ -1009,7 +956,7 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
   const miniFirstDay=new Date(refDate.getFullYear(),refDate.getMonth(),1).getDay();
   const miniDIM=new Date(refDate.getFullYear(),refDate.getMonth()+1,0).getDate();
   const miniCal=[...Array(miniFirstDay).fill(null),...Array.from({length:miniDIM},(_,i)=>i+1)];
-  const filteredEvents=events.filter(e=>{const cal=calMap[e.calendar]!==undefined?e.calendar:'hearth';return calFilters[cal]!==false;});
+  const filteredEvents=events.filter(e=>{const cal=calMap[e.calendar]!==undefined?e.calendar:'kith';return calFilters[cal]!==false;});
 
   const navBtnStyle={background:A.inputBg,border:'none',borderRadius:A.rXs,color:A.label2,padding:'5px 11px',fontSize:16,cursor:'pointer'};
   const goBack=()=>calView==='month'?setMonthOffset(p=>p-1):setWeekOffset(p=>p-1);
@@ -1017,7 +964,7 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
   const goToday=()=>{setWeekOffset(0);setMonthOffset(0);};
   const headerLabel=calView==='month'?`${MONTHS[mMonth]} ${mYear}`:`${MONTHS[weekStart.getMonth()]} ${weekStart.getFullYear()}`;
 
-  const blankForm={title:'',date:localDate(),time:'',endTime:'',duration:'1h',cal:'hearth',notes:'',memberId:'',recurring:''};
+  const blankForm={title:'',date:localDate(),time:'',endTime:'',duration:'1h',cal:'kith',notes:'',memberId:'',recurring:''};
   const openNew=()=>{setEditEvent(null);setForm(blankForm);setDrawerOpen(true);};
   const openEdit=ev=>{
     setEditEvent(ev);
@@ -1307,7 +1254,7 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
           <FormGroup label="Calendar">
             <div style={{padding:'12px 16px'}}>
               <Sel value={form.cal} onChange={e=>setForm(p=>({...p,cal:e.target.value}))}>
-                <option value="hearth">Hearth</option>
+                <option value="kith">Kith</option>
                 {icsSources.map(s=><option key={s.id} value={`ics:${s.name}`}>{s.name}</option>)}
               </Sel>
             </div>
@@ -1444,7 +1391,7 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
         <FormGroup label="Calendar">
           <div style={{padding:'12px 16px'}}>
             <Sel value={form.cal} onChange={e=>setForm(p=>({...p,cal:e.target.value}))}>
-              <option value="hearth">Hearth</option>
+              <option value="kith">Kith</option>
               {icsSources.map(s=><option key={s.id} value={`ics:${s.name}`}>{s.name}</option>)}
             </Sel>
           </div>
@@ -1477,7 +1424,7 @@ const isValidDate=d=>/^\d{4}-\d{2}-\d{2}$/.test(d);
 function InboxScreen({toastAdd,events,setEvents,setInboxCount}){
   const [pending,setPending]=useState([]);
   const [recent,setRecent]=useState([]);
-  const [fwdAddress,setFwdAddress]=useState('hearth@mjflanigan.com');
+  const [fwdAddress,setFwdAddress]=useState('');
   const [editDates,setEditDates]=useState({});
 
   useEffect(()=>{
@@ -1498,7 +1445,7 @@ function InboxScreen({toastAdd,events,setEvents,setInboxCount}){
       setPending(p=>{const next=p.filter(i=>i.id!==id);setInboxCount(next.length);return next;});
       setRecent(p=>[{event_name:item.event_name,event_date:date,source:'Email'},...p]);
       api.get('/api/events').then(setEvents);
-      toastAdd('Added to Hearth Calendar');
+      toastAdd('Added to Kith Calendar');
     }catch(e){toastAdd('Failed to add event','red');}
   };
   const discard=async id=>{
@@ -1560,7 +1507,7 @@ function InboxScreen({toastAdd,events,setEvents,setInboxCount}){
                 </div>
               </div>
               <div style={{borderTop:`1px solid ${A.sep}`,padding:'12px 18px',display:'flex',gap:8,background:'rgba(0,0,0,0.01)'}}>
-                <Btn variant="green" sm onClick={()=>accept(item.id)}>Add to Hearth Calendar</Btn>
+                <Btn variant="green" sm onClick={()=>accept(item.id)}>Add to Kith Calendar</Btn>
                 <Btn variant="ghost" sm onClick={()=>discard(item.id)}>Discard</Btn>
               </div>
             </Card>
@@ -1887,7 +1834,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [weatherLon,setWeatherLon]=useState('-84.388');
   const [weatherDisplay,setWeatherDisplay]=useState('');
   const [geoLoading,setGeoLoading]=useState(false);
-  const [fwdAddress,setFwdAddress]=useState('hearth@mjflanigan.com');
+  const [fwdAddress,setFwdAddress]=useState('');
   useEffect(()=>{
     api.get('/api/settings').then(st=>{
       if(st.weather_lat) setWeatherLat(st.weather_lat);
@@ -2023,7 +1970,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
           <div style={{fontSize:14,color:A.label3,marginBottom:12}}>Get reminders for due chores and upcoming events. Requires HTTPS.</div>
           {/iphone|ipad|ipod/i.test(navigator.userAgent)&&/safari/i.test(navigator.userAgent)&&!/chrome/i.test(navigator.userAgent)&&(
             <div style={{fontSize:13,color:A.amber,background:A.amberFill,padding:'9px 12px',borderRadius:A.rXs,marginBottom:12,lineHeight:1.5}}>
-              Safari on iOS 16.4+ supports Web Push. Add Hearth to your Home Screen first, then enable notifications from the installed app.
+              Safari on iOS 16.4+ supports Web Push. Add Kith to your Home Screen first, then enable notifications from the installed app.
             </div>
           )}
           {pushStatus==='subscribed'?(
@@ -2042,7 +1989,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
       <FormGroup label="Email Forwarding">
         <div style={{padding:'14px 16px'}}>
           <div style={{fontSize:14,color:A.label3,marginBottom:10}}>Forward emails with dates here. They&apos;ll appear in your Inbox for review.</div>
-          <Inp value={fwdAddress} onChange={e=>setFwdAddress(e.target.value)} placeholder="hearth@yourdomain.com"/>
+          <Inp value={fwdAddress} onChange={e=>setFwdAddress(e.target.value)} placeholder="you@yourdomain.com"/>
           <div style={{display:'flex',gap:8,marginTop:8}}>
             <Btn sm onClick={()=>saveSetting('forwarding_address',fwdAddress)}>Save</Btn>
             <Btn sm variant="ghost" onClick={()=>{navigator.clipboard.writeText(fwdAddress);toastAdd('Copied','blue');}}>Copy</Btn>
@@ -2204,7 +2151,7 @@ function ManageMode({onDisplay,events,setEvents,chores,setChores,grocery,setGroc
     <div style={{display:'flex',height:'100vh',overflow:'hidden',background:A.systemBg}}>
       <div style={{width:220,flexShrink:0,background:'#EEECEA',borderRight:'1px solid rgba(0,0,0,0.07)',display:'flex',flexDirection:'column'}}>
         <div style={{padding:'22px 18px 14px'}}>
-          <div style={{fontSize:22,fontWeight:800,letterSpacing:'-.05em',color:A.label1}}>Hearth</div>
+          <div style={{fontSize:22,fontWeight:800,letterSpacing:'-.05em',color:A.label1}}>Kith</div>
           <div style={{fontSize:12,color:A.label5,marginTop:1,letterSpacing:'-.01em'}}>Family Dashboard</div>
         </div>
         <div style={{flex:1,padding:'4px 10px',overflowY:'auto'}}>
@@ -2333,7 +2280,7 @@ function LoginOverlay({onLogin,onKiosk}){
   if(setupNeeded) return wrap(
     <>
       <div style={{textAlign:'center'}}>
-        <div style={{fontSize:28,fontWeight:700,color:A.label1}}>Welcome to Hearth</div>
+        <div style={{fontSize:28,fontWeight:700,color:A.label1}}>Welcome to Kith</div>
         <div style={{fontSize:15,color:A.label3,marginTop:8,maxWidth:280}}>Create an admin PIN to get started.</div>
       </div>
       <PinPad title="Create Admin PIN" onSubmit={submitPin} error={error} loading={loading}/>
@@ -2354,7 +2301,7 @@ function LoginOverlay({onLogin,onKiosk}){
   return wrap(
     <>
       <div style={{textAlign:'center'}}>
-        <div style={{fontSize:28,fontWeight:700,color:A.label1}}>Hearth</div>
+        <div style={{fontSize:28,fontWeight:700,color:A.label1}}>Kith</div>
         <div style={{fontSize:15,color:A.label3,marginTop:6}}>Who&rsquo;s using this?</div>
       </div>
       <div style={{display:'flex',gap:20,flexWrap:'wrap',justifyContent:'center',maxWidth:420}}>
@@ -2404,22 +2351,22 @@ function App(){
   const parseRefreshMs=v=>({'30s':30000,'1min':60000,'5min':300000}[v]||60000);
 
   const handleLogin=(token,member)=>{
-    localStorage.setItem('hearth_token',token);
+    localStorage.setItem('kith_token',token);
     if(member) setCurrentMember(member);
     setAuth(token);
   };
   const handleKiosk=()=>{
-    localStorage.setItem('hearth_kiosk','1');
+    localStorage.setItem('kith_kiosk','1');
     setKiosk(true);
   };
 
   useEffect(()=>{
-    const kioskFlag=localStorage.getItem('hearth_kiosk')==='1';
+    const kioskFlag=localStorage.getItem('kith_kiosk')==='1';
     if(kioskFlag){setKiosk(true);setAuthChecked(true);return;}
-    const token=localStorage.getItem('hearth_token')||'';
+    const token=localStorage.getItem('kith_token')||'';
     if(!token){setAuthChecked(true);return;}
     fetch('/api/auth/me',{headers:{'Authorization':`Bearer ${token}`}})
-      .then(r=>{if(r.ok) setAuth(token); else localStorage.removeItem('hearth_token');})
+      .then(r=>{if(r.ok) setAuth(token); else localStorage.removeItem('kith_token');})
       .catch(()=>{})
       .finally(()=>setAuthChecked(true));
   },[]);
@@ -2500,7 +2447,7 @@ function App(){
   if(loading) return(
     <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',background:A.systemBg,flexDirection:'column',gap:16}}>
       <div style={{width:36,height:36,border:`3px solid ${A.sep}`,borderTop:`3px solid ${A.blue}`,borderRadius:'50%',animation:'spin 0.8s linear infinite'}}/>
-      <div style={{fontSize:15,color:A.label4,fontWeight:500}}>Loading Hearth…</div>
+      <div style={{fontSize:15,color:A.label4,fontWeight:500}}>Loading Kith…</div>
     </div>
   );
 
@@ -2510,6 +2457,3 @@ function App(){
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
-</script>
-</body>
-</html>

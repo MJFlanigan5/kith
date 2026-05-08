@@ -1,5 +1,5 @@
 services:
-  hearth:
+  kith:
     build: .
     ports:
       - "7400:7400"

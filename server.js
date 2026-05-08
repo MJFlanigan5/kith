@@ -16,7 +16,7 @@ fs.mkdirSync(PHOTOS_DIR, { recursive: true });
 app.use('/photos', express.static(PHOTOS_DIR));
 
 app.use(express.json({ limit: '20mb' }));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'dist')));
 
 // ── Auth helpers ──────────────────────────────────────────────────────────────
 
@@ -58,7 +58,10 @@ function requireAdmin(req, res, next) {
     upd.run('vapid_public',  pub);
     upd.run('vapid_private', priv);
   }
-  webpush.setVapidDetails('mailto:hearth@local.home', pub, priv);
+  const vapidContact = process.env.VAPID_CONTACT
+    || db.prepare("SELECT value FROM settings WHERE key='forwarding_address'").get()?.value
+    || 'mailto:kith@local.home';
+  webpush.setVapidDetails(vapidContact.includes('@') && !vapidContact.startsWith('mailto:') ? `mailto:${vapidContact}` : vapidContact, pub, priv);
   app._vapidPublic = pub;
 }
 
@@ -173,7 +176,11 @@ function computeNextDue(recurrence) {
   if (recurrence.startsWith('Daily'))      d.setDate(d.getDate() + 1);
   else if (recurrence.startsWith('Bi-w'))  d.setDate(d.getDate() + 14);
   else if (recurrence.startsWith('Month')) addMonths(d);
-  else                                     d.setDate(d.getDate() + 7); // Weekly
+  else if (recurrence.startsWith('Annual')) d.setFullYear(d.getFullYear() + 1);
+  else if (recurrence.startsWith('Weekday')) {
+    d.setDate(d.getDate() + 1);
+    while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
+  } else d.setDate(d.getDate() + 7); // Weekly
   return localDate(d);
 }
 
@@ -328,11 +335,11 @@ app.get('/api/events', (req, res) => {
 app.post('/api/events', requireAuth, (req, res) => {
   const { title, date, time, end_time, duration, calendar, color, notes, member_id, recurring_rule } = req.body;
   if (!title?.trim() || !date) return res.status(400).json({ error: 'title and date are required' });
-  const calColors = { personal:'#007AFF', work:'#5856D6', family:'#32ADE6', hearth:'#34C759' };
+  const calColors = { personal:'#007AFF', work:'#5856D6', family:'#32ADE6', kith:'#34C759' };
   const col = color || calColors[calendar] || '#34C759';
   const r = db.prepare(
     'INSERT INTO events (title,date,time,end_time,duration,calendar,color,notes,member_id,recurring_rule) VALUES (?,?,?,?,?,?,?,?,?,?)'
-  ).run(title.trim(), date, normalizeTime(time)||'All day', end_time||'', duration||'1h', calendar||'hearth', col, notes||'', member_id||null, recurring_rule||'');
+  ).run(title.trim(), date, normalizeTime(time)||'All day', end_time||'', duration||'1h', calendar||'kith', col, notes||'', member_id||null, recurring_rule||'');
   const seriesId = r.lastInsertRowid;
 
   // Generate recurring occurrences
@@ -355,18 +362,18 @@ app.post('/api/events', requireAuth, (req, res) => {
         while (cur.getDay() === 0 || cur.getDay() === 6) cur.setDate(cur.getDate() + 1);
       } else break;
       if (cur > limit) break;
-      ins2.run(title.trim(), localDate(cur), time||'All day', end_time||'', duration||'1h', calendar||'hearth', col, notes||'', member_id||null, recurring_rule||'', 'manual', seriesId);
+      ins2.run(title.trim(), localDate(cur), normalizeTime(time)||'All day', end_time||'', duration||'1h', calendar||'kith', col, notes||'', member_id||null, recurring_rule||'', 'manual', seriesId);
     }
   }
 
-  res.json({ id: seriesId, title: title.trim(), date, time: time||'All day', end_time: end_time||'', calendar: calendar||'hearth', color: col, member_id: member_id||null, recurring_rule: rule });
+  res.json({ id: seriesId, title: title.trim(), date, time: time||'All day', end_time: end_time||'', calendar: calendar||'kith', color: col, member_id: member_id||null, recurring_rule: rule });
 });
 
 app.put('/api/events/:id', requireAuth, (req, res) => {
   const existing = db.prepare('SELECT * FROM events WHERE id=?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Not found' });
   const { title, date, time, end_time, duration, calendar, color, notes, member_id, recurring_rule } = req.body;
-  const calColors = { personal:'#007AFF', work:'#5856D6', family:'#32ADE6', hearth:'#34C759' };
+  const calColors = { personal:'#007AFF', work:'#5856D6', family:'#32ADE6', kith:'#34C759' };
   const col = color || calColors[calendar] || existing.color;
   db.prepare('UPDATE events SET title=?,date=?,time=?,end_time=?,duration=?,calendar=?,color=?,notes=?,member_id=?,recurring_rule=? WHERE id=?')
     .run(
@@ -525,7 +532,7 @@ app.post('/api/inbox/:id/accept', requireAuth, (req, res) => {
   if (!date) return res.status(400).json({ error: 'Valid date (YYYY-MM-DD) required' });
   const time = item.event_time || 'All day';
   db.prepare('INSERT INTO events (title,date,time,calendar,color,source) VALUES (?,?,?,?,?,?)')
-    .run(item.event_name, date, time, 'hearth', '#34C759', 'email');
+    .run(item.event_name, date, time, 'kith', '#34C759', 'email');
   db.prepare('INSERT INTO recently_added (event_name,event_date,source) VALUES (?,?,?)')
     .run(item.event_name, date, 'Email');
   db.prepare('DELETE FROM inbox WHERE id=?').run(req.params.id);
@@ -590,7 +597,7 @@ app.post('/api/push/unsubscribe', requireAuth, (req, res) => {
 
 app.post('/api/push/test', requireAuth, async (req, res) => {
   const subs = db.prepare('SELECT * FROM push_subscriptions').all();
-  await sendPushToAll({ title: 'Hearth', body: 'Push notifications are working!', tag: 'test' });
+  await sendPushToAll({ title: 'Kith', body: 'Push notifications are working!', tag: 'test' });
   res.json({ ok: true, sent: subs.length });
 });
 
@@ -675,7 +682,7 @@ app.get('/api/news', async (req, res) => {
   const getSetting = key => db.prepare('SELECT value FROM settings WHERE key=?').get(key)?.value;
   const feedUrl = getSetting('news_feed') || 'https://feeds.npr.org/1001/rss.xml';
   try {
-    const xml = await fetch(feedUrl, { headers: { 'User-Agent': 'Hearth/1.0' } }).then(r => r.text());
+    const xml = await fetch(feedUrl, { headers: { 'User-Agent': 'Kith/1.0' } }).then(r => r.text());
     _newsCache = parseRSS(xml);
     _newsCacheAt = Date.now();
     res.json(_newsCache);
@@ -696,7 +703,7 @@ cron.schedule('0 8 * * *', async () => {
   const due = db.prepare("SELECT * FROM chores WHERE status IN ('due','overdue') AND done=0").all();
   if (!due.length) return;
   await sendPushToAll({
-    title: 'Hearth — Chores Due',
+    title: 'Kith — Chores Due',
     body: `${due.length} chore${due.length > 1 ? 's' : ''} need attention: ${due.map(c => c.name).join(', ')}`,
     tag: 'chores',
   });
@@ -829,7 +836,7 @@ async function callClaudeForEvent(subject, body) {
 
 app.post('/api/email/inbound', async (req, res) => {
   const secret = db.prepare('SELECT value FROM settings WHERE key=?').get('email_webhook_secret')?.value;
-  if (secret && req.headers['x-hearth-secret'] !== secret) {
+  if (secret && req.headers['x-kith-secret'] !== secret) {
     return res.status(401).json({ error: 'Invalid secret' });
   }
 
@@ -867,6 +874,6 @@ app.post('/api/email/inbound', async (req, res) => {
 });
 
 // ── SPA fallback ──────────────────────────────────────────────────────────────
-app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'dist', 'index.html')));
 
-app.listen(PORT, () => console.log(`Hearth running → http://localhost:${PORT}`));
+app.listen(PORT, () => console.log(`Kith running → http://localhost:${PORT}`));

@@ -1,5 +1,5 @@
 {
-  "name": "hearth-email-worker",
+  "name": "kith-email-worker",
   "version": "1.0.0",
   "private": true,
   "dependencies": {

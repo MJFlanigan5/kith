@@ -16,18 +16,18 @@ export default {
       ? new TextDecoder().decode(icsAttachment.content)
       : null;
 
-    const res = await fetch(`${env.HEARTH_URL}/api/email/inbound`, {
+    const res = await fetch(`${env.KITH_URL}/api/email/inbound`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Hearth-Secret': env.HEARTH_WEBHOOK_SECRET,
+        'X-Kith-Secret': env.KITH_WEBHOOK_SECRET,
       },
       body: JSON.stringify({ subject, from, body, ics }),
     });
 
     if (!res.ok) {
       const text = await res.text();
-      throw new Error(`Hearth webhook failed ${res.status}: ${text.slice(0, 200)}`);
+      throw new Error(`Kith webhook failed ${res.status}: ${text.slice(0, 200)}`);
     }
   },
 };

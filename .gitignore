@@ -1,4 +1,7 @@
 node_modules/
 data/
+dist/
 *.db
 .env
+transcript_*.json
+metadata_*.json

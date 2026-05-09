@@ -114,7 +114,16 @@ function parseICS(text) {
         }
       }
     }
-    return { title: e.SUMMARY || 'Untitled', date, time, external_id: e.UID || null };
+    let recurrence = 'One-time';
+    if (e.RRULE) {
+      const freq = (e.RRULE.match(/FREQ=(\w+)/) || [])[1];
+      const interval = parseInt((e.RRULE.match(/INTERVAL=(\d+)/) || [])[1] || '1');
+      if (freq === 'DAILY')   recurrence = interval >= 2 ? `Every ${interval} days` : 'Daily';
+      else if (freq === 'WEEKLY')  recurrence = interval >= 2 ? 'Bi-weekly' : 'Weekly';
+      else if (freq === 'MONTHLY') recurrence = interval >= 2 ? `Every ${interval} months` : 'Monthly';
+      else if (freq === 'YEARLY')  recurrence = 'Annually';
+    }
+    return { title: e.SUMMARY || 'Untitled', date, time, recurrence, external_id: e.UID || null };
   }).filter(e => e.date);
 }
 
@@ -871,6 +880,7 @@ app.post('/api/email/inbound', async (req, res) => {
       event_name = ev.title;
       event_date = ev.date;
       event_time = ev.time;
+      recurrence = ev.recurrence || 'One-time';
       confidence = 'high';
     }
   }

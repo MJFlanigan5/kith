@@ -5,3 +5,4 @@ dist/
 .env
 transcript_*.json
 metadata_*.json
+.kith-webhook-secret

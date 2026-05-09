@@ -2327,6 +2327,150 @@ function LoginOverlay({onLogin,onKiosk}){
   );
 }
 
+function SetupWizard({onComplete}){
+  const [step,setStep]=useState(1);
+  const [city,setCity]=useState('');
+  const [cityResult,setCityResult]=useState(null);
+  const [cityBusy,setCityBusy]=useState(false);
+  const [cityErr,setCityErr]=useState('');
+  const [memberName,setMemberName]=useState('');
+  const [memberColor,setMemberColor]=useState('#007AFF');
+  const [addedMembers,setAddedMembers]=useState([]);
+  const [aiProvider,setAiProvider]=useState('gemini');
+  const [aiKey,setAiKey]=useState('');
+  const [saving,setSaving]=useState(false);
+  const COLORS=['#007AFF','#34C759','#FF3B30','#FF9500','#5856D6','#32ADE6','#AF52DE','#FF2D55'];
+
+  const searchCity=async()=>{
+    if(!city.trim()) return;
+    setCityBusy(true);setCityErr('');
+    try{
+      const r=await fetch(`/api/weather/geocode?city=${encodeURIComponent(city)}`).then(r=>r.json());
+      if(r.error){setCityErr('City not found');setCityResult(null);}
+      else setCityResult(r);
+    }catch{setCityErr('Search failed');}
+    finally{setCityBusy(false);}
+  };
+
+  const step1Next=async()=>{
+    if(cityResult) await api.put('/api/settings',{weather_lat:String(cityResult.lat),weather_lon:String(cityResult.lon),weather_city:cityResult.name}).catch(()=>{});
+    setStep(2);
+  };
+
+  const addMember=async()=>{
+    if(!memberName.trim()) return;
+    const r=await api.post('/api/members',{name:memberName.trim(),color:memberColor}).catch(()=>null);
+    if(r?.id) setAddedMembers(p=>[...p,{id:r.id,name:r.name,color:memberColor,initials:r.initials}]);
+    setMemberName('');
+  };
+
+  const step3Next=async()=>{
+    if(aiKey.trim()){
+      await fetch('/api/settings/ai-key',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify({provider:aiProvider,key:aiKey.trim()})}).catch(()=>{});
+    }
+    setStep(4);
+  };
+
+  const finish=async()=>{
+    setSaving(true);
+    await api.put('/api/settings',{wizard_completed:'1'}).catch(()=>{});
+    onComplete();
+  };
+
+  const dots=(
+    <div style={{display:'flex',gap:8,marginBottom:40}}>
+      {[1,2,3,4].map(s=>(
+        <div key={s} style={{width:s===step?24:8,height:8,borderRadius:4,background:s<=step?A.blue:'rgba(0,0,0,0.12)',transition:'all .3s'}}/>
+      ))}
+    </div>
+  );
+
+  const wrap=(title,sub,content,btns)=>(
+    <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:'100vh',background:A.systemBg,padding:24}}>
+      {dots}
+      <div style={{width:'100%',maxWidth:440}}>
+        <div style={{marginBottom:28,textAlign:'center'}}>
+          <h1 style={{fontSize:28,fontWeight:800,letterSpacing:'-.04em',color:A.label1,margin:0}}>{title}</h1>
+          {sub&&<p style={{fontSize:15,color:A.label4,marginTop:8,lineHeight:1.5,margin:'8px 0 0'}}>{sub}</p>}
+        </div>
+        {content}
+        <div style={{display:'flex',gap:12,marginTop:28}}>{btns}</div>
+      </div>
+    </div>
+  );
+
+  if(step===1) return wrap(
+    'Where are you?',
+    'Used for local weather on your dashboard.',
+    <Card style={{padding:20}}>
+      <div style={{display:'flex',gap:8}}>
+        <Inp value={city} onChange={e=>{setCity(e.target.value);setCityResult(null);setCityErr('');}} placeholder="City name" onKeyDown={e=>e.key==='Enter'&&searchCity()}/>
+        <Btn onClick={searchCity} style={{flexShrink:0}}>{cityBusy?'…':'Search'}</Btn>
+      </div>
+      {cityResult&&<div style={{marginTop:12,padding:'10px 14px',background:A.blueFill,borderRadius:A.rXs,fontSize:14,color:A.blue,fontWeight:500}}>{cityResult.name}</div>}
+      {cityErr&&<div style={{marginTop:12,fontSize:14,color:A.red}}>{cityErr}</div>}
+    </Card>,
+    <Btn full onClick={step1Next}>{cityResult?'Use this location':'Skip'}</Btn>
+  );
+
+  if(step===2) return wrap(
+    "Who's in your family?",
+    'Color-code events and track chores by person.',
+    <>
+      <Card style={{padding:20,marginBottom:16}}>
+        <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:14}}>
+          {COLORS.map(c=><button key={c} onClick={()=>setMemberColor(c)} style={{width:30,height:30,borderRadius:'50%',border:`3px solid ${memberColor===c?'#1C1C1E':'transparent'}`,background:c,cursor:'pointer'}}/>)}
+        </div>
+        <div style={{display:'flex',gap:8}}>
+          <Inp value={memberName} onChange={e=>setMemberName(e.target.value)} placeholder="Name (e.g. Emma)" onKeyDown={e=>e.key==='Enter'&&addMember()}/>
+          <Btn onClick={addMember} style={{flexShrink:0}}>Add</Btn>
+        </div>
+      </Card>
+      {addedMembers.length>0&&<Card>{addedMembers.map((m,i)=>(
+        <div key={m.id} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 16px',borderTop:i>0?`1px solid ${A.sep}`:'none'}}>
+          <div style={{width:36,height:36,borderRadius:'50%',background:m.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:700,color:'#fff'}}>{m.initials}</div>
+          <span style={{fontSize:15,fontWeight:500,color:A.label1}}>{m.name}</span>
+        </div>
+      ))}</Card>}
+    </>,
+    <>
+      <Btn variant='ghost' full onClick={()=>setStep(3)}>Skip</Btn>
+      <Btn full onClick={()=>setStep(3)}>Continue</Btn>
+    </>
+  );
+
+  if(step===3) return wrap(
+    'AI email parsing',
+    'Optional — lets Kith extract events from forwarded emails.',
+    <Card style={{padding:20}}>
+      <div style={{marginBottom:12}}>
+        <Sel value={aiProvider} onChange={e=>setAiProvider(e.target.value)}>
+          <option value="gemini">Gemini Flash (Google — recommended)</option>
+          <option value="anthropic">Claude Haiku (Anthropic)</option>
+          <option value="openai">GPT-4o Mini (OpenAI)</option>
+          <option value="groq">Llama 3.1 (Groq — free tier)</option>
+        </Sel>
+      </div>
+      <Inp value={aiKey} onChange={e=>setAiKey(e.target.value)} placeholder="Paste API key" type="password"/>
+    </Card>,
+    <>
+      <Btn variant='ghost' full onClick={()=>setStep(4)}>Skip</Btn>
+      <Btn full onClick={step3Next}>{aiKey.trim()?'Save & continue':'Continue'}</Btn>
+    </>
+  );
+
+  return(
+    <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:'100vh',background:A.systemBg,padding:24,textAlign:'center'}}>
+      <div style={{fontSize:56,marginBottom:8}}>🏡</div>
+      <h1 style={{fontSize:32,fontWeight:800,letterSpacing:'-.04em',color:A.label1,margin:'0 0 8px'}}>Kith is ready</h1>
+      <p style={{fontSize:16,color:A.label4,marginBottom:40,maxWidth:320,lineHeight:1.5}}>Your family dashboard is all set. You can update any of this later in Settings.</p>
+      <Btn onClick={finish} style={{minWidth:200,padding:'14px 32px',fontSize:17}}>
+        {saving?'Loading…':'Enter Kith'}
+      </Btn>
+    </div>
+  );
+}
+
 function App(){
   const [auth,setAuth]=useState('');
   const [kiosk,setKiosk]=useState(false);
@@ -2348,6 +2492,7 @@ function App(){
   const [refreshMs,setRefreshMs]=useState(60000);
   const [weather,setWeather]=useState(null);
   const [loading,setLoading]=useState(true);
+  const [wizardDone,setWizardDone]=useState(null); // null=checking, false=show wizard, true=done
   const parseRefreshMs=v=>({'30s':30000,'1min':60000,'5min':300000}[v]||60000);
 
   const handleLogin=(token,member)=>{
@@ -2371,8 +2516,18 @@ function App(){
       .finally(()=>setAuthChecked(true));
   },[]);
 
+  // Check whether setup wizard has been completed
   useEffect(()=>{
-    if(!authChecked||(!auth&&!kiosk)) return;
+    if(!authChecked) return;
+    if(kiosk){setWizardDone(true);return;}
+    if(!auth) return;
+    api.get('/api/settings').then(s=>{
+      setWizardDone(s.wizard_completed==='1');
+    }).catch(()=>setWizardDone(true));
+  },[authChecked,auth,kiosk]);
+
+  useEffect(()=>{
+    if(!authChecked||(!auth&&!kiosk)||wizardDone!==true) return;
     if('serviceWorker' in navigator){
       navigator.serviceWorker.register('/sw.js').catch(()=>{});
     }
@@ -2407,7 +2562,7 @@ function App(){
       setLoading(false);
     });
     api.get('/api/weather').then(w=>{if(!w.error) setWeather(w);}).catch(()=>{});
-  },[authChecked,auth,kiosk]);
+  },[authChecked,auth,kiosk,wizardDone]);
 
   // Background poll — keeps wall display live
   useEffect(()=>{
@@ -2444,6 +2599,12 @@ function App(){
     </div>
   );
   if(!auth&&!kiosk) return <LoginOverlay onLogin={handleLogin} onKiosk={handleKiosk}/>;
+  if((auth||kiosk)&&wizardDone===null) return(
+    <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',background:A.systemBg}}>
+      <div style={{width:36,height:36,border:`3px solid ${A.sep}`,borderTop:`3px solid ${A.blue}`,borderRadius:'50%',animation:'spin 0.8s linear infinite'}}/>
+    </div>
+  );
+  if(auth&&wizardDone===false) return <SetupWizard onComplete={()=>setWizardDone(true)}/>;
   if(loading) return(
     <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',background:A.systemBg,flexDirection:'column',gap:16}}>
       <div style={{width:36,height:36,border:`3px solid ${A.sep}`,borderTop:`3px solid ${A.blue}`,borderRadius:'50%',animation:'spin 0.8s linear infinite'}}/>

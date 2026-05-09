@@ -602,7 +602,7 @@ app.post('/api/push/test', requireAuth, async (req, res) => {
 });
 
 // ── Routes: Settings ──────────────────────────────────────────────────────────
-const SETTINGS_SENSITIVE = new Set(['email_webhook_secret','anthropic_api_key','jwt_secret','vapid_public','vapid_private','admin_pin_hash','smtp_pass']);
+const SETTINGS_SENSITIVE = new Set(['email_webhook_secret','anthropic_api_key','ai_api_key','jwt_secret','vapid_public','vapid_private','admin_pin_hash','smtp_pass']);
 app.get('/api/settings', (req, res) => {
   const rows = db.prepare('SELECT key,value FROM settings').all();
   res.json(Object.fromEntries(rows.filter(r=>!SETTINGS_SENSITIVE.has(r.key)).map(r=>[r.key,r.value])));
@@ -616,6 +616,14 @@ app.put('/api/settings', requireAdmin, (req, res) => {
   if ('weather_lat' in req.body || 'weather_lon' in req.body || 'temperature_unit' in req.body) _weatherCache = null;
   if ('news_feed' in req.body) { _newsCache = null; _newsCacheAt = 0; }
   if ('sports_leagues' in req.body) { for (const k of Object.keys(_sportsCache)) delete _sportsCache[k]; }
+  res.json({ ok: true });
+});
+
+app.put('/api/settings/ai-key', requireAdmin, (req, res) => {
+  const { provider, key } = req.body;
+  const upd = db.prepare('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)');
+  if (provider) upd.run('ai_provider', String(provider));
+  if (key !== undefined) upd.run('ai_api_key', String(key));
   res.json({ ok: true });
 });
 
@@ -809,29 +817,42 @@ app.delete('/api/photos/:id', requireAuth, (req, res) => {
 
 // ── Routes: Email inbound (Cloudflare Email Worker webhook) ───────────────────
 
-async function callClaudeForEvent(subject, body) {
-  const apiKey = db.prepare('SELECT value FROM settings WHERE key=?').get('anthropic_api_key')?.value
-    || process.env.ANTHROPIC_API_KEY || '';
+async function callAiForEvent(subject, body) {
+  const getSetting = k => db.prepare('SELECT value FROM settings WHERE key=?').get(k)?.value || '';
+  const provider = getSetting('ai_provider') || 'anthropic';
+  const apiKey = getSetting('ai_api_key') || getSetting('anthropic_api_key') || process.env.ANTHROPIC_API_KEY || '';
   if (!apiKey) return null;
 
-  const resp = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 200,
-      messages: [{
-        role: 'user',
-        content: `Extract calendar event details from this email. Return JSON only, no other text.\n\nSubject: ${subject}\nBody: ${body.slice(0, 2000)}\n\nReturn: {"event_name":"...","event_date":"YYYY-MM-DD or description","event_time":"H:MM AM/PM or All day","recurrence":"One-time|Weekly|Monthly|etc","confidence":"high|medium|low"}\nIf no event is found return {"event_name":"","confidence":"low"}`,
-      }],
-    }),
-  });
-  const data = await resp.json();
-  try { return JSON.parse(data.content[0].text); } catch { return null; }
+  const prompt = `Extract calendar event details from this email. Return JSON only, no other text.\n\nSubject: ${subject}\nBody: ${body.slice(0, 2000)}\n\nReturn: {"event_name":"...","event_date":"YYYY-MM-DD or description","event_time":"H:MM AM/PM or All day","recurrence":"One-time|Weekly|Monthly|etc","confidence":"high|medium|low"}\nIf no event is found return {"event_name":"","confidence":"low"}`;
+
+  try {
+    let text;
+    if (provider === 'gemini') {
+      const data = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json' } }),
+      }).then(r => r.json());
+      text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    } else if (provider === 'openai' || provider === 'groq') {
+      const baseUrl = provider === 'groq' ? 'https://api.groq.com/openai/v1' : 'https://api.openai.com/v1';
+      const model = provider === 'groq' ? 'llama-3.1-8b-instant' : 'gpt-4o-mini';
+      const data = await fetch(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body: JSON.stringify({ model, max_tokens: 200, messages: [{ role: 'user', content: prompt }] }),
+      }).then(r => r.json());
+      text = data.choices?.[0]?.message?.content;
+    } else {
+      const data = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 200, messages: [{ role: 'user', content: prompt }] }),
+      }).then(r => r.json());
+      text = data.content?.[0]?.text;
+    }
+    return text ? JSON.parse(text) : null;
+  } catch { return null; }
 }
 
 app.post('/api/email/inbound', async (req, res) => {
@@ -855,7 +876,7 @@ app.post('/api/email/inbound', async (req, res) => {
   }
 
   if (!event_name) {
-    const result = await callClaudeForEvent(subject || '', body || '').catch(() => null);
+    const result = await callAiForEvent(subject || '', body || '').catch(() => null);
     if (result?.event_name) {
       event_name = result.event_name;
       event_date = result.event_date || '';

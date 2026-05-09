@@ -141,6 +141,20 @@ const _fwd = db.prepare("SELECT value FROM settings WHERE key='forwarding_addres
 if (_fwd?.value === 'hearth@local.home' || _fwd?.value === 'hearth@mjflanigan.com') {
   db.prepare("UPDATE settings SET value='' WHERE key='forwarding_address'").run();
 }
+// Migrate from anthropic_api_key to ai_api_key
+const _oldKey = db.prepare("SELECT value FROM settings WHERE key='anthropic_api_key'").get();
+const _newKey = db.prepare("SELECT value FROM settings WHERE key='ai_api_key'").get();
+if (_oldKey?.value && !_newKey) {
+  db.prepare("INSERT INTO settings (key,value) VALUES (?,?)").run('ai_api_key', _oldKey.value);
+  db.prepare("INSERT INTO settings (key,value) VALUES (?,?)").run('ai_provider', 'anthropic');
+}
+// Mark wizard complete if app has existing data (upgrade scenario — skip wizard for returning users)
+const _wiz = db.prepare("SELECT value FROM settings WHERE key='wizard_completed'").get();
+if (!_wiz) {
+  const _hasMembers = db.prepare('SELECT COUNT(*) as c FROM family_members').get().c > 0;
+  const _hasCity = (db.prepare("SELECT value FROM settings WHERE key='weather_city'").get()?.value || '').length > 0;
+  if (_hasMembers || _hasCity) db.prepare("INSERT INTO settings (key,value) VALUES (?,?)").run('wizard_completed','1');
+}
 
 // ── Seed data removed — app starts empty for real use ────────────────────────
 // Meals table needs rows to exist for the meal planner (one row per day, blank)
@@ -155,6 +169,8 @@ const defaults = {
   forwarding_address: '',
   email_webhook_secret: require('crypto').randomBytes(24).toString('hex'),
   anthropic_api_key: '',
+  ai_provider: 'gemini',
+  ai_api_key: '',
   weather_lat: '33.8533', weather_lon: '-84.2201', weather_city: '',
   sports_leagues: 'nba,nfl,mlb,nhl',
   news_feed: 'https://feeds.npr.org/1001/rss.xml',

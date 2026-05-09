@@ -409,7 +409,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
     try{
       const result=await api.put(`/api/chores/${id}/done`);
       if(result.error) return;
-      setChores(p=>p.map(c=>c.id===id?{...c,done:result.done,next_due:result.next_due}:c));
+      setChores(p=>p.map(c=>c.id===id?{...c,done:result.done,next_due:result.next_due,status:result.status}:c));
     }catch(e){}
   };
 
@@ -1438,12 +1438,12 @@ function InboxScreen({toastAdd,events,setEvents,setInboxCount}){
 
   const accept=async id=>{
     const item=pending.find(i=>i.id===id);
-    const date=editDates[id]??item.event_date;
+    const isoDate=editDates[id]??(item.event_date?.match(/^\d{4}-\d{2}-\d{2}$/)?item.event_date:localDate());
     try{
-      const result=await api.post(`/api/inbox/${id}/accept`,{date});
+      const result=await api.post(`/api/inbox/${id}/accept`,{date:isoDate});
       if(result.error){toastAdd(result.error,'red');return;}
       setPending(p=>{const next=p.filter(i=>i.id!==id);setInboxCount(next.length);return next;});
-      setRecent(p=>[{event_name:item.event_name,event_date:date,source:'Email'},...p]);
+      setRecent(p=>[{event_name:item.event_name,event_date:isoDate,source:'Email'},...p]);
       api.get('/api/events').then(setEvents);
       toastAdd('Added to Kith Calendar');
     }catch(e){toastAdd('Failed to add event','red');}

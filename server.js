@@ -434,7 +434,7 @@ app.get('/api/chores/leaderboard', (req, res) => {
     LEFT JOIN family_members fm ON fm.id = cc.member_id
     WHERE date(cc.completed_at) >= date(?)
     GROUP BY cc.member_id ORDER BY points DESC
-  `).all(weekStart.toISOString().split('T')[0]);
+  `).all(localDate(weekStart));
   res.json(rows);
 });
 
@@ -479,7 +479,8 @@ app.put('/api/chores/:id/done', requireAuth, (req, res) => {
     }
   }
   updateChoreStatuses();
-  res.json({ done, next_due: nextDue, points_earned: done ? (c.points || 1) : 0 });
+  const newStatus = db.prepare('SELECT status FROM chores WHERE id=?').get(c.id)?.status || 'upcoming';
+  res.json({ done, next_due: nextDue, status: newStatus, points_earned: done ? (c.points || 1) : 0 });
 });
 
 app.delete('/api/chores/:id', requireAdmin, (req, res) => {

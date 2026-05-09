@@ -4,6 +4,6 @@ compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 
 [vars]
-KITH_URL = "https://your-kith-server.com"
+KITH_URL = "https://kith.mjflanigan.com"
 
 # Set via: wrangler secret put KITH_WEBHOOK_SECRET

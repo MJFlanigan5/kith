@@ -628,6 +628,13 @@ app.put('/api/settings', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
+app.put('/api/settings/webhook-secret', requireAdmin, (req, res) => {
+  const { secret } = req.body;
+  if (!secret) return res.status(400).json({ error: 'secret required' });
+  db.prepare('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)').run('email_webhook_secret', String(secret));
+  res.json({ ok: true });
+});
+
 app.put('/api/settings/ai-key', requireAdmin, (req, res) => {
   const { provider, key } = req.body;
   const upd = db.prepare('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)');

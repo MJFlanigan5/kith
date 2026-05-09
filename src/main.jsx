@@ -1835,6 +1835,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [weatherDisplay,setWeatherDisplay]=useState('');
   const [geoLoading,setGeoLoading]=useState(false);
   const [fwdAddress,setFwdAddress]=useState('');
+  const [webhookSecret,setWebhookSecret]=useState('');
   useEffect(()=>{
     api.get('/api/settings').then(st=>{
       if(st.weather_lat) setWeatherLat(st.weather_lat);
@@ -1995,6 +1996,18 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
             <Btn sm variant="ghost" onClick={()=>{navigator.clipboard.writeText(fwdAddress);toastAdd('Copied','blue');}}>Copy</Btn>
           </div>
           <div style={{fontSize:12,color:A.label5,marginTop:8}}>Changing this address requires updating your email routing rules.</div>
+          <div style={{borderTop:`1px solid ${A.sep}`,marginTop:14,paddingTop:14}}>
+            <div style={{fontSize:14,color:A.label3,marginBottom:8}}>Webhook secret — must match the secret set in your Cloudflare Worker.</div>
+            <Inp value={webhookSecret} onChange={e=>setWebhookSecret(e.target.value)} placeholder="Paste webhook secret" type="password"/>
+            <div style={{marginTop:8}}>
+              <Btn sm onClick={async()=>{
+                if(!webhookSecret.trim()) return;
+                await fetch('/api/settings/webhook-secret',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify({secret:webhookSecret.trim()})});
+                setWebhookSecret('');
+                toastAdd('Webhook secret saved');
+              }}>Save secret</Btn>
+            </div>
+          </div>
         </div>
       </FormGroup>
 

@@ -1,12 +1,13 @@
 'use strict';
-const express = require('express');
-const path    = require('path');
-const fs      = require('fs');
-const cron    = require('node-cron');
-const webpush = require('web-push');
-const db      = require('./db');
-const jwt     = require('jsonwebtoken');
-const bcrypt  = require('bcryptjs');
+const express    = require('express');
+const path       = require('path');
+const fs         = require('fs');
+const cron       = require('node-cron');
+const webpush    = require('web-push');
+const db         = require('./db');
+const jwt        = require('jsonwebtoken');
+const bcrypt     = require('bcryptjs');
+const pdfParse   = require('pdf-parse');
 
 const app  = express();
 const PORT = process.env.PORT || 7400;
@@ -554,6 +555,42 @@ app.delete('/api/inbox/:id', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
+app.post('/api/inbox/upload', requireAuth, async (req, res) => {
+  const { filename = '', data } = req.body || {};
+  if (!data || typeof data !== 'string') return res.status(400).json({ error: 'data required' });
+
+  const isPdf = filename.toLowerCase().endsWith('.pdf') || data.startsWith('data:application/pdf');
+  const isImage = /^data:image\//.test(data);
+  if (!isPdf && !isImage) return res.status(400).json({ error: 'only images and PDFs are supported' });
+
+  try {
+    let events = [];
+    const base64 = data.includes(',') ? data.split(',')[1] : data;
+
+    if (isPdf) {
+      const buf = Buffer.from(base64, 'base64');
+      const pdf = await pdfParse(buf);
+      const text = pdf.text.slice(0, 4000);
+      const result = await callAiForEvent(filename, text);
+      if (result?.event_name) events = [result];
+    } else {
+      const mimeType = data.split(';')[0].replace('data:', '') || 'image/jpeg';
+      events = await callAiWithMedia(base64, mimeType);
+    }
+
+    const insert = db.prepare('INSERT INTO inbox (subject,event_name,event_date,event_time,recurrence,confidence) VALUES (?,?,?,?,?,?)');
+    let count = 0;
+    for (const ev of events) {
+      if (!ev.event_name) continue;
+      insert.run(filename || 'Uploaded file', ev.event_name, ev.event_date || '', ev.event_time || 'All day', ev.recurrence || 'One-time', ev.confidence || 'medium');
+      count++;
+    }
+    res.json({ ok: true, count });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── Routes: ICS ───────────────────────────────────────────────────────────────
 app.get('/api/ics/sources', (req, res) => {
   res.json(db.prepare('SELECT * FROM ics_sources ORDER BY created_at').all());
@@ -612,7 +649,7 @@ app.post('/api/push/test', requireAuth, async (req, res) => {
 });
 
 // ── Routes: Settings ──────────────────────────────────────────────────────────
-const SETTINGS_SENSITIVE = new Set(['email_webhook_secret','anthropic_api_key','ai_api_key','jwt_secret','vapid_public','vapid_private','admin_pin_hash','smtp_pass']);
+const SETTINGS_SENSITIVE = new Set(['email_webhook_secret','anthropic_api_key','ai_api_key','jwt_secret','vapid_public','vapid_private','admin_pin_hash','resend_api_key']);
 app.get('/api/settings', (req, res) => {
   const rows = db.prepare('SELECT key,value FROM settings').all();
   res.json(Object.fromEntries(rows.filter(r=>!SETTINGS_SENSITIVE.has(r.key)).map(r=>[r.key,r.value])));
@@ -641,6 +678,19 @@ app.put('/api/settings/ai-key', requireAdmin, (req, res) => {
   const upd = db.prepare('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)');
   if (provider) upd.run('ai_provider', String(provider));
   if (key !== undefined) upd.run('ai_api_key', String(key));
+  res.json({ ok: true });
+});
+
+app.put('/api/settings/email', requireAdmin, (req, res) => {
+  const { resend_api_key, resend_from, email_to, daily_summary_time, kith_url, weekly_digest_enabled, daily_summary_enabled } = req.body;
+  const upd = db.prepare('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)');
+  if (resend_api_key)       upd.run('resend_api_key',      String(resend_api_key));
+  if (resend_from  !== undefined) upd.run('resend_from',   String(resend_from));
+  if (email_to     !== undefined) upd.run('email_to',      String(email_to));
+  if (daily_summary_time !== undefined) upd.run('daily_summary_time', String(daily_summary_time));
+  if (kith_url     !== undefined) upd.run('kith_url',      String(kith_url));
+  if (weekly_digest_enabled !== undefined) upd.run('weekly_digest_enabled', weekly_digest_enabled ? '1' : '0');
+  if (daily_summary_enabled !== undefined) upd.run('daily_summary_enabled', daily_summary_enabled ? '1' : '0');
   res.json({ ok: true });
 });
 
@@ -872,6 +922,34 @@ async function callAiForEvent(subject, body) {
   } catch { return null; }
 }
 
+async function callAiWithMedia(imageBase64, mimeType) {
+  const getSetting = k => db.prepare('SELECT value FROM settings WHERE key=?').get(k)?.value || '';
+  const provider = getSetting('ai_provider') || 'anthropic';
+  const apiKey = getSetting('ai_api_key') || getSetting('anthropic_api_key') || process.env.ANTHROPIC_API_KEY || '';
+  if (!apiKey) return [];
+  const prompt = 'Extract all calendar events from this image or document. Return JSON only, no other text.\nReturn: {"events":[{"event_name":"...","event_date":"YYYY-MM-DD or natural language","event_time":"H:MM AM/PM or All day","recurrence":"One-time|Weekly|Monthly|etc","confidence":"high|medium|low"}]}\nReturn {"events":[]} if no events found.';
+  try {
+    let text;
+    if (provider === 'gemini') {
+      const data = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ inlineData: { mimeType, data: imageBase64 } }, { text: prompt }] }], generationConfig: { responseMimeType: 'application/json' } }),
+      }).then(r => r.json());
+      text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    } else {
+      const data = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 800, messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: mimeType, data: imageBase64 } }, { type: 'text', text: prompt }] }] }),
+      }).then(r => r.json());
+      text = data.content?.[0]?.text;
+    }
+    const parsed = text ? JSON.parse(text) : null;
+    return Array.isArray(parsed?.events) ? parsed.events : [];
+  } catch { return []; }
+}
+
 app.post('/api/email/inbound', async (req, res) => {
   const secret = db.prepare('SELECT value FROM settings WHERE key=?').get('email_webhook_secret')?.value;
   if (secret && req.headers['x-kith-secret'] !== secret) {
@@ -910,6 +988,196 @@ app.post('/api/email/inbound', async (req, res) => {
     .run(subject || '', event_name, event_date, event_time, recurrence, confidence);
 
   res.json({ ok: true });
+});
+
+// ── Email reminders ───────────────────────────────────────────────────────────
+
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+async function sendEmail(subject, html, text) {
+  const g = k => db.prepare('SELECT value FROM settings WHERE key=?').get(k)?.value || '';
+  const apiKey = g('resend_api_key');
+  const from   = g('resend_from');
+  const to     = g('email_to');
+  if (!apiKey) throw new Error('Resend API key not set — add it in Settings → Email Reminders');
+  if (!from)   throw new Error('From address not set — add it in Settings → Email Reminders');
+  if (!to)     throw new Error('Recipient address not set — add it in Settings → Email Reminders');
+  const payload = { from, to, subject, html };
+  if (text) payload.text = text;
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || `Resend error ${res.status}`);
+  }
+}
+
+function getOrCreateUnsubToken() {
+  let token = db.prepare("SELECT value FROM settings WHERE key='email_unsubscribe_token'").get()?.value;
+  if (!token) {
+    token = require('crypto').randomBytes(20).toString('hex');
+    db.prepare("INSERT INTO settings (key,value) VALUES ('email_unsubscribe_token',?)").run(token);
+  }
+  return token;
+}
+
+function emailBase(title, subtitle, body, unsubUrl) {
+  const ft = unsubUrl
+    ? `Kith — your self-hosted family dashboard &nbsp;·&nbsp; <a href="${unsubUrl}" style="color:#8E8E93;text-decoration:underline">Unsubscribe</a>`
+    : `Kith — your self-hosted family dashboard`;
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f7;margin:0;padding:24px}
+    .wrap{max-width:560px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08)}
+    .hd{background:#1C1C1E;padding:24px 28px}
+    .hd h1{color:#fff;margin:0;font-size:22px;font-weight:700;letter-spacing:-.03em}
+    .hd p{color:rgba(255,255,255,.55);margin:4px 0 0;font-size:13px}
+    .bd{padding:24px 28px}
+    .day{font-size:11px;font-weight:700;color:#8E8E93;text-transform:uppercase;letter-spacing:.06em;margin:20px 0 8px}
+    .day:first-child{margin-top:0}
+    .ev{display:flex;align-items:center;gap:10px;padding:10px 14px;background:#F2F2F7;border-radius:10px;margin-bottom:6px}
+    .ev-dot{width:8px;height:8px;border-radius:50%;background:#007AFF;flex-shrink:0}
+    .ev-name{font-size:14px;font-weight:600;color:#1C1C1E}
+    .ev-time{font-size:12px;color:#8E8E93;margin-left:auto}
+    .chore{padding:8px 14px;border-bottom:1px solid #F2F2F7;font-size:13px;color:#3C3C43;display:flex;gap:8px;align-items:center}
+    .chore:last-child{border-bottom:none}
+    .chore-pts{font-size:11px;color:#FF9500;margin-left:auto}
+    .empty{font-size:14px;color:#8E8E93;font-style:italic;padding:10px 0}
+    .ft{padding:16px 28px;background:#F2F2F7;font-size:11px;color:#8E8E93;text-align:center}
+  </style></head><body>
+  <div class="wrap">
+    <div class="hd"><h1>${title}</h1><p>${subtitle}</p></div>
+    <div class="bd">${body}</div>
+    <div class="ft">${ft}</div>
+  </div></body></html>`;
+}
+
+app.post('/api/email/test', requireAdmin, async (req, res) => {
+  try {
+    await sendEmail(
+      'Kith — Test Email',
+      emailBase('Email is working!', new Date().toDateString(), '<p style="font-size:15px;color:#1C1C1E">Your Kith email reminders are configured correctly.</p>'),
+      'Kith — Test Email\n\nYour Kith email reminders are configured correctly.'
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/email/unsubscribe', (req, res) => {
+  const stored = db.prepare("SELECT value FROM settings WHERE key='email_unsubscribe_token'").get()?.value;
+  if (!stored || req.query.t !== stored) {
+    return res.status(400).send('<html><body style="font-family:sans-serif;padding:40px;text-align:center"><h2>Invalid link</h2><p>This unsubscribe link is not valid.</p></body></html>');
+  }
+  const upd = db.prepare('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)');
+  upd.run('daily_summary_enabled', '0');
+  upd.run('weekly_digest_enabled', '0');
+  res.send('<html><body style="font-family:-apple-system,sans-serif;padding:48px 24px;text-align:center;background:#f5f5f7"><div style="max-width:400px;margin:0 auto;background:#fff;border-radius:16px;padding:36px;box-shadow:0 2px 12px rgba(0,0,0,.08)"><h2 style="margin:0 0 12px;font-size:22px">Unsubscribed</h2><p style="color:#666;margin:0 0 20px">You will no longer receive email reminders from Kith.</p><p style="color:#999;font-size:13px">You can re-enable them any time in Settings → Email Reminders.</p></div></body></html>');
+});
+
+// Daily summary — configurable time, fires every minute and checks
+let _dailySummarySentDate = '';
+cron.schedule('* * * * *', async () => {
+  const g = k => db.prepare('SELECT value FROM settings WHERE key=?').get(k)?.value || '';
+  if (g('daily_summary_enabled') !== '1') return;
+
+  const configTime = g('daily_summary_time') || '07:00';
+  const now = new Date();
+  const nowHHMM = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  const today = localDate(now);
+  if (nowHHMM !== configTime || _dailySummarySentDate === today) return;
+  _dailySummarySentDate = today;
+
+  const events = db.prepare("SELECT * FROM events WHERE date=? ORDER BY time").all(today);
+  const chores = db.prepare("SELECT * FROM chores WHERE status IN ('due','overdue') AND done=0").all();
+  const meal   = db.prepare("SELECT meal FROM meals WHERE day=?").get(today)?.meal || '';
+
+  if (!events.length && !chores.length && !meal) return;
+
+  const dow = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][now.getDay()];
+  const dateLabel = now.toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric' });
+
+  let html = '', text = `Kith — ${dow}, ${dateLabel}\n\n`;
+
+  html += `<div class="day">Today's Events</div>`;
+  text += `TODAY'S EVENTS\n`;
+  if (events.length) {
+    html += events.map(e => `<div class="ev"><div class="ev-dot"></div><div class="ev-name">${esc(e.title)}</div><div class="ev-time">${esc(e.time||'')}</div></div>`).join('');
+    text += events.map(e => `• ${e.title}${e.time && e.time !== 'All day' ? ' — ' + e.time : ''}`).join('\n') + '\n';
+  } else {
+    html += `<div class="empty">Nothing scheduled today</div>`;
+    text += 'Nothing scheduled today\n';
+  }
+
+  if (chores.length) {
+    html += `<div class="day">Chores Due</div><div style="background:#F2F2F7;border-radius:10px;overflow:hidden">`;
+    html += chores.map(c => `<div class="chore">☐ ${esc(c.name)}<span class="chore-pts">${esc(c.points)}★</span></div>`).join('');
+    html += `</div>`;
+    text += `\nCHORES DUE\n${chores.map(c => `• ${c.name}`).join('\n')}\n`;
+  }
+
+  if (meal) {
+    html += `<div class="day">Today's Meal</div><div class="ev"><div class="ev-name">${esc(meal)}</div></div>`;
+    text += `\nTODAY'S MEAL\n${meal}\n`;
+  }
+
+  const unsubToken = getOrCreateUnsubToken();
+  const kithUrl = g('kith_url');
+  const unsubUrl = kithUrl ? `${kithUrl.replace(/\/$/, '')}/api/email/unsubscribe?t=${unsubToken}` : null;
+  if (unsubUrl) text += `\nUnsubscribe: ${unsubUrl}`;
+
+  try {
+    await sendEmail(`Kith — ${dow}, ${dateLabel}`, emailBase(`${dow}, ${dateLabel}`, 'Your daily summary', html, unsubUrl), text);
+  } catch (e) {
+    console.error('[email] daily summary failed:', e.message);
+  }
+});
+
+// Weekly digest — Sunday at 6pm (only if there's something to report)
+cron.schedule('0 18 * * 0', async () => {
+  const g = k => db.prepare('SELECT value FROM settings WHERE key=?').get(k)?.value || '';
+  if (g('weekly_digest_enabled') !== '1') return;
+
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(); d.setDate(d.getDate() + i);
+    return { iso: localDate(d), label: d.toLocaleDateString('en-US', { weekday:'long', month:'short', day:'numeric' }) };
+  });
+
+  let html = '', text = 'YOUR WEEK AHEAD\n\n';
+  let hasAny = false;
+  for (const { iso, label } of days) {
+    const evs = db.prepare("SELECT * FROM events WHERE date=? ORDER BY time").all(iso);
+    if (!evs.length) continue;
+    hasAny = true;
+    html += `<div class="day">${label}</div>`;
+    html += evs.map(e => `<div class="ev"><div class="ev-dot"></div><div class="ev-name">${esc(e.title)}</div><div class="ev-time">${esc(e.time||'')}</div></div>`).join('');
+    text += `${label.toUpperCase()}\n${evs.map(e => `• ${e.title}${e.time && e.time !== 'All day' ? ' — ' + e.time : ''}`).join('\n')}\n\n`;
+  }
+
+  const chores = db.prepare("SELECT * FROM chores WHERE enabled=1 AND done=0").all();
+  if (!hasAny && !chores.length) return;
+
+  if (chores.length) {
+    html += `<div class="day">Recurring Chores This Week</div><div style="background:#F2F2F7;border-radius:10px;overflow:hidden">`;
+    html += chores.slice(0, 8).map(c => `<div class="chore">☐ ${esc(c.name)}<span class="chore-pts">${esc(c.points)}★</span></div>`).join('');
+    html += `</div>`;
+    text += `CHORES\n${chores.slice(0, 8).map(c => `• ${c.name}`).join('\n')}\n`;
+  }
+
+  const unsubToken = getOrCreateUnsubToken();
+  const kithUrl = g('kith_url');
+  const unsubUrl = kithUrl ? `${kithUrl.replace(/\/$/, '')}/api/email/unsubscribe?t=${unsubToken}` : null;
+  if (unsubUrl) text += `\nUnsubscribe: ${unsubUrl}`;
+
+  const range = `${days[0].label} – ${days[6].label}`;
+  try {
+    await sendEmail(`Kith — Week of ${days[0].label}`, emailBase('Your Week Ahead', range, html, unsubUrl), text);
+  } catch (e) {
+    console.error('[email] weekly digest failed:', e.message);
+  }
 });
 
 // ── SPA fallback ──────────────────────────────────────────────────────────────

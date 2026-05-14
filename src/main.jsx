@@ -1418,6 +1418,40 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
   );
 }
 
+/* ── Upload Card (Magic Import) ──────────────────────────────────────── */
+function UploadCard({toastAdd,onUploaded}){
+  const [loading,setLoading]=useState(false);
+  const inputRef=useRef(null);
+
+  const handle=async e=>{
+    const file=e.target.files?.[0];
+    if(!file)return;
+    e.target.value='';
+    const isPdf=file.type==='application/pdf'||file.name.toLowerCase().endsWith('.pdf');
+    const isImage=file.type.startsWith('image/');
+    if(!isPdf&&!isImage){toastAdd('Only images and PDFs are supported','red');return;}
+    setLoading(true);
+    try{
+      const data=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(file);});
+      const result=await api.post('/api/inbox/upload',{filename:file.name,data});
+      if(result.error){toastAdd(result.error,'red');}
+      else if(result.count===0){toastAdd('No events found in this file','blue');}
+      else{toastAdd(`${result.count} event${result.count>1?'s':''} added to inbox`);onUploaded();}
+    }catch(err){toastAdd('Upload failed','red');}
+    finally{setLoading(false);}
+  };
+
+  return(
+    <Card style={{padding:'16px 18px',marginBottom:24}}>
+      <div style={{fontSize:14,color:A.label3,marginBottom:10}}>Import a photo or PDF of an event, flyer, or schedule:</div>
+      <input ref={inputRef} type="file" accept="image/*,.pdf" style={{display:'none'}} onChange={handle}/>
+      <Btn sm onClick={()=>inputRef.current?.click()} disabled={loading}>
+        {loading?'Parsing…':'+ Upload Image or PDF'}
+      </Btn>
+    </Card>
+  );
+}
+
 /* ── Inbox ───────────────────────────────────────────────────────────── */
 const isValidDate=d=>/^\d{4}-\d{2}-\d{2}$/.test(d);
 
@@ -1522,6 +1556,8 @@ function InboxScreen({toastAdd,events,setEvents,setInboxCount}){
           <button onClick={()=>{navigator.clipboard.writeText(fwdAddress);toastAdd('Copied','blue');}} style={{background:'rgba(255,255,255,0.1)',border:'none',color:'rgba(255,255,255,0.7)',borderRadius:6,padding:'5px 12px',fontSize:12,cursor:'pointer'}}>Copy</button>
         </div>
       </Card>
+
+      <UploadCard toastAdd={toastAdd} onUploaded={()=>api.get('/api/inbox').then(d=>{setPending(d.pending);setRecent(d.recent);setInboxCount(d.pending.length);})}/>
 
       <div style={{fontSize:12,fontWeight:600,color:A.label4,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:8}}>Recently Added</div>
       <Card>
@@ -1836,6 +1872,14 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [geoLoading,setGeoLoading]=useState(false);
   const [fwdAddress,setFwdAddress]=useState('');
   const [webhookSecret,setWebhookSecret]=useState('');
+  const [resendKey,setResendKey]=useState('');
+  const [resendFrom,setResendFrom]=useState('');
+  const [emailTo,setEmailTo]=useState('');
+  const [summaryTime,setSummaryTime]=useState('07:00');
+  const [kithUrl,setKithUrl]=useState('');
+  const [weeklyDigest,setWeeklyDigest]=useState(false);
+  const [dailySummary,setDailySummary]=useState(false);
+  const [emailTestLoading,setEmailTestLoading]=useState(false);
   useEffect(()=>{
     api.get('/api/settings').then(st=>{
       if(st.weather_lat) setWeatherLat(st.weather_lat);
@@ -1844,6 +1888,12 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
       if(st.forwarding_address) setFwdAddress(st.forwarding_address);
       if(st.temperature_unit) setTemp(st.temperature_unit==='C'?'°C':'°F');
       if(st.refresh_interval) setRefresh(st.refresh_interval);
+      if(st.resend_from) setResendFrom(st.resend_from);
+      if(st.email_to) setEmailTo(st.email_to);
+      if(st.daily_summary_time) setSummaryTime(st.daily_summary_time);
+      if(st.kith_url) setKithUrl(st.kith_url);
+      if(st.weekly_digest_enabled) setWeeklyDigest(st.weekly_digest_enabled==='1');
+      if(st.daily_summary_enabled) setDailySummary(st.daily_summary_enabled==='1');
     }).catch(()=>{});
   },[]);
   const geocodeCity=async()=>{
@@ -2007,6 +2057,57 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
                 toastAdd('Webhook secret saved');
               }}>Save secret</Btn>
             </div>
+          </div>
+        </div>
+      </FormGroup>
+
+      <FormGroup label="Email Reminders">
+        <div style={{padding:'14px 16px'}}>
+          <div style={{fontSize:14,color:A.label3,marginBottom:14}}>Powered by <a href="https://resend.com" target="_blank" rel="noopener noreferrer" style={{color:A.blue}}>Resend</a>. Get a free API key at resend.com, verify your sending domain, then paste it below.</div>
+          <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:14}}>
+            <Inp value={resendKey} onChange={e=>setResendKey(e.target.value)} placeholder="Resend API key (re_…)" type="password"/>
+            <Inp value={resendFrom} onChange={e=>setResendFrom(e.target.value)} placeholder="From address (e.g. kith@yourdomain.com)"/>
+            <Inp value={emailTo} onChange={e=>setEmailTo(e.target.value)} placeholder="Send reminders to (email address)"/>
+            <Inp value={kithUrl} onChange={e=>setKithUrl(e.target.value)} placeholder="App URL for unsubscribe link (e.g. https://kith.yourdomain.com)"/>
+          </div>
+          <div style={{display:'flex',flexDirection:'column',gap:0,background:A.systemBg,borderRadius:A.rSm,marginBottom:14,overflow:'hidden'}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 14px'}}>
+              <div>
+                <div style={{fontSize:14,color:A.label1,fontWeight:500}}>Daily summary</div>
+                <div style={{fontSize:12,color:A.label4}}>Today's events + chores at 7am</div>
+              </div>
+              <div style={{display:'flex',alignItems:'center',gap:8}}>
+                <input type="time" value={summaryTime} onChange={e=>setSummaryTime(e.target.value)} style={{background:'var(--input-bg,#F2F2F7)',border:'none',borderRadius:6,padding:'4px 8px',fontSize:13,color:'inherit',cursor:'pointer'}}/>
+                <SegControl value={dailySummary?'On':'Off'} onChange={v=>{const on=v==='On';setDailySummary(on);fetch('/api/settings/email',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify({daily_summary_enabled:on})});}} options={['Off','On']}/>
+              </div>
+            </div>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 14px',borderTop:`1px solid ${A.sep}`}}>
+              <div>
+                <div style={{fontSize:14,color:A.label1,fontWeight:500}}>Weekly digest</div>
+                <div style={{fontSize:12,color:A.label4}}>Week ahead every Sunday at 6pm</div>
+              </div>
+              <SegControl value={weeklyDigest?'On':'Off'} onChange={v=>{const on=v==='On';setWeeklyDigest(on);fetch('/api/settings/email',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify({weekly_digest_enabled:on})});}} options={['Off','On']}/>
+            </div>
+          </div>
+          <div style={{display:'flex',gap:8}}>
+            <Btn sm onClick={async()=>{
+              try{
+                const body={resend_from:resendFrom,email_to:emailTo,daily_summary_time:summaryTime,kith_url:kithUrl};
+                if(resendKey) body.resend_api_key=resendKey;
+                const r=await fetch('/api/settings/email',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify(body)});
+                const d=await r.json();
+                if(d.error) toastAdd(d.error,'red'); else toastAdd('Email settings saved');
+              }catch{toastAdd('Save failed','red');}
+            }}>Save</Btn>
+            <Btn sm variant="ghost" disabled={emailTestLoading} onClick={async()=>{
+              setEmailTestLoading(true);
+              try{
+                const r=await fetch('/api/email/test',{method:'POST',headers:{...(_authHdr())}});
+                const d=await r.json();
+                if(d.error) toastAdd(d.error,'red'); else toastAdd('Test email sent');
+              }catch{toastAdd('Test failed','red');}
+              finally{setEmailTestLoading(false);}
+            }}>{emailTestLoading?'Sending…':'Send test'}</Btn>
           </div>
         </div>
       </FormGroup>

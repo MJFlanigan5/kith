@@ -2,7 +2,7 @@
 
 Self-hosted family dashboard. Calendar, chores, meals, grocery list, and a TV display mode for wall screens.
 
-**Features:** Google/iCloud/ICS calendar sync, recurring chores with points leaderboard, grocery list, meal planner, AI email inbox for event parsing, full-screen display mode, PIN auth, browser push notifications, weather, sports scores, news feed.
+**Features:** Google/iCloud/ICS calendar sync, recurring chores with points leaderboard, grocery list, meal planner, AI email inbox for event parsing, PDF/image event import, email reminders via Resend, full-screen display mode, PIN auth, browser push notifications, weather.
 
 ## Install
 
@@ -34,7 +34,7 @@ docker cp $(docker compose -f /opt/kith/docker-compose.yml ps -q kith):/tmp/kith
 
 ## ICS Calendars
 
-Settings → ICS Calendars → paste any `webcal://` or `https://` `.ics` URL. Works with Google Calendar, iCloud, Outlook, Fastmail, and any standard calendar source.
+Settings → ICS Calendars → paste any `webcal://` or `https://` `.ics` URL. Works with Google Calendar, iCloud, Outlook, Fastmail, and any standard calendar source. Sonarr and Radarr also expose ICS feeds you can subscribe to.
 
 ## Email Inbox
 
@@ -64,7 +64,25 @@ Settings → Email → set:
 
 Forward any calendar invite to your forwarding address. It will appear in Kith's inbox within seconds, ready to accept or dismiss.
 
-Optional: add an Anthropic or Gemini API key in Settings → Email to enable AI parsing of plain-text event emails (ICS attachments are parsed without an AI key).
+Optional: add an Anthropic or Gemini API key in Settings → AI to enable AI parsing of plain-text event emails (ICS attachments are parsed without an AI key).
+
+## PDF & Image Import
+
+In the Inbox screen, use the **Upload Image or PDF** button to import events from flyers, schedules, or screenshots. Kith uses your configured AI provider to extract event details and queues them for review.
+
+## Email Reminders
+
+Kith can send a daily morning summary and a weekly digest using [Resend](https://resend.com) (free tier: 100 emails/day).
+
+**Setup:**
+
+1. Create a free account at [resend.com](https://resend.com) and verify your sending domain
+2. Generate an API key
+3. In Kith: Settings → Email Reminders → enter your API key, from address, and recipient address
+4. Set your preferred send time and toggle Daily Summary and/or Weekly Digest on
+5. Add your app's public URL (e.g. `https://kith.yourdomain.com`) to enable unsubscribe links
+
+Emails include an unsubscribe link. Reminders are skipped on days with nothing scheduled.
 
 ## Push Notifications
 

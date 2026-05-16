@@ -622,9 +622,12 @@ app.put('/api/ics/sources/:id', requireAdmin, async (req, res) => {
   if (!name?.trim() || !url?.trim()) return res.status(400).json({ error: 'name and url required' });
   db.prepare('UPDATE ics_sources SET name=?,url=?,color=? WHERE id=?').run(name.trim(), url.trim(), color||'#3B82F6', req.params.id);
   const source = db.prepare('SELECT * FROM ics_sources WHERE id=?').get(req.params.id);
-  db.prepare('DELETE FROM events WHERE source=?').run(`ics-${source.id}`);
-  const count = await syncICSSource(source);
-  res.json({ source, count });
+  try {
+    const count = await syncICSSource(source);
+    res.json({ source, count });
+  } catch (e) {
+    res.status(500).json({ error: `Saved but sync failed: ${e.message}` });
+  }
 });
 
 app.delete('/api/ics/sources/:id', requireAdmin, (req, res) => {

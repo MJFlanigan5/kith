@@ -73,7 +73,8 @@ function useToast(){
   const add=useCallback((msg,type='green')=>{
     const id=Date.now();
     setToasts(p=>[...p,{id,msg,type}]);
-    setTimeout(()=>setToasts(p=>p.filter(t=>t.id!==id)),3000);
+    const t=setTimeout(()=>setToasts(p=>p.filter(x=>x.id!==id)),3000);
+    return ()=>clearTimeout(t);
   },[]);
   return{toasts,add};
 }
@@ -778,7 +779,8 @@ function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weath
   useEffect(()=>{
     if(prevDueRef.current!==null&&prevDueRef.current>0&&dueChores.length===0){
       setShowConfetti(true);
-      setTimeout(()=>setShowConfetti(false),3500);
+      const t=setTimeout(()=>setShowConfetti(false),3500);
+      return ()=>clearTimeout(t);
     }
     prevDueRef.current=dueChores.length;
   },[dueChores.length]);
@@ -1229,8 +1231,8 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
     );
   };
 
+  useEffect(()=>{if(isMobile&&calView==='week')setCalView('agenda');},[isMobile]);
   if(isMobile){
-    if(calView==='week') setCalView('agenda');
     return(
       <div style={{display:'flex',flexDirection:'column',height:'100%'}}>
         {/* Mobile header */}

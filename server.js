@@ -710,6 +710,7 @@ const ESPN_PATHS = {
   nfl:'football/nfl', nba:'basketball/nba', mlb:'baseball/mlb', nhl:'hockey/nhl',
   mls:'soccer/usa.1', epl:'soccer/eng.1', ucl:'soccer/uefa.champions',
   ncaaf:'football/college-football', ncaab:'basketball/mens-college-basketball',
+  wnba:'basketball/wnba', pga:'golf/pga', atp:'tennis/atp',
   nascar:'racing/nascar', f1:'racing/f1',
 };
 

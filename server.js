@@ -144,10 +144,17 @@ function normalizeTime(t) {
 
 // ── ICS sync helper ───────────────────────────────────────────────────────────
 async function syncICSSource(source) {
-  const text = await fetch(source.url).then(r => {
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    return r.text();
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+  let text;
+  try {
+    text = await fetch(source.url, { signal: controller.signal }).then(r => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.text();
+    });
+  } finally {
+    clearTimeout(timer);
+  }
   const events = parseICS(text);
   const cal = `ics:${source.name}`;
   const ins = db.prepare('INSERT INTO events (title,date,time,calendar,color,source,external_id) VALUES (?,?,?,?,?,?,?)');
@@ -495,7 +502,8 @@ app.get('/api/grocery', (req, res) => {
 
 app.post('/api/grocery', requireAuth, (req, res) => {
   const { name, category } = req.body;
-  const r = db.prepare('INSERT INTO grocery (name,category) VALUES (?,?)').run(name, category||'Other');
+  if (!name?.trim()) return res.status(400).json({ error: 'name is required' });
+  const r = db.prepare('INSERT INTO grocery (name,category) VALUES (?,?)').run(name.trim(), category||'Other');
   res.json({ id: r.lastInsertRowid, name, category: category||'Other', checked: 0 });
 });
 
@@ -1157,7 +1165,7 @@ cron.schedule('0 18 * * 0', async () => {
     text += `${label.toUpperCase()}\n${evs.map(e => `• ${e.title}${e.time && e.time !== 'All day' ? ' — ' + e.time : ''}`).join('\n')}\n\n`;
   }
 
-  const chores = db.prepare("SELECT * FROM chores WHERE enabled=1 AND done=0").all();
+  const chores = db.prepare("SELECT * FROM chores WHERE done=0").all();
   if (!hasAny && !chores.length) return;
 
   if (chores.length) {

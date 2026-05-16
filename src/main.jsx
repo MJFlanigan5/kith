@@ -313,6 +313,8 @@ function CountdownsScreen({countdowns,setCountdowns,toastAdd}){
 /* ── Family Members ──────────────────────────────────────────────────── */
 function FamilyScreen({members,setMembers,toastAdd}){
   const [form,setForm]=useState({name:'',color:'#007AFF'});
+  const [pinModal,setPinModal]=useState(null);
+  const [pinInput,setPinInput]=useState('');
   const COLORS=['#007AFF','#34C759','#FF3B30','#FF9500','#5856D6','#32ADE6','#AF52DE','#FF2D55','#FF6B35','#30D158'];
   const save=async()=>{
     if(!form.name.trim()) return;
@@ -325,6 +327,12 @@ function FamilyScreen({members,setMembers,toastAdd}){
     await api.del(`/api/members/${id}`);
     setMembers(p=>p.filter(m=>m.id!==id));
     toastAdd('Removed','blue');
+  };
+  const savePin=async()=>{
+    if(!String(pinInput||'').match(/^\d{4,8}$/)){toastAdd('PIN must be 4–8 digits','red');return;}
+    await api.put(`/api/members/${pinModal}/pin`,{pin:String(pinInput)});
+    setPinModal(null);setPinInput('');
+    toastAdd('PIN updated');
   };
   return(
     <div style={{maxWidth:600}}>
@@ -356,11 +364,19 @@ function FamilyScreen({members,setMembers,toastAdd}){
             <div key={m.id} style={{display:'flex',alignItems:'center',gap:14,padding:'14px 16px',borderTop:i>0?`1px solid ${A.sep}`:'none'}}>
               <div style={{width:40,height:40,borderRadius:'50%',background:m.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,fontWeight:700,color:'#fff',flexShrink:0}}>{m.initials}</div>
               <span style={{flex:1,fontSize:15,fontWeight:500,color:A.label1}}>{m.name}</span>
+              <button onClick={()=>{setPinModal(m.id);setPinInput('');}} style={{background:'none',border:'none',color:A.blue,fontSize:13,cursor:'pointer',fontWeight:500,marginRight:8}}>Set PIN</button>
               <button onClick={()=>del(m.id)} style={{background:'none',border:'none',color:A.label4,fontSize:13,cursor:'pointer',fontWeight:500}}>Remove</button>
             </div>
           ))}
         </Card>
       )}
+      <Modal open={pinModal!==null} onClose={()=>{setPinModal(null);setPinInput('');}} title={`Set PIN — ${members.find(m=>m.id===pinModal)?.name||''}`} width={360}>
+        <div style={{display:'flex',flexDirection:'column',gap:12}}>
+          <p style={{fontSize:14,color:A.label4,lineHeight:1.5}}>4–8 digits. Members use this to log in on shared devices.</p>
+          <Inp type="password" value={pinInput} onChange={e=>setPinInput(e.target.value.replace(/\D/g,'').slice(0,8))} placeholder="Enter PIN" onKeyDown={e=>e.key==='Enter'&&savePin()}/>
+          <Btn onClick={savePin} full>Save PIN</Btn>
+        </div>
+      </Modal>
     </div>
   );
 }
@@ -369,6 +385,13 @@ function FamilyScreen({members,setMembers,toastAdd}){
 function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,photos,weather,clockFormat='12h',nightModeStart='23:00',nightModeEnd='06:00'}){
   const isMobile=useIsMobile();
   const now=useClock();
+  const [liveGames,setLiveGames]=useState([]);
+  useEffect(()=>{
+    const load=()=>api.get('/api/sports').then(d=>{if(Array.isArray(d))setLiveGames(d.filter(g=>g.state==='in'));}).catch(()=>{});
+    load();
+    const id=setInterval(load,60000);
+    return()=>clearInterval(id);
+  },[]);
   const h12=now.getHours()%12||12;
   const min=String(now.getMinutes()).padStart(2,'0');
   const ampm=now.getHours()>=12?'PM':'AM';
@@ -675,6 +698,24 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
         </div>
       )}
 
+      {/* Live scores bar — only visible when games are in progress */}
+      {liveGames.length>0&&(
+        <div style={{flexShrink:0,display:'flex',alignItems:'center',gap:16,paddingBottom:8,overflowX:'auto',WebkitMaskImage:'linear-gradient(to right,black 90%,transparent 100%)'}}>
+          <div style={{display:'flex',alignItems:'center',gap:5,flexShrink:0}}>
+            <div style={{width:6,height:6,borderRadius:'50%',background:A.red,animation:'pulse 1.2s ease infinite'}}/>
+            <span style={{fontSize:10,fontWeight:700,color:D.t3,textTransform:'uppercase',letterSpacing:'.10em'}}>Live</span>
+          </div>
+          {liveGames.slice(0,5).map((g,i)=>(
+            <div key={g.id||i} style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
+              <span style={{fontSize:10,fontWeight:700,color:D.t4,letterSpacing:'.05em'}}>{g.league}</span>
+              <span style={{fontSize:13,color:D.t1,fontVariantNumeric:'tabular-nums',fontWeight:600}}>{g.away?.abbr} {g.away?.score}–{g.home?.score} {g.home?.abbr}</span>
+              {g.detail&&<span style={{fontSize:11,color:D.t4}}>{g.detail}</span>}
+              {i<liveGames.slice(0,5).length-1&&<span style={{color:D.sep,marginLeft:4}}>·</span>}
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Footer */}
       <div style={{flexShrink:0,display:'flex',alignItems:'center',justifyContent:'flex-end'}}>
         <button onClick={onManage} style={{background:'rgba(255,255,255,0.08)',color:D.t2,border:'1px solid rgba(255,255,255,0.12)',borderRadius:A.rPill,padding:'9px 20px',fontSize:13,fontWeight:500,cursor:'pointer',transition:'background .15s'}}
@@ -690,6 +731,8 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
 function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weather,clockFormat='12h'}){
   const isMobile=useIsMobile();
   const now=useClock();
+  const [news,setNews]=useState([]);
+  useEffect(()=>{api.get('/api/news').then(d=>{if(Array.isArray(d))setNews(d);}).catch(()=>{});},[]);
   const [qaOpen,setQaOpen]=useState(false);
   const [qaForm,setQaForm]=useState({title:'',date:localDate(),time:'',cal:'kith'});
   const [qaLoading,setQaLoading]=useState(false);
@@ -889,6 +932,22 @@ function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weath
       )}
 
       <Confetti active={showConfetti}/>
+
+      {/* News headlines — only shown when feed has loaded */}
+      {news.length>0&&(
+        <Card style={{marginTop:12,padding:0,overflow:'hidden'}}>
+          <div style={{padding:'10px 16px',fontSize:11,fontWeight:700,color:A.label3,textTransform:'uppercase',letterSpacing:'.07em',borderBottom:`1px solid ${A.sep}`}}>Headlines</div>
+          {news.slice(0,4).map((item,i)=>(
+            <a key={i} href={item.link} target="_blank" rel="noopener noreferrer"
+              className="irow"
+              style={{display:'flex',alignItems:'flex-start',gap:10,padding:'10px 16px',borderTop:i>0?`1px solid ${A.sep}`:'none',textDecoration:'none'}}
+            >
+              <div style={{width:4,height:4,borderRadius:'50%',background:A.label5,flexShrink:0,marginTop:6}}/>
+              <span style={{fontSize:13,color:A.label2,lineHeight:1.4}}>{item.title}</span>
+            </a>
+          ))}
+        </Card>
+      )}
 
       {/* Quick-add event — Drawer on mobile (avoids iOS fixed-modal date picker issues), Modal on desktop */}
       {isMobile?(
@@ -2193,7 +2252,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
 }
 
 /* ── Manage Shell ────────────────────────────────────────────────────── */
-function ManageMode({onDisplay,events,setEvents,chores,setChores,grocery,setGrocery,meals,setMeals,icsSources,setIcsSources,inboxCount,setInboxCount,countdowns,setCountdowns,members,setMembers,photos,setPhotos,clockFormat,setClockFormat,weather,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd,setRefreshMs,parseRefreshMs}){
+function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocery,setGrocery,meals,setMeals,icsSources,setIcsSources,inboxCount,setInboxCount,countdowns,setCountdowns,members,setMembers,photos,setPhotos,clockFormat,setClockFormat,weather,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd,setRefreshMs,parseRefreshMs}){
   const isMobile=useIsMobile();
   const [screen,setScreen]=useState('dashboard');
   const {toasts,add:toastAdd}=useToast();
@@ -2286,15 +2345,21 @@ function ManageMode({onDisplay,events,setEvents,chores,setChores,grocery,setGroc
           })}
         </div>
         <div style={{padding:'12px 10px 16px',borderTop:`1px solid ${A.sep}`}}>
-          <button onClick={onDisplay} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',borderRadius:A.rSm,border:'1px solid rgba(0,0,0,0.09)',cursor:'pointer',width:'100%',background:'transparent',color:A.label3,fontSize:13,fontWeight:500,textAlign:'left',marginBottom:10,transition:'background .12s'}}
+          <button onClick={onDisplay} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',borderRadius:A.rSm,border:'1px solid rgba(0,0,0,0.09)',cursor:'pointer',width:'100%',background:'transparent',color:A.label3,fontSize:13,fontWeight:500,textAlign:'left',marginBottom:8,transition:'background .12s'}}
             onMouseEnter={e=>e.currentTarget.style.background='rgba(0,0,0,0.04)'}
             onMouseLeave={e=>e.currentTarget.style.background='transparent'}
           >
             <svg width="15" height="12" viewBox="0 0 15 12" fill="none"><rect x=".75" y=".75" width="13.5" height="9" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M4 11.25h7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M7.5 9.75v1.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
             Display Mode
           </button>
+          <button onClick={onLogout} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',borderRadius:A.rSm,border:'none',cursor:'pointer',width:'100%',background:'transparent',color:A.label4,fontSize:13,fontWeight:400,textAlign:'left',marginBottom:10,transition:'background .12s'}}
+            onMouseEnter={e=>e.currentTarget.style.background='rgba(0,0,0,0.04)'}
+            onMouseLeave={e=>e.currentTarget.style.background='transparent'}
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M5 13H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M10 10l3-3-3-3M13 7H5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            Switch user
+          </button>
           <div style={{width:8,height:8,borderRadius:'50%',background:serverUp===null?A.label5:serverUp?A.green:A.red,transition:'background .3s'}}/>
-
         </div>
       </div>
 
@@ -2618,6 +2683,12 @@ function App(){
     localStorage.setItem('kith_kiosk','1');
     setKiosk(true);
   };
+  const handleLogout=()=>{
+    localStorage.removeItem('kith_token');
+    localStorage.removeItem('kith_kiosk');
+    setAuth('');
+    setKiosk(false);
+  };
 
   useEffect(()=>{
     const kioskFlag=localStorage.getItem('kith_kiosk')==='1';
@@ -2728,7 +2799,7 @@ function App(){
 
   return mode==='display'
     ?<DisplayMode onManage={()=>setMode('manage')} events={events} chores={chores} setChores={setChores} meals={meals} grocery={grocery} countdowns={countdowns} photos={photos} clockFormat={clockFormat} weather={weather} nightModeStart={nightModeStart} nightModeEnd={nightModeEnd}/>
-    :<ManageMode onDisplay={()=>setMode('display')} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources} inboxCount={inboxCount} setInboxCount={setInboxCount} countdowns={countdowns} setCountdowns={setCountdowns} members={members} setMembers={setMembers} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} weather={weather} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs}/>;
+    :<ManageMode onDisplay={()=>setMode('display')} onLogout={handleLogout} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources} inboxCount={inboxCount} setInboxCount={setInboxCount} countdowns={countdowns} setCountdowns={setCountdowns} members={members} setMembers={setMembers} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} weather={weather} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs}/>;
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);

@@ -1940,7 +1940,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [dailySummary,setDailySummary]=useState(false);
   const [emailTestLoading,setEmailTestLoading]=useState(false);
   const [newsFeed,setNewsFeed]=useState('');
-  const [sportsLeagues,setSportsLeagues]=useState({nfl:true,nba:true,mlb:true,nhl:true,wnba:false,mls:false,epl:false,ucl:false,ncaaf:false,ncaab:false,pga:false,atp:false,nascar:false,f1:false});
+  const [sportsLeagues,setSportsLeagues]=useState({nfl:true,nba:true,mlb:true,nhl:true,wnba:false,mls:false,epl:false,ucl:false,wc:false,wwc:false,ncaaf:false,ncaab:false,pga:false,atp:false,nascar:false,f1:false});
   useEffect(()=>{
     api.get('/api/settings').then(st=>{
       if(st.weather_lat) setWeatherLat(st.weather_lat);
@@ -1956,9 +1956,10 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
       if(st.weekly_digest_enabled) setWeeklyDigest(st.weekly_digest_enabled==='1');
       if(st.daily_summary_enabled) setDailySummary(st.daily_summary_enabled==='1');
       if(st.news_feed) setNewsFeed(st.news_feed);
+      if(st.custom_sport_paths) setCustomSportPath(st.custom_sport_paths);
       if(st.sports_leagues){
         const active=st.sports_leagues.split(',').map(s=>s.trim().toLowerCase());
-        setSportsLeagues({nfl:active.includes('nfl'),nba:active.includes('nba'),mlb:active.includes('mlb'),nhl:active.includes('nhl'),wnba:active.includes('wnba'),mls:active.includes('mls'),epl:active.includes('epl'),ucl:active.includes('ucl'),ncaaf:active.includes('ncaaf'),ncaab:active.includes('ncaab'),pga:active.includes('pga'),atp:active.includes('atp'),nascar:active.includes('nascar'),f1:active.includes('f1')});
+        setSportsLeagues({nfl:active.includes('nfl'),nba:active.includes('nba'),mlb:active.includes('mlb'),nhl:active.includes('nhl'),wnba:active.includes('wnba'),mls:active.includes('mls'),epl:active.includes('epl'),ucl:active.includes('ucl'),wc:active.includes('wc'),wwc:active.includes('wwc'),ncaaf:active.includes('ncaaf'),ncaab:active.includes('ncaab'),pga:active.includes('pga'),atp:active.includes('atp'),nascar:active.includes('nascar'),f1:active.includes('f1')});
       }
     }).catch(()=>{});
   },[]);
@@ -1981,9 +1982,13 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [refresh,setRefresh]=useState('1min');
 
   const saveSetting=(key,value)=>api.put('/api/settings',{[key]:value}).then(r=>{if(r.error)toastAdd(r.error,'red');else toastAdd('Saved');}).catch(()=>toastAdd('Save failed','red'));
-  const [pushStatus,setPushStatus]=useState('idle'); // idle | requesting | subscribed | error
+  const [pushStatus,setPushStatus]=useState('idle');
   const [icsForm,setIcsForm]=useState({name:'',url:'',color:'#3B82F6'});
   const [icsLoading,setIcsLoading]=useState(false);
+  const [icsEditId,setIcsEditId]=useState(null);
+  const [icsEditForm,setIcsEditForm]=useState({name:'',url:'',color:'#3B82F6'});
+  const [icsEditLoading,setIcsEditLoading]=useState(false);
+  const [customSportPath,setCustomSportPath]=useState('');
 
   const addIcsSource=async()=>{
     if(!icsForm.name.trim()||!icsForm.url.trim()) return;
@@ -2053,15 +2058,40 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
         {icsSources.length>0&&(
           <>
             {icsSources.map((s,i)=>(
-              <div key={s.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px',borderTop:i>0?`1px solid ${A.sep}`:'none'}}>
-                <div style={{display:'flex',alignItems:'center',gap:10}}>
-                  <div style={{width:10,height:10,borderRadius:3,background:s.color,flexShrink:0}}/>
-                  <div>
-                    <div style={{fontSize:15,color:A.label1,fontWeight:500}}>{s.name}</div>
-                    <div style={{fontSize:12,color:A.label5,fontFamily:'JetBrains Mono,monospace',maxWidth:280,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.url}</div>
+              <div key={s.id} style={{borderTop:i>0?`1px solid ${A.sep}`:'none'}}>
+                {icsEditId===s.id?(
+                  <div style={{padding:'12px 16px',display:'flex',flexDirection:'column',gap:8}}>
+                    <Inp value={icsEditForm.name} onChange={e=>setIcsEditForm(p=>({...p,name:e.target.value}))} placeholder="Calendar name"/>
+                    <Inp value={icsEditForm.url} onChange={e=>setIcsEditForm(p=>({...p,url:e.target.value}))} placeholder="https://...ics"/>
+                    <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                      <input type="color" value={icsEditForm.color} onChange={e=>setIcsEditForm(p=>({...p,color:e.target.value}))} style={{width:36,height:36,border:'none',borderRadius:6,cursor:'pointer',background:'transparent'}}/>
+                      <Btn sm onClick={async()=>{
+                        setIcsEditLoading(true);
+                        try{
+                          const r=await api.put(`/api/ics/sources/${s.id}`,icsEditForm);
+                          if(r.error){toastAdd(r.error,'red');}
+                          else{setIcsSources(p=>p.map(x=>x.id===s.id?r.source:x));setIcsEditId(null);toastAdd('Calendar updated');}
+                        }catch{toastAdd('Update failed','red');}
+                        finally{setIcsEditLoading(false);}
+                      }} style={{flex:1}}>{icsEditLoading?'Saving…':'Save'}</Btn>
+                      <Btn sm variant="ghost" onClick={()=>setIcsEditId(null)}>Cancel</Btn>
+                    </div>
                   </div>
-                </div>
-                <button onClick={()=>removeIcsSource(s.id)} style={{background:'none',border:'none',color:A.red,fontSize:13,cursor:'pointer',fontWeight:500,flexShrink:0}}>Remove</button>
+                ):(
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px'}}>
+                    <div style={{display:'flex',alignItems:'center',gap:10}}>
+                      <div style={{width:10,height:10,borderRadius:3,background:s.color,flexShrink:0}}/>
+                      <div>
+                        <div style={{fontSize:15,color:A.label1,fontWeight:500}}>{s.name}</div>
+                        <div style={{fontSize:12,color:A.label5,fontFamily:'JetBrains Mono,monospace',maxWidth:240,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.url}</div>
+                      </div>
+                    </div>
+                    <div style={{display:'flex',gap:12,flexShrink:0}}>
+                      <button onClick={()=>{setIcsEditId(s.id);setIcsEditForm({name:s.name,url:s.url,color:s.color});}} style={{background:'none',border:'none',color:A.blue,fontSize:13,cursor:'pointer',fontWeight:500}}>Edit</button>
+                      <button onClick={()=>removeIcsSource(s.id)} style={{background:'none',border:'none',color:A.red,fontSize:13,cursor:'pointer',fontWeight:500}}>Remove</button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
             <div style={{padding:'12px 16px',borderTop:`1px solid ${A.sep}`}}>
@@ -2261,9 +2291,15 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
             <Btn sm onClick={()=>saveSetting('news_feed',newsFeed.trim())}>Save</Btn>
           </div>
         </FormRow>
+        <FormRow label="Custom event (ESPN path)" footer="For Olympics or one-off events. Enter the ESPN sport/league path, e.g. soccer/fifa.world.u20">
+          <div style={{display:'flex',gap:10,flex:1}}>
+            <Inp value={customSportPath} onChange={e=>setCustomSportPath(e.target.value)} placeholder="e.g. soccer/fifa.world" style={{flex:1}}/>
+            <Btn sm onClick={()=>saveSetting('custom_sport_paths',customSportPath.trim())}>Save</Btn>
+          </div>
+        </FormRow>
         <FormRow label="Live sports">
           <div style={{display:'flex',gap:12,flexWrap:'wrap'}}>
-            {[['nfl','NFL'],['nba','NBA'],['mlb','MLB'],['nhl','NHL'],['wnba','WNBA'],['mls','MLS'],['epl','EPL'],['ucl','Champions League'],['ncaaf','NCAAF'],['ncaab','NCAAB'],['pga','PGA Golf'],['atp','ATP Tennis'],['nascar','NASCAR'],['f1','Formula 1']].map(([lg,label])=>(
+            {[['nfl','NFL'],['nba','NBA'],['mlb','MLB'],['nhl','NHL'],['wnba','WNBA'],['mls','MLS'],['epl','EPL'],['ucl','Champions League'],['wc','World Cup'],['wwc',"Women's World Cup"],['ncaaf','NCAAF'],['ncaab','NCAAB'],['pga','PGA Golf'],['atp','ATP Tennis'],['nascar','NASCAR'],['f1','Formula 1']].map(([lg,label])=>(
               <label key={lg} style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',fontSize:14,color:A.label1}}>
                 <input type="checkbox" checked={!!sportsLeagues[lg]} onChange={e=>{
                   const next={...sportsLeagues,[lg]:e.target.checked};

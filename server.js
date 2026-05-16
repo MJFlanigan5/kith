@@ -617,6 +617,16 @@ app.post('/api/ics/sources', requireAdmin, async (req, res) => {
   }
 });
 
+app.put('/api/ics/sources/:id', requireAdmin, async (req, res) => {
+  const { name, url, color } = req.body || {};
+  if (!name?.trim() || !url?.trim()) return res.status(400).json({ error: 'name and url required' });
+  db.prepare('UPDATE ics_sources SET name=?,url=?,color=? WHERE id=?').run(name.trim(), url.trim(), color||'#3B82F6', req.params.id);
+  const source = db.prepare('SELECT * FROM ics_sources WHERE id=?').get(req.params.id);
+  db.prepare('DELETE FROM events WHERE source=?').run(`ics-${source.id}`);
+  const count = await syncICSSource(source);
+  res.json({ source, count });
+});
+
 app.delete('/api/ics/sources/:id', requireAdmin, (req, res) => {
   db.prepare('DELETE FROM events WHERE source=?').run(`ics-${req.params.id}`);
   db.prepare('DELETE FROM ics_sources WHERE id=?').run(req.params.id);
@@ -709,6 +719,7 @@ const SPORTS_TTL = 2 * 60 * 1000;
 const ESPN_PATHS = {
   nfl:'football/nfl', nba:'basketball/nba', mlb:'baseball/mlb', nhl:'hockey/nhl',
   mls:'soccer/usa.1', epl:'soccer/eng.1', ucl:'soccer/uefa.champions',
+  wwc:'soccer/fifa.womens.world', wc:'soccer/fifa.world',
   ncaaf:'football/college-football', ncaab:'basketball/mens-college-basketball',
   wnba:'basketball/wnba', pga:'golf/pga', atp:'tennis/atp',
   nascar:'racing/nascar', f1:'racing/f1',
@@ -717,14 +728,16 @@ const ESPN_PATHS = {
 app.get('/api/sports', async (req, res) => {
   const getSetting = key => db.prepare('SELECT value FROM settings WHERE key=?').get(key)?.value;
   const leagues = (getSetting('sports_leagues') || 'nba,nfl,mlb,nhl').split(',').filter(Boolean);
+  const customPaths = (getSetting('custom_sport_paths') || '').split(',').map(s=>s.trim()).filter(Boolean);
+  const customEntries = customPaths.map(p => ({ key: `custom:${p}`, path: p }));
   const now = Date.now();
   const results = [];
-  await Promise.all(leagues.map(async league => {
+  const leagueEntries = leagues.map(l => ({ key: l, path: ESPN_PATHS[l] })).filter(e => e.path);
+  await Promise.all([...leagueEntries, ...customEntries].map(async ({ key, path: espnPath }) => {
+    const league = key;
     if (_sportsCache[league] && now - _sportsCacheAt[league] < SPORTS_TTL) {
       results.push(..._sportsCache[league]); return;
     }
-    const espnPath = ESPN_PATHS[league];
-    if (!espnPath) return;
     try {
       const data = await fetch(`https://site.api.espn.com/apis/site/v2/sports/${espnPath}/scoreboard`).then(r => r.json());
       const games = (data.events || []).map(ev => {

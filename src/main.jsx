@@ -1940,7 +1940,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [dailySummary,setDailySummary]=useState(false);
   const [emailTestLoading,setEmailTestLoading]=useState(false);
   const [newsFeed,setNewsFeed]=useState('');
-  const [sportsLeagues,setSportsLeagues]=useState({nfl:true,nba:true,mlb:true,nhl:true});
+  const [sportsLeagues,setSportsLeagues]=useState({nfl:true,nba:true,mlb:true,nhl:true,mls:false,epl:false,ucl:false,ncaaf:false,ncaab:false,nascar:false});
   useEffect(()=>{
     api.get('/api/settings').then(st=>{
       if(st.weather_lat) setWeatherLat(st.weather_lat);
@@ -1958,7 +1958,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
       if(st.news_feed) setNewsFeed(st.news_feed);
       if(st.sports_leagues){
         const active=st.sports_leagues.split(',').map(s=>s.trim().toLowerCase());
-        setSportsLeagues({nfl:active.includes('nfl'),nba:active.includes('nba'),mlb:active.includes('mlb'),nhl:active.includes('nhl')});
+        setSportsLeagues({nfl:active.includes('nfl'),nba:active.includes('nba'),mlb:active.includes('mlb'),nhl:active.includes('nhl'),mls:active.includes('mls'),epl:active.includes('epl'),ucl:active.includes('ucl'),ncaaf:active.includes('ncaaf'),ncaab:active.includes('ncaab'),nascar:active.includes('nascar')});
       }
     }).catch(()=>{});
   },[]);
@@ -2263,14 +2263,14 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
         </FormRow>
         <FormRow label="Live sports">
           <div style={{display:'flex',gap:12,flexWrap:'wrap'}}>
-            {['nfl','nba','mlb','nhl'].map(lg=>(
+            {[['nfl','NFL'],['nba','NBA'],['mlb','MLB'],['nhl','NHL'],['mls','MLS'],['epl','EPL'],['ucl','Champions League'],['ncaaf','NCAAF'],['ncaab','NCAAB'],['nascar','NASCAR']].map(([lg,label])=>(
               <label key={lg} style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',fontSize:14,color:A.label1}}>
                 <input type="checkbox" checked={!!sportsLeagues[lg]} onChange={e=>{
                   const next={...sportsLeagues,[lg]:e.target.checked};
                   setSportsLeagues(next);
                   saveSetting('sports_leagues',Object.entries(next).filter(([,v])=>v).map(([k])=>k).join(','));
                 }}/>
-                {lg.toUpperCase()}
+                {label}
               </label>
             ))}
           </div>

@@ -706,7 +706,12 @@ app.put('/api/settings/email', requireAdmin, (req, res) => {
 const _sportsCache = {};
 const _sportsCacheAt = {};
 const SPORTS_TTL = 2 * 60 * 1000;
-const ESPN_PATHS = { nfl:'football/nfl', nba:'basketball/nba', mlb:'baseball/mlb', nhl:'hockey/nhl' };
+const ESPN_PATHS = {
+  nfl:'football/nfl', nba:'basketball/nba', mlb:'baseball/mlb', nhl:'hockey/nhl',
+  mls:'soccer/usa.1', epl:'soccer/eng.1', ucl:'soccer/uefa.champions',
+  ncaaf:'football/college-football', ncaab:'basketball/mens-college-basketball',
+  nascar:'racing/nascar',
+};
 
 app.get('/api/sports', async (req, res) => {
   const getSetting = key => db.prepare('SELECT value FROM settings WHERE key=?').get(key)?.value;

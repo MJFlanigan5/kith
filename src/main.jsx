@@ -1939,7 +1939,8 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [weeklyDigest,setWeeklyDigest]=useState(false);
   const [dailySummary,setDailySummary]=useState(false);
   const [emailTestLoading,setEmailTestLoading]=useState(false);
-  const [newsFeed,setNewsFeed]=useState('');
+  const [newsFeeds,setNewsFeeds]=useState([]);
+  const [newsFeedInput,setNewsFeedInput]=useState('');
   const [sportsLeagues,setSportsLeagues]=useState({nfl:true,nba:true,mlb:true,nhl:true,wnba:false,mls:false,epl:false,ucl:false,wc:false,wwc:false,ncaaf:false,ncaab:false,pga:false,atp:false,nascar:false,f1:false});
   useEffect(()=>{
     api.get('/api/settings').then(st=>{
@@ -1955,7 +1956,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
       if(st.kith_url) setKithUrl(st.kith_url);
       if(st.weekly_digest_enabled) setWeeklyDigest(st.weekly_digest_enabled==='1');
       if(st.daily_summary_enabled) setDailySummary(st.daily_summary_enabled==='1');
-      if(st.news_feed) setNewsFeed(st.news_feed);
+      if(st.news_feed) setNewsFeeds(st.news_feed.split(',').map(s=>s.trim()).filter(Boolean));
       if(st.custom_sport_paths) setCustomSportPath(st.custom_sport_paths);
       if(st.sports_leagues){
         const active=st.sports_leagues.split(',').map(s=>s.trim().toLowerCase());
@@ -2285,10 +2286,18 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
       </FormGroup>
 
       <FormGroup label="Content" footer="News headlines and live sports show on the wall display when active.">
-        <FormRow label="News feed (RSS)">
-          <div style={{display:'flex',gap:10,flex:1}}>
-            <Inp value={newsFeed} onChange={e=>setNewsFeed(e.target.value)} placeholder="https://feeds.npr.org/1001/rss.xml" style={{flex:1}}/>
-            <Btn sm onClick={()=>saveSetting('news_feed',newsFeed.trim())}>Save</Btn>
+        <FormRow label="News feeds (RSS)">
+          <div style={{display:'flex',flexDirection:'column',gap:8,flex:1}}>
+            {newsFeeds.map((url,i)=>(
+              <div key={i} style={{display:'flex',alignItems:'center',gap:8}}>
+                <span style={{flex:1,fontSize:13,color:A.label3,fontFamily:'JetBrains Mono,monospace',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{url}</span>
+                <button onClick={()=>{const next=newsFeeds.filter((_,j)=>j!==i);setNewsFeeds(next);saveSetting('news_feed',next.join(','));}} style={{background:'none',border:'none',color:A.red,fontSize:13,cursor:'pointer',fontWeight:500,flexShrink:0}}>Remove</button>
+              </div>
+            ))}
+            <div style={{display:'flex',gap:8}}>
+              <Inp value={newsFeedInput} onChange={e=>setNewsFeedInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&newsFeedInput.trim()){const next=[...newsFeeds,newsFeedInput.trim()];setNewsFeeds(next);saveSetting('news_feed',next.join(','));setNewsFeedInput('');}}} placeholder="https://feeds.npr.org/1001/rss.xml" style={{flex:1}}/>
+              <Btn sm onClick={()=>{if(!newsFeedInput.trim())return;const next=[...newsFeeds,newsFeedInput.trim()];setNewsFeeds(next);saveSetting('news_feed',next.join(','));setNewsFeedInput('');}}>Add</Btn>
+            </div>
           </div>
         </FormRow>
         <FormRow label="Custom event (ESPN path)" footer="For Olympics or one-off events. Enter the ESPN sport/league path, e.g. soccer/fifa.world.u20">

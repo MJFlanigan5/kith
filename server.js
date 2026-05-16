@@ -769,7 +769,7 @@ function parseRSS(xml) {
   const items = [];
   const re = /<item>([\s\S]*?)<\/item>/g;
   let m;
-  while ((m = re.exec(xml)) !== null && items.length < 8) {
+  while ((m = re.exec(xml)) !== null && items.length < 5) {
     const block = m[1];
     const title = (/<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>/s.exec(block)||[])[1]?.trim();
     const link = (/<link>\s*(https?:\/\/[^<]+)\s*<\/link>/s.exec(block)||[])[1]?.trim() ||
@@ -782,10 +782,16 @@ function parseRSS(xml) {
 app.get('/api/news', async (req, res) => {
   if (_newsCache && Date.now() - _newsCacheAt < NEWS_TTL) return res.json(_newsCache);
   const getSetting = key => db.prepare('SELECT value FROM settings WHERE key=?').get(key)?.value;
-  const feedUrl = getSetting('news_feed') || 'https://feeds.npr.org/1001/rss.xml';
+  const feedUrls = (getSetting('news_feed') || 'https://feeds.npr.org/1001/rss.xml')
+    .split(',').map(s => s.trim()).filter(Boolean);
   try {
-    const xml = await fetch(feedUrl, { headers: { 'User-Agent': 'Kith/1.0' } }).then(r => r.text());
-    _newsCache = parseRSS(xml);
+    const results = await Promise.all(feedUrls.map(async url => {
+      try {
+        const xml = await fetch(url, { headers: { 'User-Agent': 'Kith/1.0' } }).then(r => r.text());
+        return parseRSS(xml);
+      } catch { return []; }
+    }));
+    _newsCache = results.flat().slice(0, 20);
     _newsCacheAt = Date.now();
     res.json(_newsCache);
   } catch (e) {

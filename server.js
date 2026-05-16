@@ -7,7 +7,6 @@ const webpush    = require('web-push');
 const db         = require('./db');
 const jwt        = require('jsonwebtoken');
 const bcrypt     = require('bcryptjs');
-const pdfParse   = require('pdf-parse');
 
 const app  = express();
 const PORT = process.env.PORT || 7400;
@@ -568,6 +567,7 @@ app.post('/api/inbox/upload', requireAuth, async (req, res) => {
     const base64 = data.includes(',') ? data.split(',')[1] : data;
 
     if (isPdf) {
+      const pdfParse = require('pdf-parse');
       const buf = Buffer.from(base64, 'base64');
       const pdf = await pdfParse(buf);
       const text = pdf.text.slice(0, 4000);

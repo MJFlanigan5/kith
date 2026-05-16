@@ -1,14 +1,12 @@
-FROM node:20-alpine AS build
+FROM node:20-slim AS build
 WORKDIR /app
-RUN apk add --no-cache python3 make g++
 COPY package*.json ./
 RUN npm install
 COPY . .
 RUN npm run build
 
-FROM node:20-alpine
+FROM node:20-slim
 WORKDIR /app
-RUN apk add --no-cache python3 make g++
 COPY package*.json ./
 RUN npm install --production
 COPY server.js db.js ./

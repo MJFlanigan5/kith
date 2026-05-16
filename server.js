@@ -710,7 +710,7 @@ const ESPN_PATHS = {
   nfl:'football/nfl', nba:'basketball/nba', mlb:'baseball/mlb', nhl:'hockey/nhl',
   mls:'soccer/usa.1', epl:'soccer/eng.1', ucl:'soccer/uefa.champions',
   ncaaf:'football/college-football', ncaab:'basketball/mens-college-basketball',
-  nascar:'racing/nascar',
+  nascar:'racing/nascar', f1:'racing/f1',
 };
 
 app.get('/api/sports', async (req, res) => {

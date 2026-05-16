@@ -1939,6 +1939,8 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [weeklyDigest,setWeeklyDigest]=useState(false);
   const [dailySummary,setDailySummary]=useState(false);
   const [emailTestLoading,setEmailTestLoading]=useState(false);
+  const [newsFeed,setNewsFeed]=useState('');
+  const [sportsLeagues,setSportsLeagues]=useState({nfl:true,nba:true,mlb:true,nhl:true});
   useEffect(()=>{
     api.get('/api/settings').then(st=>{
       if(st.weather_lat) setWeatherLat(st.weather_lat);
@@ -1953,6 +1955,11 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
       if(st.kith_url) setKithUrl(st.kith_url);
       if(st.weekly_digest_enabled) setWeeklyDigest(st.weekly_digest_enabled==='1');
       if(st.daily_summary_enabled) setDailySummary(st.daily_summary_enabled==='1');
+      if(st.news_feed) setNewsFeed(st.news_feed);
+      if(st.sports_leagues){
+        const active=st.sports_leagues.split(',').map(s=>s.trim().toLowerCase());
+        setSportsLeagues({nfl:active.includes('nfl'),nba:active.includes('nba'),mlb:active.includes('mlb'),nhl:active.includes('nhl')});
+      }
     }).catch(()=>{});
   },[]);
   const geocodeCity=async()=>{
@@ -2245,6 +2252,29 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
           )}
           {(!photos||photos.length===0)&&<p style={{fontSize:13,color:A.label5,marginTop:10,fontStyle:'normal'}}>No photos yet — upload some to show a rotating frame on the wall display</p>}
         </div>
+      </FormGroup>
+
+      <FormGroup label="Content" footer="News headlines and live sports show on the wall display when active.">
+        <FormRow label="News feed (RSS)">
+          <div style={{display:'flex',gap:10,flex:1}}>
+            <Inp value={newsFeed} onChange={e=>setNewsFeed(e.target.value)} placeholder="https://feeds.npr.org/1001/rss.xml" style={{flex:1}}/>
+            <Btn sm onClick={()=>saveSetting('news_feed',newsFeed.trim())}>Save</Btn>
+          </div>
+        </FormRow>
+        <FormRow label="Live sports">
+          <div style={{display:'flex',gap:12,flexWrap:'wrap'}}>
+            {['nfl','nba','mlb','nhl'].map(lg=>(
+              <label key={lg} style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',fontSize:14,color:A.label1}}>
+                <input type="checkbox" checked={!!sportsLeagues[lg]} onChange={e=>{
+                  const next={...sportsLeagues,[lg]:e.target.checked};
+                  setSportsLeagues(next);
+                  saveSetting('sports_leagues',Object.entries(next).filter(([,v])=>v).map(([k])=>k).join(','));
+                }}/>
+                {lg.toUpperCase()}
+              </label>
+            ))}
+          </div>
+        </FormRow>
       </FormGroup>
 
     </div>

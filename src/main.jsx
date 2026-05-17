@@ -619,255 +619,231 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
           )}
         </div>
       ):(
-        <div style={{flex:1,display:'grid',gridTemplateColumns:'1fr 1.6fr 1fr',gridTemplateRows:'1fr 1fr auto auto',gap:12,minHeight:0}}>
+        <div style={{flex:1,display:'flex',flexDirection:'column',gap:12,minHeight:0}}>
 
-          {/* Upcoming — left, full height */}
-          <Widget style={{gridRow:'1/3',display:'flex',flexDirection:'column',overflow:'hidden'}}>
-            <WLabel>Upcoming</WLabel>
-            <div style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:14,WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
-              {agendaDays.map(({label,date})=>{
-                const evs=events.filter(e=>e.date===date);
-                return(
-                  <div key={date}>
-                    <div style={{fontSize:10,fontWeight:700,color:D.t3,marginBottom:6,textTransform:'uppercase',letterSpacing:'.08em'}}>{label}</div>
-                    {evs.length===0&&<div style={{fontSize:13,color:D.t4}}>Free</div>}
-                    {evs.map(ev=>(
-                      <div key={ev.id} style={{background:ev.color+'18',borderRadius:8,padding:'8px 11px',marginBottom:4,borderLeft:`3px solid ${ev.color}`}}>
-                        <div style={{fontSize:14,color:D.t1,fontWeight:600}}>{ev.title}</div>
-                        <div style={{fontSize:12,color:D.t3,fontVariantNumeric:'tabular-nums',marginTop:1}}>{fmtTime(ev.time,clockFormat)}</div>
+          {/* Main 3-col grid */}
+          <div style={{flex:1,display:'grid',gridTemplateColumns:'1fr 1.6fr 1fr',gap:12,minHeight:0}}>
+
+            {/* LEFT: Upcoming events */}
+            <Widget style={{display:'flex',flexDirection:'column',overflow:'hidden'}}>
+              <WLabel>Upcoming</WLabel>
+              <div style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:14,WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
+                {agendaDays.map(({label,date})=>{
+                  const evs=events.filter(e=>e.date===date);
+                  return(
+                    <div key={date}>
+                      <div style={{fontSize:10,fontWeight:700,color:D.t3,marginBottom:6,textTransform:'uppercase',letterSpacing:'.08em'}}>{label}</div>
+                      {evs.length===0&&<div style={{fontSize:13,color:D.t4}}>Free</div>}
+                      {evs.map(ev=>(
+                        <div key={ev.id} style={{background:ev.color+'18',borderRadius:8,padding:'8px 11px',marginBottom:4,borderLeft:`3px solid ${ev.color}`}}>
+                          <div style={{fontSize:14,color:D.t1,fontWeight:600}}>{ev.title}</div>
+                          <div style={{fontSize:12,color:D.t3,fontVariantNumeric:'tabular-nums',marginTop:1}}>{fmtTime(ev.time,clockFormat)}</div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            </Widget>
+
+            {/* CENTER: chores (conditional) + dinner */}
+            <div style={{display:'flex',flexDirection:'column',gap:12,minHeight:0}}>
+              {chores.filter(c=>(c.status==='due'||c.status==='overdue')&&!c.done).length>0&&(
+                <Widget style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+                    <WLabel>Chores</WLabel>
+                    <span style={{fontSize:11,fontWeight:700,color:A.amber}}>{chores.filter(c=>(c.status==='due'||c.status==='overdue')&&!c.done).length} due</span>
+                  </div>
+                  <div style={{flex:1,overflowY:'auto',WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
+                    {chores.filter(c=>(c.status==='due'||c.status==='overdue')&&!c.done).map(c=>(
+                      <div key={c.id} onClick={()=>toggleChore(c.id)} style={{display:'flex',alignItems:'center',gap:12,padding:'9px 0',borderBottom:`1px solid ${D.sep}`,cursor:'pointer'}}>
+                        <div style={{width:22,height:22,borderRadius:'50%',flexShrink:0,background:'transparent',border:`1.5px solid ${D.t4}`,display:'flex',alignItems:'center',justifyContent:'center'}}/>
+                        <span style={{flex:1,fontSize:14,color:D.t2,fontWeight:500}}>{c.name}</span>
+                        <span style={{fontSize:11,color:c.status==='overdue'?A.red:A.amber,fontWeight:700}}>{c.status==='overdue'?'Overdue':'Today'}</span>
                       </div>
                     ))}
                   </div>
-                );
-              })}
-            </div>
-          </Widget>
-
-          {/* Chores — top center */}
-          <Widget style={{display:'flex',flexDirection:'column',overflow:'hidden'}}>
-            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
-              <WLabel>Chores</WLabel>
-              {chores.filter(c=>(c.status==='due'||c.status==='overdue')&&!c.done).length>0&&(
-                <span style={{fontSize:11,fontWeight:700,color:A.amber}}>{chores.filter(c=>(c.status==='due'||c.status==='overdue')&&!c.done).length} due</span>
+                </Widget>
               )}
-            </div>
-            <div style={{flex:1,overflowY:'auto',WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
-              {chores.length===0&&<div style={{fontSize:13,color:D.t4}}>No chores</div>}
-              {chores.map(c=>(
-                <div key={c.id} onClick={()=>toggleChore(c.id)} style={{display:'flex',alignItems:'center',gap:12,padding:'9px 0',borderBottom:`1px solid ${D.sep}`,cursor:'pointer',opacity:c.done?.25:1,transition:'opacity .4s'}}>
-                  <div style={{width:22,height:22,borderRadius:'50%',flexShrink:0,background:c.done?A.green:'transparent',border:`1.5px solid ${c.done?A.green:D.t4}`,display:'flex',alignItems:'center',justifyContent:'center',transition:'all .3s'}}>
-                    {c.done&&<svg width="11" height="8" viewBox="0 0 12 9" fill="none"><path d="M1 4.5L4.5 8L11 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                  </div>
-                  <span style={{flex:1,fontSize:14,color:D.t2,textDecoration:c.done?'line-through':undefined,fontWeight:500}}>{c.name}</span>
-                  {(c.status==='due'||c.status==='overdue')&&!c.done&&(
-                    <span style={{fontSize:11,color:c.status==='overdue'?A.red:A.amber,fontWeight:700}}>{c.status==='overdue'?'Overdue':'Today'}</span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </Widget>
-
-          {/* Dinner — bottom center */}
-          <Widget style={{display:'flex',flexDirection:'column'}}>
-            <WLabel>Dinner tonight</WLabel>
-            <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center'}}>
-              <div style={{fontSize:28,fontWeight:700,color:D.t1,letterSpacing:'-.02em',lineHeight:1.2,marginBottom:14}}>{todayDinner()||'—'}</div>
-              <div style={{display:'flex',gap:10}}>
-                {[1,2].map(offset=>{
-                  const d=new Date(); d.setDate(d.getDate()+offset);
-                  const dayName=DAYS[d.getDay()];
-                  const meal=(meals||[]).find(m=>m.day===dayName)?.meal||'—';
-                  return(
-                    <div key={offset} style={{flex:1,background:'rgba(255,255,255,0.05)',borderRadius:8,padding:'8px 10px'}}>
-                      <div style={{fontSize:10,fontWeight:700,color:D.t3,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>{offset===1?'Tomorrow':dayName}</div>
-                      <div style={{fontSize:13,color:meal!=='—'?D.t2:D.t4,fontWeight:500}}>{meal}</div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </Widget>
-
-          {/* Weather — top right */}
-          <Widget style={{display:'flex',flexDirection:'column',overflow:'hidden'}}>
-            <WLabel>Weather</WLabel>
-            {weather?(
-              <div style={{display:'flex',flexDirection:'column',flex:1,minHeight:0}}>
-                <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center'}}>
-                  <span style={{fontSize:64,fontWeight:800,color:D.t1,lineHeight:1,letterSpacing:'-.05em',fontVariantNumeric:'tabular-nums'}}>{weather.temp}°</span>
-                  <div style={{fontSize:15,color:D.t2,fontWeight:500,marginTop:6,marginBottom:3}}>{weather.condition}</div>
-                  <div style={{fontSize:12,color:D.t3}}>H:{weather.hi}° · L:{weather.lo}°</div>
-                </div>
-                <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:2,borderTop:`1px solid ${D.sep}`,paddingTop:10,flexShrink:0}}>
-                  {weather.forecast.map(f=>(
-                    <div key={f.day} style={{textAlign:'center'}}>
-                      <div style={{fontSize:10,color:D.t3,fontWeight:600,marginBottom:3}}>{f.day}</div>
-                      <div style={{fontSize:17,marginBottom:3}}>{f.icon}</div>
-                      <div style={{fontSize:12,color:D.t1,fontWeight:700}}>{f.hi}°</div>
-                      <div style={{fontSize:11,color:D.t4}}>{f.lo}°</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ):(
-              <div style={{fontSize:13,color:D.t4}}>Loading…</div>
-            )}
-          </Widget>
-
-          {/* Grocery + Countdowns + Photos — bottom right */}
-          <div style={{display:'flex',flexDirection:'column',gap:12}}>
-            {photos&&photos.length>0?(
-              <Widget style={{flex:1,padding:0,overflow:'hidden',position:'relative',minHeight:0}}>
-                <img
-                  key={photoIdx}
-                  src={`/photos/${photos[photoIdx%photos.length]?.filename}`}
-                  style={{width:'100%',height:'100%',objectFit:'cover',display:'block',animation:'fadeIn .6s ease'}}
-                  alt=""
-                />
-                {photos.length>1&&(
-                  <div style={{position:'absolute',bottom:8,left:'50%',transform:'translateX(-50%)',display:'flex',gap:5}}>
-                    {photos.map((_,i)=><div key={i} style={{width:5,height:5,borderRadius:'50%',background:i===photoIdx%photos.length?'#fff':'rgba(255,255,255,0.35)'}}/>)}
-                  </div>
-                )}
-              </Widget>
-            ):(
-              <Widget style={{flex:1}}>
-                <WLabel>Grocery</WLabel>
-                {(grocery||[]).filter(g=>!g.checked).length===0&&<div style={{fontSize:13,color:D.t4}}>Nothing on the list</div>}
-                {(grocery||[]).filter(g=>!g.checked).slice(0,5).map((item,i)=>(
-                  <div key={item.id} style={{display:'flex',alignItems:'center',gap:9,padding:'6px 0',borderBottom:i>0?`1px solid ${D.sep}`:'none'}}>
-                    <div style={{width:6,height:6,borderRadius:'50%',background:'rgba(255,255,255,0.30)',flexShrink:0}}/>
-                    <span style={{fontSize:13,color:D.t2}}>{item.name}</span>
-                  </div>
-                ))}
-              </Widget>
-            )}
-            <Widget>
-              <WLabel>Countdowns</WLabel>
-              {(!countdowns||countdowns.length===0)&&<div style={{fontSize:13,color:D.t4}}>None set</div>}
-              {(countdowns||[]).filter(c=>daysUntil(c.date)>=0).slice(0,3).map((c,i)=>{
-                const days=daysUntil(c.date);
-                return(
-                  <div key={c.id} style={{display:'flex',alignItems:'center',gap:10,padding:'6px 0',borderTop:i>0?`1px solid ${D.sep}`:'none'}}>
-                    <span style={{fontSize:16}}>{c.emoji}</span>
-                    <span style={{flex:1,fontSize:13,color:D.t2,fontWeight:500}}>{c.label}</span>
-                    <span style={{fontSize:15,fontWeight:800,color:D.t1}}>{days===0?'Today':days+'d'}</span>
-                  </div>
-                );
-              })}
-            </Widget>
-          </div>
-
-          {/* Monthly goals — full-width bottom row, only when members exist */}
-          {memberProgress.length>0&&(
-            <div style={{gridColumn:'1/4',gridRow:3,display:'flex',gap:12}}>
-              {memberProgress.map(m=>{
-                const pct=m.monthly_goal>0?Math.min(100,Math.round((m.points/m.monthly_goal)*100)):0;
-                const hit=m.monthly_goal>0&&m.points>=m.monthly_goal;
-                return(
-                  <div key={m.id} style={{flex:1,background:D.card,borderRadius:16,border:`1px solid ${hit?A.green+'44':D.border}`,padding:'14px 18px',display:'flex',alignItems:'center',gap:16,transition:'border-color .4s'}}>
-                    <div style={{width:42,height:42,borderRadius:'50%',background:m.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,fontWeight:700,color:'#fff',flexShrink:0}}>{m.initials}</div>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',marginBottom:6}}>
-                        <span style={{fontSize:14,fontWeight:600,color:D.t1}}>{m.name}</span>
-                        <span style={{fontSize:13,color:hit?A.green:D.t2,fontWeight:700,fontVariantNumeric:'tabular-nums'}}>
-                          {m.points}{m.monthly_goal>0?` / ${m.monthly_goal} pts`:' pts'}
-                        </span>
-                      </div>
-                      {m.monthly_goal>0?(
-                        <>
-                          <div style={{height:6,borderRadius:3,background:'rgba(255,255,255,0.08)',overflow:'hidden'}}>
-                            <div style={{height:'100%',borderRadius:3,width:`${pct}%`,background:hit?A.green:pct>60?A.amber:'rgba(255,255,255,0.35)',transition:'width .6s ease, background .4s'}}/>
-                          </div>
-                          {m.reward&&hit&&(
-                            <div style={{fontSize:11,color:A.green,fontWeight:600,marginTop:4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.reward}</div>
-                          )}
-                          {!hit&&<div style={{fontSize:11,color:D.t4,marginTop:4}}>{pct}% of monthly goal</div>}
-                        </>
-                      ):(
-                        <div style={{fontSize:11,color:D.t4}}>No goal set</div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Household goals — full-width, only when goals exist */}
-          {goals.length>0&&(
-            <Widget style={{gridColumn:'1/4',gridRow:4,padding:'14px 18px'}}>
-              <WLabel>Household Goals</WLabel>
-              <div style={{display:'grid',gridTemplateColumns:`repeat(${Math.min(goals.length,4)},1fr)`,gap:16}}>
-                {goals.slice(0,4).map(g=>{
-                  const pct=g.progress_target>0?Math.min(100,Math.round((g.progress_current/g.progress_target)*100)):0;
-                  const done=pct>=100;
-                  const isCounter=g.progress_type==='counter';
-                  const progressLabel=isCounter
-                    ? `${g.unit}${g.progress_current} / ${g.unit}${g.progress_target}`
-                    : `${pct}%`;
-                  const daysLeft=g.deadline?Math.ceil((new Date(g.deadline)-new Date())/(1000*60*60*24)):null;
-                  return(
-                    <div key={g.id}>
-                      <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',marginBottom:6}}>
-                        <span style={{fontSize:13,fontWeight:600,color:D.t1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1,marginRight:8}}>{g.name}</span>
-                        <span style={{fontSize:12,color:done?A.green:D.t3,fontWeight:600,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{progressLabel}</span>
-                      </div>
-                      <div style={{height:5,borderRadius:3,background:'rgba(255,255,255,0.08)',overflow:'hidden',marginBottom:4}}>
-                        <div style={{height:'100%',borderRadius:3,width:`${pct}%`,background:done?A.green:pct>60?A.amber:'rgba(255,255,255,0.35)',transition:'width .6s ease'}}/>
-                      </div>
-                      {daysLeft!==null&&<div style={{fontSize:10,color:daysLeft<14?A.amber:D.t4}}>{daysLeft>0?`${daysLeft}d left`:'Due today'}</div>}
-                    </div>
-                  );
-                })}
-              </div>
-            </Widget>
-          )}
-
-          {/* Pinned notes — full-width, only when pinned notes exist */}
-          {notes.filter(n=>n.pinned).length>0&&(
-            <div style={{gridColumn:'1/4',display:'grid',gridTemplateColumns:`repeat(${Math.min(notes.filter(n=>n.pinned).length,4)},1fr)`,gap:12}}>
-              {notes.filter(n=>n.pinned).slice(0,4).map(n=>(
-                <div key={n.id} style={{background:n.color||'#FAFAF5',borderRadius:14,padding:'16px 18px',border:'1px solid rgba(0,0,0,0.04)'}}>
-                  <div style={{fontSize:14,fontWeight:700,color:'#1C1C1E',marginBottom:n.content?6:0}}>{n.title}</div>
-                  {n.content&&<div style={{fontSize:12,color:'#3C3C43',lineHeight:1.5,whiteSpace:'pre-wrap'}}>{n.content}</div>}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Active poll — most recent poll */}
-          {polls.length>0&&(()=>{
-            const poll=polls[0];
-            const votes={...(poll.votes||{}),...livePollVotes};
-            const total=Object.values(votes).reduce((a,b)=>a+Number(b),0);
-            return(
-              <Widget style={{gridColumn:'1/4',padding:'14px 18px'}}>
-                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
-                  <WLabel>Poll</WLabel>
-                  <span style={{fontSize:11,color:D.t4}}>{total} vote{total!==1?'s':''} · vote from the app</span>
-                </div>
-                <div style={{fontSize:15,fontWeight:600,color:D.t1,marginBottom:12}}>{poll.question}</div>
-                <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
-                  {poll.options.map((opt,idx)=>{
-                    const count=Number(votes[idx])||0;
-                    const pct=total>0?Math.round((count/total)*100):0;
+              <Widget style={{flexShrink:0}}>
+                <WLabel>Dinner tonight</WLabel>
+                <div style={{fontSize:26,fontWeight:700,color:D.t1,letterSpacing:'-.02em',lineHeight:1.2,marginBottom:12}}>{todayDinner()||'—'}</div>
+                <div style={{display:'flex',gap:8}}>
+                  {[1,2].map(offset=>{
+                    const d=new Date(); d.setDate(d.getDate()+offset);
+                    const dayName=DAYS[d.getDay()];
+                    const meal=(meals||[]).find(m=>m.day===dayName)?.meal||'—';
                     return(
-                      <div key={idx} style={{flex:'1 1 120px',minWidth:0}}>
-                        <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',marginBottom:4}}>
-                          <span style={{fontSize:12,color:D.t2,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{opt}</span>
-                          <span style={{fontSize:13,fontWeight:700,color:D.t1,flexShrink:0,marginLeft:8,fontVariantNumeric:'tabular-nums'}}>{pct}%</span>
-                        </div>
-                        <div style={{height:6,borderRadius:3,background:'rgba(255,255,255,0.10)',overflow:'hidden'}}>
-                          <div style={{height:'100%',borderRadius:3,width:`${pct}%`,background:'rgba(255,255,255,0.45)',transition:'width .5s ease'}}/>
-                        </div>
+                      <div key={offset} style={{flex:1,background:'rgba(255,255,255,0.05)',borderRadius:8,padding:'7px 10px'}}>
+                        <div style={{fontSize:10,fontWeight:700,color:D.t3,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:3}}>{offset===1?'Tomorrow':dayName}</div>
+                        <div style={{fontSize:12,color:meal!=='—'?D.t2:D.t4,fontWeight:500}}>{meal}</div>
                       </div>
                     );
                   })}
                 </div>
               </Widget>
-            );
-          })()}
+            </div>
+
+            {/* RIGHT: weather + dynamic extras */}
+            <div style={{display:'flex',flexDirection:'column',gap:12,minHeight:0,overflow:'hidden'}}>
+              {/* Weather — always */}
+              <Widget style={{flexShrink:0}}>
+                <WLabel>Weather</WLabel>
+                {weather?(
+                  <>
+                    <div style={{display:'flex',alignItems:'baseline',gap:10,marginBottom:6}}>
+                      <span style={{fontSize:48,fontWeight:800,color:D.t1,lineHeight:1,letterSpacing:'-.05em',fontVariantNumeric:'tabular-nums'}}>{weather.temp}°</span>
+                      <div>
+                        <div style={{fontSize:13,color:D.t2,fontWeight:500}}>{weather.condition}</div>
+                        <div style={{fontSize:11,color:D.t3,marginTop:1}}>H:{weather.hi}° · L:{weather.lo}°</div>
+                      </div>
+                    </div>
+                    <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:2,borderTop:`1px solid ${D.sep}`,paddingTop:8}}>
+                      {weather.forecast.map(f=>(
+                        <div key={f.day} style={{textAlign:'center'}}>
+                          <div style={{fontSize:9,color:D.t3,fontWeight:600,marginBottom:2}}>{f.day}</div>
+                          <div style={{fontSize:15,marginBottom:2}}>{f.icon}</div>
+                          <div style={{fontSize:11,color:D.t1,fontWeight:700}}>{f.hi}°</div>
+                          <div style={{fontSize:10,color:D.t4}}>{f.lo}°</div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ):(
+                  <div style={{fontSize:13,color:D.t4}}>Loading…</div>
+                )}
+              </Widget>
+              {/* Photos — if uploaded */}
+              {photos&&photos.length>0&&(
+                <Widget style={{flex:1,padding:0,overflow:'hidden',position:'relative',minHeight:80}}>
+                  <img key={photoIdx} src={`/photos/${photos[photoIdx%photos.length]?.filename}`}
+                    style={{width:'100%',height:'100%',objectFit:'cover',display:'block',animation:'fadeIn .6s ease'}} alt=""/>
+                  {photos.length>1&&(
+                    <div style={{position:'absolute',bottom:8,left:'50%',transform:'translateX(-50%)',display:'flex',gap:5}}>
+                      {photos.map((_,i)=><div key={i} style={{width:5,height:5,borderRadius:'50%',background:i===photoIdx%photos.length?'#fff':'rgba(255,255,255,0.35)'}}/>)}
+                    </div>
+                  )}
+                </Widget>
+              )}
+              {/* Grocery — if items exist */}
+              {(grocery||[]).filter(g=>!g.checked).length>0&&(
+                <Widget style={{flexShrink:0}}>
+                  <WLabel>Grocery</WLabel>
+                  {(grocery||[]).filter(g=>!g.checked).slice(0,4).map((item,i)=>(
+                    <div key={item.id} style={{display:'flex',alignItems:'center',gap:9,padding:'5px 0',borderBottom:i>0?`1px solid ${D.sep}`:'none'}}>
+                      <div style={{width:5,height:5,borderRadius:'50%',background:'rgba(255,255,255,0.30)',flexShrink:0}}/>
+                      <span style={{fontSize:13,color:D.t2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{item.name}</span>
+                    </div>
+                  ))}
+                </Widget>
+              )}
+              {/* Countdowns — if upcoming */}
+              {(countdowns||[]).filter(c=>daysUntil(c.date)>=0).length>0&&(
+                <Widget style={{flexShrink:0}}>
+                  <WLabel>Countdowns</WLabel>
+                  {(countdowns||[]).filter(c=>daysUntil(c.date)>=0).slice(0,3).map((c,i)=>{
+                    const days=daysUntil(c.date);
+                    return(
+                      <div key={c.id} style={{display:'flex',alignItems:'center',gap:10,padding:'5px 0',borderTop:i>0?`1px solid ${D.sep}`:'none'}}>
+                        <span style={{fontSize:16}}>{c.emoji}</span>
+                        <span style={{flex:1,fontSize:13,color:D.t2,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.label}</span>
+                        <span style={{fontSize:14,fontWeight:800,color:D.t1,flexShrink:0}}>{days===0?'Today':days+'d'}</span>
+                      </div>
+                    );
+                  })}
+                </Widget>
+              )}
+            </div>
+
+          </div>{/* end main 3-col grid */}
+
+          {/* Bottom bar — full-width extras, only when any exist */}
+          {(memberProgress.length>0||goals.length>0||notes.filter(n=>n.pinned).length>0||polls.length>0)&&(
+            <div style={{flexShrink:0,display:'flex',gap:10,alignItems:'stretch',height:88}}>
+              {/* Member progress */}
+              {memberProgress.slice(0,4).map(m=>{
+                const pct=m.monthly_goal>0?Math.min(100,Math.round((m.points/m.monthly_goal)*100)):0;
+                const hit=m.monthly_goal>0&&m.points>=m.monthly_goal;
+                return(
+                  <div key={m.id} style={{flex:1,background:D.card,borderRadius:14,border:`1px solid ${hit?A.green+'44':D.border}`,padding:'10px 14px',display:'flex',alignItems:'center',gap:10,minWidth:0}}>
+                    <div style={{width:34,height:34,borderRadius:'50%',background:m.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:700,color:'#fff',flexShrink:0}}>{m.initials}</div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',marginBottom:5}}>
+                        <span style={{fontSize:12,fontWeight:600,color:D.t1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.name}</span>
+                        <span style={{fontSize:12,color:hit?A.green:D.t2,fontWeight:700,fontVariantNumeric:'tabular-nums',flexShrink:0,marginLeft:6}}>{m.points}{m.monthly_goal>0?`/${m.monthly_goal}`:''}</span>
+                      </div>
+                      {m.monthly_goal>0&&(
+                        <div style={{height:4,borderRadius:2,background:'rgba(255,255,255,0.08)',overflow:'hidden'}}>
+                          <div style={{height:'100%',borderRadius:2,width:`${pct}%`,background:hit?A.green:pct>60?A.amber:'rgba(255,255,255,0.35)',transition:'width .6s'}}/>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              {/* Household goals */}
+              {goals.length>0&&(
+                <Widget style={{flex:2,padding:'10px 14px',overflow:'hidden'}}>
+                  <div style={{fontSize:9,fontWeight:700,color:D.t3,textTransform:'uppercase',letterSpacing:'.10em',marginBottom:8}}>Goals</div>
+                  <div style={{display:'flex',gap:14,flexWrap:'wrap'}}>
+                    {goals.slice(0,3).map(g=>{
+                      const pct=g.progress_target>0?Math.min(100,Math.round((g.progress_current/g.progress_target)*100)):0;
+                      const isCounter=g.progress_type==='counter';
+                      const label=isCounter?`${g.unit}${g.progress_current}/${g.unit}${g.progress_target}`:`${pct}%`;
+                      return(
+                        <div key={g.id} style={{flex:'1 1 100px',minWidth:0}}>
+                          <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
+                            <span style={{fontSize:11,color:D.t2,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{g.name}</span>
+                            <span style={{fontSize:11,color:pct>=100?A.green:D.t3,fontWeight:700,marginLeft:8,flexShrink:0}}>{label}</span>
+                          </div>
+                          <div style={{height:4,borderRadius:2,background:'rgba(255,255,255,0.08)',overflow:'hidden'}}>
+                            <div style={{height:'100%',borderRadius:2,width:`${pct}%`,background:pct>=100?A.green:pct>60?A.amber:'rgba(255,255,255,0.35)',transition:'width .6s'}}/>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </Widget>
+              )}
+              {/* Pinned notes */}
+              {notes.filter(n=>n.pinned).length>0&&(
+                <div style={{flex:1,display:'flex',gap:8,overflow:'hidden',minWidth:0}}>
+                  {notes.filter(n=>n.pinned).slice(0,2).map(n=>(
+                    <div key={n.id} style={{flex:1,background:n.color||'#FAFAF5',borderRadius:12,padding:'10px 14px',overflow:'hidden',minWidth:0}}>
+                      <div style={{fontSize:12,fontWeight:700,color:'#1C1C1E',marginBottom:n.content?3:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{n.title}</div>
+                      {n.content&&<div style={{fontSize:11,color:'#3C3C43',overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical'}}>{n.content}</div>}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {/* Active poll */}
+              {polls.length>0&&(()=>{
+                const poll=polls[0];
+                const votes={...(poll.votes||{}),...livePollVotes};
+                const total=Object.values(votes).reduce((a,b)=>a+Number(b),0);
+                return(
+                  <Widget style={{flex:1.5,padding:'10px 14px',overflow:'hidden'}}>
+                    <div style={{fontSize:9,fontWeight:700,color:D.t3,textTransform:'uppercase',letterSpacing:'.10em',marginBottom:5}}>Poll · {total} vote{total!==1?'s':''}</div>
+                    <div style={{fontSize:12,fontWeight:600,color:D.t1,marginBottom:7,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{poll.question}</div>
+                    <div style={{display:'flex',gap:6}}>
+                      {poll.options.slice(0,4).map((opt,idx)=>{
+                        const count=Number(votes[idx])||0;
+                        const pct=total>0?Math.round((count/total)*100):0;
+                        return(
+                          <div key={idx} style={{flex:1,minWidth:0}}>
+                            <div style={{height:4,borderRadius:2,background:'rgba(255,255,255,0.08)',overflow:'hidden',marginBottom:3}}>
+                              <div style={{height:'100%',borderRadius:2,width:`${pct}%`,background:'rgba(255,255,255,0.4)',transition:'width .5s'}}/>
+                            </div>
+                            <div style={{fontSize:9,color:D.t3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{opt} {pct}%</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </Widget>
+                );
+              })()}
+            </div>
+          )}
 
         </div>
       )}
@@ -2955,10 +2931,12 @@ function GoalsScreen({goals,setGoals,toastAdd}){
     const body={name:form.name.trim(),description:form.description.trim(),progress_type:form.progress_type,progress_current:Number(form.progress_current)||0,progress_target:Number(form.progress_target)||100,unit:form.unit.trim(),deadline:form.deadline};
     if(editGoal){
       const updated=await api.put(`/api/goals/${editGoal.id}`,body);
+      if(!updated?.id){toastAdd(updated?.error||'Error saving','red');return;}
       setGoals(p=>p.map(g=>g.id===editGoal.id?updated:g));
       toastAdd('Goal updated');
     } else {
       const created=await api.post('/api/goals',body);
+      if(!created?.id){toastAdd(created?.error||'Error saving','red');return;}
       setGoals(p=>[...p,created]);
       toastAdd('Goal added');
     }
@@ -2972,9 +2950,9 @@ function GoalsScreen({goals,setGoals,toastAdd}){
   };
 
   const updateProgress=async(g,newVal)=>{
-    const clamped=Math.min(Math.max(0,Number(newVal)||0),g.progress_target);
+    const clamped=Math.min(Math.max(0,Number(newVal)||0),g.progress_target||100);
     const updated=await api.put(`/api/goals/${g.id}`,{progress_current:clamped});
-    setGoals(p=>p.map(x=>x.id===g.id?updated:x));
+    if(updated&&updated.id) setGoals(p=>p.map(x=>x.id===g.id?updated:x));
   };
 
   return(

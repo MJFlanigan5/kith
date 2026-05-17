@@ -942,7 +942,7 @@ app.post('/api/goals', requireAdmin, (req, res) => {
   res.json(db.prepare('SELECT * FROM household_goals WHERE id=?').get(r.lastInsertRowid));
 });
 
-app.put('/api/goals/:id', requireAdmin, (req, res) => {
+app.put('/api/goals/:id', requireAuth, (req, res) => {
   const g = db.prepare('SELECT * FROM household_goals WHERE id=?').get(req.params.id);
   if (!g) return res.status(404).json({ error: 'Not found' });
   const { name, description, progress_type, progress_current, progress_target, unit, deadline } = req.body || {};

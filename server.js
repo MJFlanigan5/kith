@@ -890,6 +890,29 @@ app.delete('/api/members/:id', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
+app.put('/api/members/:id/goal', requireAdmin, (req, res) => {
+  const { monthly_goal, reward } = req.body || {};
+  db.prepare('UPDATE family_members SET monthly_goal=?,reward=? WHERE id=?')
+    .run(Number(monthly_goal) || 0, (reward || '').trim(), Number(req.params.id));
+  res.json({ ok: true });
+});
+
+app.get('/api/members/progress', requireAuth, (req, res) => {
+  const now = new Date();
+  const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+  const members = db.prepare('SELECT * FROM family_members ORDER BY created_at').all();
+  const rows = db.prepare(
+    'SELECT member_id, SUM(points) as points FROM chore_completions WHERE date(completed_at) >= ? GROUP BY member_id'
+  ).all(monthStart);
+  const ptMap = Object.fromEntries(rows.map(r => [r.member_id, r.points]));
+  res.json(members.map(m => ({
+    id: m.id, name: m.name, color: m.color, initials: m.initials,
+    monthly_goal: m.monthly_goal || 0,
+    reward: m.reward || '',
+    points: ptMap[m.id] || 0,
+  })));
+});
+
 // ── Routes: Photos (screensaver) ──────────────────────────────────────────────
 app.get('/api/photos', (req, res) => {
   res.json(db.prepare('SELECT * FROM photos ORDER BY created_at DESC').all());

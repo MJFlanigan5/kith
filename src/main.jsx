@@ -316,6 +316,8 @@ function FamilyScreen({members,setMembers,toastAdd}){
   const [form,setForm]=useState({name:'',color:'#007AFF'});
   const [pinModal,setPinModal]=useState(null);
   const [pinInput,setPinInput]=useState('');
+  const [goalId,setGoalId]=useState(null);
+  const [goalForm,setGoalForm]=useState({monthly_goal:'',reward:''});
   const COLORS=['#007AFF','#34C759','#FF3B30','#FF9500','#5856D6','#32ADE6','#AF52DE','#FF2D55','#FF6B35','#30D158'];
   const save=async()=>{
     if(!form.name.trim()) return;
@@ -334,6 +336,13 @@ function FamilyScreen({members,setMembers,toastAdd}){
     await api.put(`/api/members/${pinModal}/pin`,{pin:String(pinInput)});
     setPinModal(null);setPinInput('');
     toastAdd('PIN updated');
+  };
+  const saveGoal=async()=>{
+    const goal=Number(goalForm.monthly_goal)||0;
+    await api.put(`/api/members/${goalId}/goal`,{monthly_goal:goal,reward:goalForm.reward});
+    setMembers(p=>p.map(m=>m.id===goalId?{...m,monthly_goal:goal,reward:goalForm.reward}:m));
+    setGoalId(null);
+    toastAdd('Goal saved');
   };
   return(
     <div style={{maxWidth:600}}>
@@ -362,11 +371,26 @@ function FamilyScreen({members,setMembers,toastAdd}){
       ):(
         <Card>
           {members.map((m,i)=>(
-            <div key={m.id} style={{display:'flex',alignItems:'center',gap:14,padding:'14px 16px',borderTop:i>0?`1px solid ${A.sep}`:'none'}}>
-              <div style={{width:40,height:40,borderRadius:'50%',background:m.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,fontWeight:700,color:'#fff',flexShrink:0}}>{m.initials}</div>
-              <span style={{flex:1,fontSize:15,fontWeight:500,color:A.label1}}>{m.name}</span>
-              <button onClick={()=>{setPinModal(m.id);setPinInput('');}} style={{background:'none',border:'none',color:A.blue,fontSize:13,cursor:'pointer',fontWeight:500,marginRight:8}}>Set PIN</button>
-              <button onClick={()=>del(m.id)} style={{background:'none',border:'none',color:A.label4,fontSize:13,cursor:'pointer',fontWeight:500}}>Remove</button>
+            <div key={m.id} style={{borderTop:i>0?`1px solid ${A.sep}`:'none'}}>
+              <div style={{display:'flex',alignItems:'center',gap:14,padding:'14px 16px'}}>
+                <div style={{width:40,height:40,borderRadius:'50%',background:m.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,fontWeight:700,color:'#fff',flexShrink:0}}>{m.initials}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:15,fontWeight:500,color:A.label1}}>{m.name}</div>
+                  {m.monthly_goal>0&&<div style={{fontSize:12,color:A.label4,marginTop:2}}>{m.monthly_goal} pt goal{m.reward?` · ${m.reward}`:''}</div>}
+                </div>
+                <button onClick={()=>{setGoalId(goalId===m.id?null:m.id);setGoalForm({monthly_goal:m.monthly_goal||'',reward:m.reward||''});}} style={{background:'none',border:'none',color:A.blue,fontSize:13,cursor:'pointer',fontWeight:500}}>
+                  {goalId===m.id?'Cancel':'Set Goal'}
+                </button>
+                <button onClick={()=>{setPinModal(m.id);setPinInput('');}} style={{background:'none',border:'none',color:A.blue,fontSize:13,cursor:'pointer',fontWeight:500}}>PIN</button>
+                <button onClick={()=>del(m.id)} style={{background:'none',border:'none',color:A.label4,fontSize:13,cursor:'pointer',fontWeight:500}}>Remove</button>
+              </div>
+              {goalId===m.id&&(
+                <div style={{padding:'0 16px 14px',display:'flex',gap:8,alignItems:'center'}}>
+                  <Inp type="number" min="0" value={goalForm.monthly_goal} onChange={e=>setGoalForm(p=>({...p,monthly_goal:e.target.value}))} placeholder="Monthly pts goal" style={{width:160}}/>
+                  <Inp value={goalForm.reward} onChange={e=>setGoalForm(p=>({...p,reward:e.target.value}))} placeholder="Reward (optional)" style={{flex:1}}/>
+                  <Btn sm onClick={saveGoal}>Save</Btn>
+                </div>
+              )}
             </div>
           ))}
         </Card>
@@ -399,6 +423,14 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
     const load=()=>api.get('/api/news').then(d=>{if(Array.isArray(d))setNews(d);}).catch(()=>{});
     load();
     const id=setInterval(load,30*60*1000);
+    return()=>clearInterval(id);
+  },[]);
+
+  const [memberProgress,setMemberProgress]=useState([]);
+  useEffect(()=>{
+    const load=()=>api.get('/api/members/progress').then(d=>{if(Array.isArray(d))setMemberProgress(d);}).catch(()=>{});
+    load();
+    const id=setInterval(load,5*60*1000);
     return()=>clearInterval(id);
   },[]);
   const [newsIdx,setNewsIdx]=useState(0);
@@ -577,7 +609,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
           )}
         </div>
       ):(
-        <div style={{flex:1,display:'grid',gridTemplateColumns:'1fr 1.6fr 1fr',gridTemplateRows:'1fr 1fr',gap:12,minHeight:0}}>
+        <div style={{flex:1,display:'grid',gridTemplateColumns:'1fr 1.6fr 1fr',gridTemplateRows:'1fr 1fr auto',gap:12,minHeight:0}}>
 
           {/* Upcoming — left, full height */}
           <Widget style={{gridRow:'1/3',display:'flex',flexDirection:'column',overflow:'hidden'}}>
@@ -715,6 +747,43 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
               })}
             </Widget>
           </div>
+
+          {/* Monthly goals — full-width bottom row, only when members exist */}
+          {memberProgress.length>0&&(
+            <div style={{gridColumn:'1/4',gridRow:3,display:'flex',gap:12}}>
+              {memberProgress.map(m=>{
+                const pct=m.monthly_goal>0?Math.min(100,Math.round((m.points/m.monthly_goal)*100)):0;
+                const hit=m.monthly_goal>0&&m.points>=m.monthly_goal;
+                return(
+                  <div key={m.id} style={{flex:1,background:D.card,borderRadius:16,border:`1px solid ${hit?A.green+'44':D.border}`,padding:'14px 18px',display:'flex',alignItems:'center',gap:16,transition:'border-color .4s'}}>
+                    <div style={{width:42,height:42,borderRadius:'50%',background:m.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,fontWeight:700,color:'#fff',flexShrink:0}}>{m.initials}</div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',marginBottom:6}}>
+                        <span style={{fontSize:14,fontWeight:600,color:D.t1}}>{m.name}</span>
+                        <span style={{fontSize:13,color:hit?A.green:D.t2,fontWeight:700,fontVariantNumeric:'tabular-nums'}}>
+                          {m.points}{m.monthly_goal>0?` / ${m.monthly_goal} pts`:' pts'}
+                        </span>
+                      </div>
+                      {m.monthly_goal>0?(
+                        <>
+                          <div style={{height:6,borderRadius:3,background:'rgba(255,255,255,0.08)',overflow:'hidden'}}>
+                            <div style={{height:'100%',borderRadius:3,width:`${pct}%`,background:hit?A.green:pct>60?A.amber:'rgba(255,255,255,0.35)',transition:'width .6s ease, background .4s'}}/>
+                          </div>
+                          {m.reward&&hit&&(
+                            <div style={{fontSize:11,color:A.green,fontWeight:600,marginTop:4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.reward}</div>
+                          )}
+                          {!hit&&<div style={{fontSize:11,color:D.t4,marginTop:4}}>{pct}% of monthly goal</div>}
+                        </>
+                      ):(
+                        <div style={{fontSize:11,color:D.t4}}>No goal set</div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
         </div>
       )}
 

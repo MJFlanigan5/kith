@@ -701,11 +701,14 @@ app.put('/api/settings', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
+app.get('/api/settings/webhook-secret', requireAdmin, (req, res) => {
+  const val = db.prepare("SELECT value FROM settings WHERE key='email_webhook_secret'").get()?.value || '';
+  res.json({ secret: val });
+});
 app.put('/api/settings/webhook-secret', requireAdmin, (req, res) => {
-  const { secret } = req.body;
-  if (!secret) return res.status(400).json({ error: 'secret required' });
+  const secret = req.body?.secret || require('crypto').randomBytes(24).toString('hex');
   db.prepare('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)').run('email_webhook_secret', String(secret));
-  res.json({ ok: true });
+  res.json({ secret });
 });
 
 app.put('/api/settings/ai-key', requireAdmin, (req, res) => {

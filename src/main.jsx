@@ -2201,6 +2201,43 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,toastAdd}){
   );
 }
 
+function WebhookSecretPanel({toastAdd}){
+  const [secret,setSecret]=useState('');
+  const [revealed,setRevealed]=useState(false);
+  const [loading,setLoading]=useState(false);
+
+  const load=async()=>{
+    const r=await api.get('/api/settings/webhook-secret');
+    if(r?.secret){setSecret(r.secret);setRevealed(true);}
+  };
+
+  const regen=async()=>{
+    if(!confirm('Generate a new webhook secret? You will need to update Cloudflare with the new value.')) return;
+    setLoading(true);
+    const r=await api.put('/api/settings/webhook-secret',{});
+    setLoading(false);
+    if(r?.secret){setSecret(r.secret);setRevealed(true);toastAdd('New secret generated — copy it and update Cloudflare','blue');}
+    else toastAdd('Failed to generate','red');
+  };
+
+  const copy=()=>{navigator.clipboard.writeText(secret);toastAdd('Copied','blue');};
+
+  if(!revealed) return(
+    <Btn sm onClick={load}>Reveal current secret</Btn>
+  );
+
+  return(
+    <div>
+      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+        <code style={{flex:1,fontSize:12,background:A.inputBg,padding:'6px 10px',borderRadius:A.rXs,border:`1px solid ${A.sep}`,color:A.label2,wordBreak:'break-all'}}>{secret}</code>
+        <Btn sm variant="ghost" onClick={copy}>Copy</Btn>
+      </div>
+      <Btn sm variant="ghost" onClick={regen} disabled={loading}>{loading?'Generating…':'Regenerate'}</Btn>
+      <div style={{fontSize:12,color:A.label5,marginTop:8}}>After regenerating, paste the new value into your Cloudflare Worker as <code>HEARTH_WEBHOOK_SECRET</code>.</div>
+    </div>
+  );
+}
+
 /* ── Settings ────────────────────────────────────────────────────────── */
 function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setPhotos,clockFormat,setClockFormat,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd,setRefreshMs,parseRefreshMs,setQuickActions}){
   const isMobile=useIsMobile();
@@ -2433,16 +2470,9 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
           </div>
           <div style={{fontSize:12,color:A.label5,marginTop:8}}>Changing this address requires updating your email routing rules.</div>
           <div style={{borderTop:`1px solid ${A.sep}`,marginTop:14,paddingTop:14}}>
-            <div style={{fontSize:14,color:A.label3,marginBottom:8}}>Webhook secret — must match the secret set in your Cloudflare Worker.</div>
-            <Inp value={webhookSecret} onChange={e=>setWebhookSecret(e.target.value)} placeholder="Paste webhook secret" type="password"/>
-            <div style={{marginTop:8}}>
-              <Btn sm onClick={async()=>{
-                if(!webhookSecret.trim()) return;
-                await fetch('/api/settings/webhook-secret',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify({secret:webhookSecret.trim()})});
-                setWebhookSecret('');
-                toastAdd('Webhook secret saved');
-              }}>Save secret</Btn>
-            </div>
+            <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:4}}>Webhook secret</div>
+            <div style={{fontSize:13,color:A.label4,marginBottom:10}}>Must match the secret in your Cloudflare Worker. Copy it here after regenerating, then paste it into Cloudflare.</div>
+            <WebhookSecretPanel toastAdd={toastAdd}/>
           </div>
         </div>
       </FormGroup>

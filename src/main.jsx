@@ -2914,38 +2914,41 @@ function PollsScreen({polls,setPolls,toastAdd}){
   );
 }
 
-/* ── Manage Shell ────────────────────────────────────────────────────── */
 /* ── Goals Screen ────────────────────────────────────────────────────── */
 function GoalsScreen({goals,setGoals,toastAdd}){
   const isMobile=useIsMobile();
-  const [drawerOpen,setDrawerOpen]=useState(false);
-  const [editGoal,setEditGoal]=useState(null);
-  const blankForm={name:'',description:'',progress_type:'percent',progress_current:'',progress_target:'100',unit:'',deadline:''};
-  const [form,setForm]=useState(blankForm);
-  const [localPct,setLocalPct]=useState({});
+  const blank={name:'',description:'',progress_type:'percent',progress_current:'',progress_target:'100',unit:'',deadline:''};
+  const [form,setForm]=useState(blank);
+  const [editId,setEditId]=useState(null);
+  const [open,setOpen]=useState(false);
+  const [dragging,setDragging]=useState({});
+  const [saving,setSaving]=useState({});
 
-  const openNew=()=>{setEditGoal(null);setForm(blankForm);setDrawerOpen(true);};
+  const pctOf=g=>dragging[g.id]??(g.progress_target>0?Math.min(100,Math.round((g.progress_current/g.progress_target)*100)):0);
+
+  const openAdd=()=>{setEditId(null);setForm(blank);setOpen(true);};
   const openEdit=g=>{
-    setEditGoal(g);
+    setEditId(g.id);
     setForm({name:g.name,description:g.description||'',progress_type:g.progress_type,progress_current:String(g.progress_current),progress_target:String(g.progress_target),unit:g.unit||'',deadline:g.deadline||''});
-    setDrawerOpen(true);
+    setOpen(true);
   };
+  const closeForm=()=>{setOpen(false);setEditId(null);setForm(blank);};
 
   const save=async()=>{
-    if(!form.name.trim()){toastAdd('Name is required','red');return;}
+    if(!form.name.trim()){toastAdd('Name required','red');return;}
     const body={name:form.name.trim(),description:form.description.trim(),progress_type:form.progress_type,progress_current:Number(form.progress_current)||0,progress_target:Number(form.progress_target)||100,unit:form.unit.trim(),deadline:form.deadline};
-    if(editGoal){
-      const updated=await api.put(`/api/goals/${editGoal.id}`,body);
-      if(!updated?.id){toastAdd(updated?.error||'Error saving','red');return;}
-      setGoals(p=>p.map(g=>g.id===editGoal.id?updated:g));
-      toastAdd('Goal updated');
-    } else {
-      const created=await api.post('/api/goals',body);
-      if(!created?.id){toastAdd(created?.error||'Error saving','red');return;}
-      setGoals(p=>[...p,created]);
+    if(editId){
+      const r=await api.put(`/api/goals/${editId}`,body);
+      if(!r?.id){toastAdd(r?.error||'Save failed','red');return;}
+      setGoals(p=>p.map(g=>g.id===editId?r:g));
+      toastAdd('Saved');
+    }else{
+      const r=await api.post('/api/goals',body);
+      if(!r?.id){toastAdd(r?.error||'Save failed','red');return;}
+      setGoals(p=>[...p,r]);
       toastAdd('Goal added');
     }
-    setDrawerOpen(false);setEditGoal(null);setForm(blankForm);
+    closeForm();
   };
 
   const del=async id=>{
@@ -2954,14 +2957,15 @@ function GoalsScreen({goals,setGoals,toastAdd}){
     toastAdd('Deleted','blue');
   };
 
-  const updateProgress=async(g,newVal)=>{
-    const clamped=Math.min(Math.max(0,Number(newVal)||0),g.progress_target||100);
-    try{
-      const updated=await api.put(`/api/goals/${g.id}`,{progress_current:clamped});
-      if(updated&&updated.id) setGoals(p=>p.map(x=>x.id===g.id?updated:x));
-      else toastAdd(updated?.error||'Could not save','red');
-    }catch(e){toastAdd('Could not save','red');}
-    setLocalPct(p=>{const n={...p};delete n[g.id];return n;});
+  const commitProgress=async(g,pct)=>{
+    if(saving[g.id]) return;
+    setSaving(s=>({...s,[g.id]:true}));
+    const newVal=Math.round((pct/100)*(g.progress_target||100));
+    const r=await api.put(`/api/goals/${g.id}`,{progress_current:newVal});
+    setSaving(s=>{const n={...s};delete n[g.id];return n;});
+    setDragging(d=>{const n={...d};delete n[g.id];return n;});
+    if(r?.id) setGoals(p=>p.map(x=>x.id===g.id?r:x));
+    else toastAdd(r?.error||'Save failed','red');
   };
 
   return(
@@ -2971,27 +2975,28 @@ function GoalsScreen({goals,setGoals,toastAdd}){
           <h1 style={{fontSize:isMobile?34:44,fontWeight:800,letterSpacing:'-.05em',lineHeight:1.05}}>Goals</h1>
           <p style={{color:A.label4,fontSize:15,marginTop:6}}>{goals.length} household goal{goals.length!==1?'s':''}</p>
         </div>
-        <Btn onClick={openNew}>+ Add Goal</Btn>
+        <Btn onClick={openAdd}>+ Add Goal</Btn>
       </div>
 
       {goals.length===0?(
         <Card style={{padding:'52px 24px',textAlign:'center'}}>
           <div style={{fontSize:13,fontWeight:700,color:A.label5,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:10}}>No goals yet</div>
-          <div style={{fontSize:15,color:A.label3,fontWeight:500}}>Add big household projects and track progress here</div>
+          <div style={{fontSize:15,color:A.label3,fontWeight:500}}>Add a household goal and track progress here</div>
         </Card>
       ):(
         <div style={{display:'flex',flexDirection:'column',gap:12}}>
           {goals.map(g=>{
-            const pct=g.progress_target>0?Math.min(100,Math.round((g.progress_current/g.progress_target)*100)):0;
-            const done=pct>=100;
+            const pct=pctOf(g);
+            const done=g.progress_target>0&&g.progress_current>=g.progress_target;
             const isCounter=g.progress_type==='counter';
-            const daysLeft=g.deadline?Math.ceil((new Date(g.deadline)-new Date())/(1000*60*60*24)):null;
+            const daysLeft=g.deadline?Math.ceil((new Date(g.deadline)-new Date())/86400000):null;
+            const isSaving=!!saving[g.id];
             return(
               <Card key={g.id} style={{padding:'18px 20px'}}>
                 <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:12,marginBottom:10}}>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:17,fontWeight:700,color:A.label1,marginBottom:g.description?4:0}}>{g.name}</div>
-                    {g.description&&<div style={{fontSize:13,color:A.label4,lineHeight:1.4}}>{g.description}</div>}
+                    <div style={{fontSize:17,fontWeight:700,color:A.label1}}>{g.name}</div>
+                    {g.description&&<div style={{fontSize:13,color:A.label4,marginTop:3,lineHeight:1.4}}>{g.description}</div>}
                   </div>
                   <div style={{display:'flex',gap:12,flexShrink:0,alignItems:'center'}}>
                     {daysLeft!==null&&<span style={{fontSize:12,color:daysLeft<14?A.amber:A.label4,fontWeight:600}}>{daysLeft>0?`${daysLeft}d left`:'Due today'}</span>}
@@ -3001,65 +3006,67 @@ function GoalsScreen({goals,setGoals,toastAdd}){
                 </div>
                 <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:10}}>
                   <div style={{flex:1,height:8,borderRadius:4,background:A.inputBg,overflow:'hidden'}}>
-                    <div style={{height:'100%',borderRadius:4,width:`${pct}%`,background:done?A.green:pct>60?A.amber:A.blue,transition:'width .5s ease'}}/>
+                    <div style={{height:'100%',borderRadius:4,background:done?A.green:pct>60?A.amber:A.blue,width:`${pct}%`,transition:isSaving?'none':'width .3s ease'}}/>
                   </div>
-                  <span style={{fontSize:13,fontWeight:700,color:done?A.green:A.label2,flexShrink:0,fontVariantNumeric:'tabular-nums',minWidth:48,textAlign:'right'}}>
-                    {isCounter?`${g.unit}${g.progress_current}/${g.unit}${g.progress_target}`:`${pct}%`}
+                  <span style={{fontSize:13,fontWeight:700,color:done?A.green:A.label2,flexShrink:0,minWidth:48,textAlign:'right'}}>
+                    {isCounter?`${g.unit||''}${g.progress_current}/${g.unit||''}${g.progress_target}`:`${pct}%`}
                   </span>
                 </div>
-                <div style={{display:'flex',alignItems:'center',gap:10}}>
-                  {isCounter?(
-                    <>
-                      <input type="number" min="0" max={g.progress_target}
-                        defaultValue={g.progress_current}
-                        key={g.progress_current}
-                        onBlur={e=>updateProgress(g,e.target.value)}
-                        style={{width:100,padding:'6px 10px',borderRadius:A.rXs,border:`1px solid ${A.sep}`,background:A.inputBg,fontSize:14,color:A.label1}}/>
-                      <span style={{fontSize:13,color:A.label4}}>of {g.unit}{g.progress_target} {g.unit?'':g.name.toLowerCase()}</span>
-                    </>
-                  ):(
-                    <>
-                      <input type="range" min="0" max="100"
-                        value={localPct[g.id]??pct}
-                        onChange={e=>setLocalPct(p=>({...p,[g.id]:Number(e.target.value)}))}
-                        onMouseUp={e=>{const v=localPct[g.id]??pct;updateProgress(g,Math.round((v/100)*(g.progress_target||100)));}}
-                        onTouchEnd={e=>{const v=localPct[g.id]??pct;updateProgress(g,Math.round((v/100)*(g.progress_target||100)));}}
-                        style={{flex:1,accentColor:A.blue}}/>
-                      <span style={{fontSize:13,color:A.label4,minWidth:32,textAlign:'right'}}>{localPct[g.id]??pct}%</span>
-                    </>
-                  )}
-                </div>
+                {isCounter?(
+                  <input type="number" min="0" max={g.progress_target}
+                    defaultValue={g.progress_current}
+                    key={g.id+'-'+g.progress_current}
+                    onBlur={e=>{const v=Number(e.target.value)||0;if(v!==g.progress_current) commitProgress(g,g.progress_target>0?Math.min(100,(v/g.progress_target)*100):0);}}
+                    disabled={isSaving}
+                    style={{width:100,padding:'6px 10px',borderRadius:A.rXs,border:`1px solid ${A.sep}`,background:A.inputBg,fontSize:14,color:A.label1}}/>
+                ):(
+                  <div style={{display:'flex',alignItems:'center',gap:10}}>
+                    <input type="range" min="0" max="100"
+                      value={pct}
+                      onChange={e=>setDragging(d=>({...d,[g.id]:Number(e.target.value)}))}
+                      onMouseUp={()=>commitProgress(g,pct)}
+                      onTouchEnd={()=>commitProgress(g,pct)}
+                      disabled={isSaving}
+                      style={{flex:1,accentColor:A.blue,opacity:isSaving?.6:1,cursor:isSaving?'not-allowed':'pointer'}}/>
+                    <span style={{fontSize:13,color:A.label4,minWidth:32,textAlign:'right'}}>{pct}%</span>
+                  </div>
+                )}
               </Card>
             );
           })}
         </div>
       )}
 
-      <Drawer open={drawerOpen} onClose={()=>{setDrawerOpen(false);setEditGoal(null);}} title={editGoal?'Edit Goal':'Add Goal'}>
-        <FormGroup label="Details">
-          <div style={{padding:'12px 16px'}}><Inp value={form.name} onChange={e=>setForm(p=>({...p,name:e.target.value}))} placeholder="e.g. Rebuild the deck"/></div>
-          <div style={{padding:'12px 16px',borderTop:`1px solid ${A.sep}`}}><Inp value={form.description} onChange={e=>setForm(p=>({...p,description:e.target.value}))} placeholder="Optional description"/></div>
+      <Drawer open={open} onClose={closeForm} title={editId?'Edit Goal':'Add Goal'}>
+        <FormGroup label="Name">
+          <div style={{padding:'12px 16px'}}><Inp value={form.name} onChange={e=>setForm(p=>({...p,name:e.target.value}))} placeholder="e.g. Pay off car"/></div>
+        </FormGroup>
+        <FormGroup label="Description (optional)">
+          <div style={{padding:'12px 16px'}}><Inp value={form.description} onChange={e=>setForm(p=>({...p,description:e.target.value}))} placeholder="Notes"/></div>
         </FormGroup>
         <FormGroup label="Progress type">
           <div style={{padding:'12px 16px'}}>
             <SegControl value={form.progress_type==='percent'?'Percent':'Counter'} onChange={v=>setForm(p=>({...p,progress_type:v==='Percent'?'percent':'counter'}))} options={['Percent','Counter']}/>
           </div>
-          {form.progress_type==='counter'&&(
-            <div style={{padding:'12px 16px',borderTop:`1px solid ${A.sep}`,display:'flex',gap:8}}>
-              <Inp value={form.unit} onChange={e=>setForm(p=>({...p,unit:e.target.value}))} placeholder="Unit prefix (e.g. $)" style={{width:100}}/>
+        </FormGroup>
+        {form.progress_type==='counter'&&(
+          <FormGroup label="Unit / Current / Target">
+            <div style={{padding:'12px 16px',display:'flex',gap:8}}>
+              <Inp value={form.unit} onChange={e=>setForm(p=>({...p,unit:e.target.value}))} placeholder="$ or lbs…" style={{width:80}}/>
               <Inp type="number" value={form.progress_current} onChange={e=>setForm(p=>({...p,progress_current:e.target.value}))} placeholder="Current" style={{flex:1}}/>
               <Inp type="number" value={form.progress_target} onChange={e=>setForm(p=>({...p,progress_target:e.target.value}))} placeholder="Target" style={{flex:1}}/>
             </div>
-          )}
-        </FormGroup>
+          </FormGroup>
+        )}
         <FormGroup label="Deadline (optional)">
           <div style={{padding:'12px 16px'}}><Inp type="date" value={form.deadline} onChange={e=>setForm(p=>({...p,deadline:e.target.value}))}/></div>
         </FormGroup>
-        <div style={{padding:'16px'}}><Btn onClick={save} full>{editGoal?'Save Changes':'Add Goal'}</Btn></div>
+        <div style={{padding:'16px'}}><Btn onClick={save} full>{editId?'Save Changes':'Add Goal'}</Btn></div>
       </Drawer>
     </div>
   );
 }
+
 
 function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocery,setGrocery,meals,setMeals,icsSources,setIcsSources,inboxCount,setInboxCount,countdowns,setCountdowns,members,setMembers,photos,setPhotos,clockFormat,setClockFormat,weather,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd,setRefreshMs,parseRefreshMs,goals,setGoals,notes,setNotes,polls,setPolls,quickActions,setQuickActions}){
   const isMobile=useIsMobile();

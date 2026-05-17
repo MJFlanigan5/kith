@@ -1716,6 +1716,15 @@ function ChoresScreen({chores,setChores,toastAdd}){
     toastAdd('Deleted','blue');
   };
 
+  const toggleDone=async c=>{
+    try{
+      const result=await api.put(`/api/chores/${c.id}/done`);
+      if(result.error){toastAdd(result.error,'red');return;}
+      setChores(p=>p.map(x=>x.id===c.id?{...x,done:result.done,next_due:result.next_due,status:result.status}:x));
+      if(result.done) toastAdd(`${c.name} done!`);
+    }catch{toastAdd('Failed to update','red');}
+  };
+
   const statePill=s=>{
     if(s==='due')     return{color:A.amber,bg:A.amberFill,label:'Due today'};
     if(s==='overdue') return{color:A.red,  bg:A.redFill,  label:'Overdue'};
@@ -1744,15 +1753,18 @@ function ChoresScreen({chores,setChores,toastAdd}){
             {chores.map(c=>{
               const p=statePill(c.status);
               return(
-                <div key={c.id} className="tap" style={{padding:'14px 16px',borderTop:`1px solid ${A.sep}`,borderLeft:`3px solid ${c.status==='due'?A.amber:c.status==='overdue'?A.red:'transparent'}`,background:c.status==='due'?`${A.amber}06`:c.status==='overdue'?`${A.red}06`:'transparent'}}>
+                <div key={c.id} style={{padding:'14px 16px',borderTop:`1px solid ${A.sep}`,borderLeft:`3px solid ${c.status==='due'?A.amber:c.status==='overdue'?A.red:'transparent'}`,background:c.done?A.greenFill:c.status==='due'?`${A.amber}06`:c.status==='overdue'?`${A.red}06`:'transparent',opacity:c.done?.6:1,transition:'opacity .3s'}}>
                   <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
-                    <span style={{fontSize:15,fontWeight:600}}>{c.name}</span>
+                    <span style={{fontSize:15,fontWeight:600,textDecoration:c.done?'line-through':'none',color:c.done?A.label4:A.label1}}>{c.name}</span>
                     <Badge color={p.color} bg={p.bg}>{p.label}</Badge>
                   </div>
-                  <div style={{fontSize:13,color:A.label4,marginBottom:8}}>{c.recurrence} · Next: {c.next_due||'—'}</div>
-                  <div style={{display:'flex',gap:12}}>
-                    <button onClick={()=>openEdit(c)} style={{background:'none',border:'none',color:A.blue,fontSize:13,cursor:'pointer',fontWeight:500,padding:0}}>Edit</button>
-                    <button onClick={()=>deleteChore(c.id)} style={{background:'none',border:'none',color:A.red,fontSize:13,cursor:'pointer',fontWeight:500,padding:0}}>Delete</button>
+                  <div style={{fontSize:13,color:A.label4,marginBottom:10}}>{c.recurrence} · Next: {c.next_due||'—'}</div>
+                  <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                    <button onClick={()=>toggleDone(c)} style={{flex:1,padding:'9px 0',borderRadius:A.rXs,border:'none',background:c.done?A.inputBg:A.green,color:c.done?A.label3:'#fff',fontSize:14,fontWeight:700,cursor:'pointer'}}>
+                      {c.done?'Undo':'Mark Done'}
+                    </button>
+                    <button onClick={()=>openEdit(c)} style={{background:A.inputBg,border:'none',borderRadius:A.rXs,color:A.label2,fontSize:13,cursor:'pointer',fontWeight:500,padding:'9px 14px'}}>Edit</button>
+                    <button onClick={()=>deleteChore(c.id)} style={{background:'none',border:'none',color:A.red,fontSize:13,cursor:'pointer',fontWeight:500,padding:'9px 4px'}}>Delete</button>
                   </div>
                 </div>
               );
@@ -1760,7 +1772,7 @@ function ChoresScreen({chores,setChores,toastAdd}){
           </div>
         ) : (
           <>
-            <div style={{display:'grid',gridTemplateColumns:'2fr 56px 1.2fr 1fr 1fr 120px 80px',padding:'10px 16px',borderBottom:`1px solid ${A.sep}`}}>
+            <div style={{display:'grid',gridTemplateColumns:'2fr 56px 1.2fr 1fr 1fr 120px 120px',padding:'10px 16px',borderBottom:`1px solid ${A.sep}`}}>
               {['Chore','Pts','Recurrence','Last Done','Next Due','Status',''].map((h,i)=>(
                 <div key={i} style={{fontSize:12,fontWeight:700,color:A.label4,textTransform:'uppercase',letterSpacing:'.05em'}}>{h}</div>
               ))}
@@ -1768,16 +1780,17 @@ function ChoresScreen({chores,setChores,toastAdd}){
             {chores.map((c,i)=>{
               const p=statePill(c.status);
               return(
-                <div key={c.id} className="irow" style={{display:'grid',gridTemplateColumns:'2fr 56px 1.2fr 1fr 1fr 120px 80px',padding:'13px 16px',borderTop:`1px solid ${A.sep}`,borderLeft:`3px solid ${c.status==='due'?A.amber:c.status==='overdue'?A.red:'transparent'}`,background:c.status==='due'?`${A.amber}06`:c.status==='overdue'?`${A.red}06`:'transparent',alignItems:'center'}}>
-                  <div style={{fontSize:15,fontWeight:500}}>{c.name}</div>
+                <div key={c.id} className="irow" style={{display:'grid',gridTemplateColumns:'2fr 56px 1.2fr 1fr 1fr 120px 120px',padding:'13px 16px',borderTop:`1px solid ${A.sep}`,borderLeft:`3px solid ${c.status==='due'?A.amber:c.status==='overdue'?A.red:'transparent'}`,background:c.done?A.greenFill:c.status==='due'?`${A.amber}06`:c.status==='overdue'?`${A.red}06`:'transparent',alignItems:'center',opacity:c.done?.65:1,transition:'opacity .3s'}}>
+                  <div style={{fontSize:15,fontWeight:500,textDecoration:c.done?'line-through':'none',color:c.done?A.label4:A.label1}}>{c.name}</div>
                   <div style={{fontSize:13,color:A.amber,fontWeight:700}}>{'⭐'.repeat(c.points||1)}</div>
                   <div style={{fontSize:13,color:A.label4}}>{c.recurrence}</div>
                   <div style={{fontSize:13,color:A.label4}}>{c.last_done||'Never'}</div>
                   <div style={{fontSize:13,color:A.label4}}>{c.next_due||'—'}</div>
                   <Badge color={p.color} bg={p.bg}>{p.label}</Badge>
-                  <div style={{display:'flex',gap:10}}>
+                  <div style={{display:'flex',gap:8}}>
+                    <button onClick={()=>toggleDone(c)} style={{padding:'5px 10px',borderRadius:A.rXs,border:'none',background:c.done?A.inputBg:A.green,color:c.done?A.label3:'#fff',fontSize:12,fontWeight:700,cursor:'pointer'}}>{c.done?'Undo':'Done'}</button>
                     <button onClick={()=>openEdit(c)} style={{background:'none',border:'none',color:A.blue,fontSize:13,cursor:'pointer',fontWeight:500}}>Edit</button>
-                    <button onClick={()=>deleteChore(c.id)} style={{background:'none',border:'none',color:A.red,fontSize:13,cursor:'pointer',fontWeight:500}}>Delete</button>
+                    <button onClick={()=>deleteChore(c.id)} style={{background:'none',border:'none',color:A.red,fontSize:13,cursor:'pointer',fontWeight:500}}>Del</button>
                   </div>
                 </div>
               );

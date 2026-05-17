@@ -2284,10 +2284,14 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [sportsLeagues,setSportsLeagues]=useState({nfl:true,nba:true,mlb:true,nhl:true,wnba:false,mls:false,epl:false,ucl:false,wc:false,wwc:false,ncaaf:false,ncaab:false,pga:false,atp:false,nascar:false,f1:false});
   const [haSecret,setHaSecret]=useState('');
   const haWebhookUrl=`${window.location.origin}/api/webhook/ha`;
-  const [smUrl,setSmUrl]=useState('');
-  const [smToken,setSmToken]=useState('');
-  const [smHasToken,setSmHasToken]=useState(false);
-  const [smSaving,setSmSaving]=useState(false);
+  const [haUrl,setHaUrl]=useState('');
+  const [haToken,setHaToken]=useState('');
+  const [haHasToken,setHaHasToken]=useState(false);
+  const [haSaving,setHaSaving]=useState(false);
+  const [homeyUrl,setHomeyUrl]=useState('');
+  const [homeyToken,setHomeyToken]=useState('');
+  const [homeyHasToken,setHomeyHasToken]=useState(false);
+  const [homeySaving,setHomeySaving]=useState(false);
   const [smTesting,setSmTesting]=useState(false);
   const [qaList,setQaList]=useState([]);
   const [qaDrawer,setQaDrawer]=useState(false);
@@ -2316,7 +2320,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
       }
     }).catch(()=>{});
     api.get('/api/ha/secret').then(d=>{if(d.secret) setHaSecret(d.secret);}).catch(()=>{});
-    fetch('/api/ha/smart-home-status',{headers:{..._authHdr()}}).then(r=>r.json()).then(d=>{if(d.url)setSmUrl(d.url);if(d.hasToken)setSmHasToken(true);}).catch(()=>{});
+    fetch('/api/ha/smart-home-status',{headers:{..._authHdr()}}).then(r=>r.json()).then(d=>{if(d.ha){if(d.ha.url)setHaUrl(d.ha.url);if(d.ha.hasToken)setHaHasToken(true);}if(d.homey){if(d.homey.url)setHomeyUrl(d.homey.url);if(d.homey.hasToken)setHomeyHasToken(true);}}).catch(()=>{});
     api.get('/api/quick-actions').then(d=>{if(Array.isArray(d)) setQaList(d);}).catch(()=>{});
   },[]);
   const geocodeCity=async()=>{
@@ -2740,32 +2744,47 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
 
       <FormGroup label="Smart Home">
         <div style={{padding:'14px 16px',borderBottom:`1px solid ${A.sep}`}}>
-          <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:10}}>Pull notifications (Home Assistant or Homey)</div>
-          <div style={{fontSize:14,color:A.label3,marginBottom:12,lineHeight:1.5}}>
-            Enter your smart home URL and a long-lived access token. Kith will read active notifications and display them on your dashboard. Works with Home Assistant and Homey Pro.
-          </div>
-          <div style={{marginBottom:10}}><Inp value={smUrl} onChange={e=>setSmUrl(e.target.value)} placeholder="http://homeassistant.local:8123  or  https://xxx.connect.athom.com"/></div>
-          <div style={{marginBottom:12}}><Inp value={smToken} onChange={e=>setSmToken(e.target.value)} placeholder={smHasToken?'Token saved — paste to replace':'Long-lived access token'} type="password"/></div>
-          <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+          <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:10}}>Home Assistant — pull notifications</div>
+          <div style={{marginBottom:8}}><Inp value={haUrl} onChange={e=>setHaUrl(e.target.value)} placeholder="http://homeassistant.local:8123"/></div>
+          <div style={{marginBottom:10}}><Inp value={haToken} onChange={e=>setHaToken(e.target.value)} placeholder={haHasToken?'Token saved — paste to replace':'Long-lived access token'} type="password"/></div>
+          <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:6}}>
             <Btn sm onClick={async()=>{
-              if(!smUrl.trim()){toastAdd('URL is required','red');return;}
-              setSmSaving(true);
-              const body={url:smUrl.trim()};
-              if(smToken.trim()) body.token=smToken.trim();
+              if(!haUrl.trim()){toastAdd('URL is required','red');return;}
+              setHaSaving(true);
+              const body={ha_url:haUrl.trim()};
+              if(haToken.trim()) body.ha_token=haToken.trim();
               const r=await fetch('/api/settings/smart-home',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify(body)}).then(x=>x.json()).catch(()=>({error:'Failed'}));
-              setSmSaving(false);
-              if(r.ok){toastAdd('Saved');if(smToken.trim())setSmHasToken(true);setSmToken('');}
+              setHaSaving(false);
+              if(r.ok){toastAdd('Saved');if(haToken.trim())setHaHasToken(true);setHaToken('');}
               else toastAdd(r.error||'Save failed','red');
-            }} disabled={smSaving}>{smSaving?'Saving…':'Save'}</Btn>
+            }} disabled={haSaving}>{haSaving?'Saving…':'Save'}</Btn>
+          </div>
+          <div style={{fontSize:12,color:A.label5}}>Create a long-lived token in your HA profile page.</div>
+        </div>
+        <div style={{padding:'14px 16px',borderBottom:`1px solid ${A.sep}`}}>
+          <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:10}}>Homey Pro — pull notifications</div>
+          <div style={{marginBottom:8}}><Inp value={homeyUrl} onChange={e=>setHomeyUrl(e.target.value)} placeholder="https://xxx.connect.athom.com"/></div>
+          <div style={{marginBottom:10}}><Inp value={homeyToken} onChange={e=>setHomeyToken(e.target.value)} placeholder={homeyHasToken?'Token saved — paste to replace':'Personal access token'} type="password"/></div>
+          <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:6}}>
+            <Btn sm onClick={async()=>{
+              if(!homeyUrl.trim()){toastAdd('URL is required','red');return;}
+              setHomeySaving(true);
+              const body={homey_url:homeyUrl.trim()};
+              if(homeyToken.trim()) body.homey_token=homeyToken.trim();
+              const r=await fetch('/api/settings/smart-home',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify(body)}).then(x=>x.json()).catch(()=>({error:'Failed'}));
+              setHomeySaving(false);
+              if(r.ok){toastAdd('Saved');if(homeyToken.trim())setHomeyHasToken(true);setHomeyToken('');}
+              else toastAdd(r.error||'Save failed','red');
+            }} disabled={homeySaving}>{homeySaving?'Saving…':'Save'}</Btn>
             <Btn sm variant="ghost" onClick={async()=>{
               setSmTesting(true);
               const r=await fetch('/api/ha/pull').then(x=>x.json()).catch(()=>({error:'Request failed'}));
               setSmTesting(false);
               if(Array.isArray(r)) toastAdd(r.length>0?`Connected — ${r.length} notification${r.length!==1?'s':''}  found`:'Connected — no notifications right now');
               else toastAdd(r.error||'Connection failed','red');
-            }} disabled={smTesting}>{smTesting?'Testing…':'Test connection'}</Btn>
+            }} disabled={smTesting}>{smTesting?'Testing…':'Test both'}</Btn>
           </div>
-          <div style={{fontSize:12,color:A.label5,marginTop:10}}>HA: create a long-lived token in your profile. Homey: generate a token in Account &rsaquo; API Keys. The URL must be reachable from this server.</div>
+          <div style={{fontSize:12,color:A.label5}}>Generate a Personal Access Token at my.homey.app → Account → Personal Access Tokens.</div>
         </div>
         <div style={{padding:'14px 16px'}}>
           <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:10}}>Push events (webhook)</div>

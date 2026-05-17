@@ -684,7 +684,7 @@ app.post('/api/push/test', requireAuth, async (req, res) => {
 });
 
 // ── Routes: Settings ──────────────────────────────────────────────────────────
-const SETTINGS_SENSITIVE = new Set(['email_webhook_secret','anthropic_api_key','ai_api_key','jwt_secret','vapid_public','vapid_private','admin_pin_hash','resend_api_key','ha_webhook_secret','smart_home_token']);
+const SETTINGS_SENSITIVE = new Set(['email_webhook_secret','anthropic_api_key','ai_api_key','jwt_secret','vapid_public','vapid_private','admin_pin_hash','resend_api_key','ha_webhook_secret','smart_home_token','ha_token','homey_token']);
 app.get('/api/settings', (req, res) => {
   const rows = db.prepare('SELECT key,value FROM settings').all();
   res.json(Object.fromEntries(rows.filter(r=>!SETTINGS_SENSITIVE.has(r.key)).map(r=>[r.key,r.value])));
@@ -1065,54 +1065,56 @@ app.get('/api/ha/secret', requireAdmin, (req, res) => {
 });
 
 app.put('/api/settings/smart-home', requireAdmin, (req, res) => {
-  const { url, token } = req.body || {};
+  const { ha_url, ha_token, homey_url, homey_token } = req.body || {};
   const upd = db.prepare('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)');
-  if (url !== undefined) upd.run('smart_home_url', String(url));
-  if (token !== undefined && token !== '') upd.run('smart_home_token', String(token));
+  if (ha_url !== undefined) upd.run('ha_url', String(ha_url));
+  if (ha_token !== undefined && ha_token !== '') upd.run('ha_token', String(ha_token));
+  if (homey_url !== undefined) upd.run('homey_url', String(homey_url));
+  if (homey_token !== undefined && homey_token !== '') upd.run('homey_token', String(homey_token));
   res.json({ ok: true });
 });
 
 app.get('/api/ha/smart-home-status', requireAdmin, (req, res) => {
-  const url = db.prepare("SELECT value FROM settings WHERE key='smart_home_url'").get()?.value || '';
-  const hasToken = !!(db.prepare("SELECT value FROM settings WHERE key='smart_home_token'").get()?.value);
-  res.json({ url, hasToken });
+  const get = k => db.prepare(`SELECT value FROM settings WHERE key=?`).get(k)?.value || '';
+  res.json({
+    ha: { url: get('ha_url'), hasToken: !!get('ha_token') },
+    homey: { url: get('homey_url'), hasToken: !!get('homey_token') },
+  });
 });
 
 app.get('/api/ha/pull', async (req, res) => {
-  const url = db.prepare("SELECT value FROM settings WHERE key='smart_home_url'").get()?.value;
-  const token = db.prepare("SELECT value FROM settings WHERE key='smart_home_token'").get()?.value;
-  if (!url || !token) return res.json([]);
+  const get = k => db.prepare(`SELECT value FROM settings WHERE key=?`).get(k)?.value;
+  const haUrl = get('ha_url'); const haToken = get('ha_token');
+  const homeyUrl = get('homey_url'); const homeyToken = get('homey_token');
+
+  const fetchHA = async () => {
+    if (!haUrl || !haToken) return [];
+    const base = haUrl.replace(/\/$/, '');
+    const states = await fetch(`${base}/api/states`, {
+      headers: { 'Authorization': `Bearer ${haToken}`, 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(6000),
+    }).then(r => r.json());
+    return (Array.isArray(states) ? states : [])
+      .filter(s => s.entity_id?.startsWith('persistent_notification.') && s.state !== 'dismissed')
+      .map(s => ({ title: s.attributes?.title || s.entity_id.replace('persistent_notification.', ''), message: s.attributes?.message || '', icon: '🏠', created_at: s.last_changed || new Date().toISOString() }));
+  };
+
+  const fetchHomey = async () => {
+    if (!homeyUrl || !homeyToken) return [];
+    const base = homeyUrl.replace(/\/$/, '');
+    const r = await fetch(`${base}/api/manager/notifications/notification/`, {
+      headers: { 'Authorization': `Bearer ${homeyToken}` },
+      signal: AbortSignal.timeout(6000),
+    }).then(r => r.json());
+    const items = r.result || {};
+    return Object.values(items)
+      .map(n => ({ title: n.excerpt || 'Homey notification', message: '', icon: '🏠', created_at: n.dateCreated || new Date().toISOString() }));
+  };
+
   try {
-    const base = url.replace(/\/$/, '');
-    const isHomey = /athom\.com|homey/i.test(base);
-    let events = [];
-    if (isHomey) {
-      const r = await fetch(`${base}/api/manager/notifications/notification/`, {
-        headers: { 'Authorization': `Bearer ${token}` },
-        signal: AbortSignal.timeout(6000),
-      }).then(r => r.json());
-      const items = r.result || {};
-      events = Object.values(items)
-        .map(n => ({ title: n.excerpt || 'Homey notification', message: '', icon: '🏠', created_at: n.dateCreated || new Date().toISOString() }))
-        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-        .slice(0, 10);
-    } else {
-      const states = await fetch(`${base}/api/states`, {
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        signal: AbortSignal.timeout(6000),
-      }).then(r => r.json());
-      events = (Array.isArray(states) ? states : [])
-        .filter(s => s.entity_id?.startsWith('persistent_notification.') && s.state !== 'dismissed')
-        .map(s => ({
-          title: s.attributes?.title || s.entity_id.replace('persistent_notification.', ''),
-          message: s.attributes?.message || '',
-          icon: '🏠',
-          created_at: s.last_changed || new Date().toISOString(),
-        }))
-        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-        .slice(0, 10);
-    }
-    res.json(events);
+    const [haEvents, homeyEvents] = await Promise.all([fetchHA().catch(()=>[]), fetchHomey().catch(()=>[])]);
+    const merged = [...haEvents, ...homeyEvents].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 10);
+    res.json(merged);
   } catch (e) {
     res.status(502).json({ error: e.message });
   }

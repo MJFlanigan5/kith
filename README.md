@@ -9,7 +9,7 @@ Self-hosted family dashboard. Calendar, chores, meals, grocery list, and a TV di
 SSH into any machine running Docker:
 
 ```bash
-git clone https://github.com/MJFlanigan5/hearth.git /opt/kith && cd /opt/kith && bash deploy.sh
+git clone https://github.com/MJFlanigan5/kith.git /opt/kith && cd /opt/kith && bash deploy.sh
 ```
 
 Open `http://<server-ip>:7400`. On first load you'll be prompted to create an admin PIN. Set family member PINs from Settings.

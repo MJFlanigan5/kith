@@ -928,7 +928,7 @@ app.get('/api/members/progress', requireAuth, (req, res) => {
 });
 
 // ── Routes: Household Goals ───────────────────────────────────────────────────
-app.get('/api/goals', requireAuth, (req, res) => {
+app.get('/api/goals', (req, res) => {
   res.json(db.prepare('SELECT * FROM household_goals ORDER BY created_at').all());
 });
 
@@ -967,7 +967,7 @@ app.delete('/api/goals/:id', requireAdmin, (req, res) => {
 });
 
 // ── Routes: Notes ─────────────────────────────────────────────────────────────
-app.get('/api/notes', requireAuth, (req, res) => {
+app.get('/api/notes', (req, res) => {
   res.json(db.prepare('SELECT * FROM notes ORDER BY pinned DESC, created_at DESC').all());
 });
 
@@ -999,7 +999,7 @@ app.delete('/api/notes/:id', requireAdmin, (req, res) => {
 });
 
 // ── Routes: Polls ─────────────────────────────────────────────────────────────
-app.get('/api/polls', requireAuth, (req, res) => {
+app.get('/api/polls', (req, res) => {
   res.json(db.prepare('SELECT * FROM polls ORDER BY created_at DESC').all().map(p => ({
     ...p, options: JSON.parse(p.options), votes: JSON.parse(p.votes || '{}'),
   })));
@@ -1046,7 +1046,7 @@ app.post('/api/webhook/ha', (req, res) => {
   res.json({ ok: true, id: r.lastInsertRowid });
 });
 
-app.get('/api/ha/events', requireAuth, (req, res) => {
+app.get('/api/ha/events', (req, res) => {
   db.prepare("DELETE FROM ha_events WHERE created_at < datetime('now','-24 hours')").run();
   res.json(db.prepare("SELECT * FROM ha_events ORDER BY created_at DESC LIMIT 10").all());
 });
@@ -1054,6 +1054,39 @@ app.get('/api/ha/events', requireAuth, (req, res) => {
 app.get('/api/ha/secret', requireAdmin, (req, res) => {
   const secret = db.prepare("SELECT value FROM settings WHERE key='ha_webhook_secret'").get()?.value || '';
   res.json({ secret });
+});
+
+// ── Routes: Quick Actions ─────────────────────────────────────────────────────
+app.get('/api/quick-actions', (req, res) => {
+  const raw = db.prepare("SELECT value FROM settings WHERE key='quick_actions'").get()?.value;
+  res.json(JSON.parse(raw || '[]'));
+});
+
+app.put('/api/quick-actions', requireAdmin, (req, res) => {
+  const { actions } = req.body || {};
+  if (!Array.isArray(actions)) return res.status(400).json({ error: 'actions must be an array' });
+  db.prepare("INSERT OR REPLACE INTO settings (key,value) VALUES ('quick_actions',?)").run(JSON.stringify(actions));
+  res.json({ ok: true });
+});
+
+app.post('/api/quick-actions/trigger', requireAuth, async (req, res) => {
+  const { id } = req.body || {};
+  const raw = db.prepare("SELECT value FROM settings WHERE key='quick_actions'").get()?.value;
+  const action = JSON.parse(raw || '[]').find(a => a.id === id);
+  if (!action) return res.status(404).json({ error: 'Action not found' });
+  try {
+    let extraHeaders = {};
+    try { extraHeaders = JSON.parse(action.headers || '{}'); } catch {}
+    const opts = {
+      method: action.method || 'POST',
+      headers: { 'Content-Type': 'application/json', ...extraHeaders },
+    };
+    if (action.body && action.method !== 'GET') opts.body = action.body;
+    const r = await fetch(action.url, { ...opts, signal: AbortSignal.timeout(8000) });
+    res.json({ ok: r.ok, status: r.status });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
 });
 
 // ── Routes: Photos (screensaver) ──────────────────────────────────────────────

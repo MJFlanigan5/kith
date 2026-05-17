@@ -909,7 +909,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
 }
 
 /* ── Dashboard ───────────────────────────────────────────────────────── */
-function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weather,clockFormat='12h'}){
+function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weather,clockFormat='12h',quickActions=[]}){
   const isMobile=useIsMobile();
   const now=useClock();
   const [news,setNews]=useState([]);
@@ -919,6 +919,7 @@ function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weath
   const [qaLoading,setQaLoading]=useState(false);
   const [leaderboard,setLeaderboard]=useState([]);
   const [haEvents,setHaEvents]=useState([]);
+  const [qaState,setQaState]=useState({});
   const [showConfetti,setShowConfetti]=useState(false);
   const prevDueRef=useRef(null);
 
@@ -1035,6 +1036,40 @@ function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weath
           </div>
         );
       })()}
+
+      {/* Quick Actions */}
+      {quickActions.length>0&&(
+        <Card style={{marginBottom:16,padding:'14px 16px'}}>
+          <div style={{fontSize:11,fontWeight:700,color:A.label5,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:12}}>Quick Actions</div>
+          <div style={{display:'flex',flexWrap:'wrap',gap:10}}>
+            {quickActions.map(action=>{
+              const state=qaState[action.id]||'idle';
+              return(
+                <button key={action.id} disabled={state==='loading'} onClick={async()=>{
+                  setQaState(s=>({...s,[action.id]:'loading'}));
+                  try{
+                    const r=await api.post('/api/quick-actions/trigger',{id:action.id});
+                    setQaState(s=>({...s,[action.id]:r.ok===false?'error':'done'}));
+                  }catch{
+                    setQaState(s=>({...s,[action.id]:'error'}));
+                  }
+                  setTimeout(()=>setQaState(s=>({...s,[action.id]:'idle'})),2000);
+                }} style={{
+                  display:'flex',flexDirection:'column',alignItems:'center',gap:6,
+                  padding:'12px 18px',borderRadius:A.r,border:'none',cursor:state==='loading'?'wait':'pointer',
+                  background:state==='done'?A.greenFill:state==='error'?A.redFill:A.inputBg,
+                  transition:'background .2s',minWidth:80,
+                }}>
+                  <span style={{fontSize:22,lineHeight:1,opacity:state==='loading'?.5:1}}>{action.icon||'⚡'}</span>
+                  <span style={{fontSize:12,fontWeight:600,color:state==='done'?A.green:state==='error'?A.red:A.label2,textAlign:'center',lineHeight:1.2}}>
+                    {state==='loading'?'…':state==='done'?'Done':state==='error'?'Failed':action.label}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </Card>
+      )}
 
       {/* Home Assistant events */}
       {haEvents.length>0&&(
@@ -2209,6 +2244,11 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [sportsLeagues,setSportsLeagues]=useState({nfl:true,nba:true,mlb:true,nhl:true,wnba:false,mls:false,epl:false,ucl:false,wc:false,wwc:false,ncaaf:false,ncaab:false,pga:false,atp:false,nascar:false,f1:false});
   const [haSecret,setHaSecret]=useState('');
   const haWebhookUrl=`${window.location.origin}/api/webhook/ha`;
+  const [qaList,setQaList]=useState([]);
+  const [qaDrawer,setQaDrawer]=useState(false);
+  const [qaEdit,setQaEdit]=useState(null);
+  const qaBlank={label:'',icon:'⚡',url:'',method:'POST',headers:'',body:''};
+  const [qaForm,setQaForm]=useState(qaBlank);
   useEffect(()=>{
     api.get('/api/settings').then(st=>{
       if(st.weather_lat) setWeatherLat(st.weather_lat);
@@ -2231,6 +2271,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
       }
     }).catch(()=>{});
     api.get('/api/ha/secret').then(d=>{if(d.secret) setHaSecret(d.secret);}).catch(()=>{});
+    api.get('/api/quick-actions').then(d=>{if(Array.isArray(d)) setQaList(d);}).catch(()=>{});
   },[]);
   const geocodeCity=async()=>{
     if(!weatherCity.trim()) return;
@@ -2588,6 +2629,73 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
             ))}
           </div>
         </FormRow>
+      </FormGroup>
+
+      <FormGroup label="Quick Actions">
+        <div style={{padding:'14px 16px'}}>
+          <div style={{fontSize:14,color:A.label3,marginBottom:14}}>Buttons on your dashboard that fire any HTTP request — works with Home Assistant, Homey, or anything with an API.</div>
+          {qaList.length>0&&(
+            <div style={{display:'flex',flexDirection:'column',gap:0,marginBottom:14,borderRadius:A.rSm,overflow:'hidden',border:`1px solid ${A.sep}`}}>
+              {qaList.map((action,i)=>(
+                <div key={action.id} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',background:'#fff',borderTop:i>0?`1px solid ${A.sep}`:'none'}}>
+                  <span style={{fontSize:20,flexShrink:0}}>{action.icon||'⚡'}</span>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:14,fontWeight:600,color:A.label1}}>{action.label}</div>
+                    <div style={{fontSize:11,color:A.label5,fontFamily:'JetBrains Mono,monospace',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{action.method} {action.url}</div>
+                  </div>
+                  <button onClick={()=>{setQaEdit(action);setQaForm({label:action.label,icon:action.icon||'⚡',url:action.url,method:action.method||'POST',headers:action.headers||'',body:action.body||''});setQaDrawer(true);}} style={{background:'none',border:'none',color:A.blue,fontSize:13,cursor:'pointer',fontWeight:500}}>Edit</button>
+                  <button onClick={async()=>{const next=qaList.filter(a=>a.id!==action.id);await api.put('/api/quick-actions',{actions:next});setQaList(next);toastAdd('Removed','blue');}} style={{background:'none',border:'none',color:A.red,fontSize:13,cursor:'pointer',fontWeight:500}}>Remove</button>
+                </div>
+              ))}
+            </div>
+          )}
+          <Btn sm onClick={()=>{setQaEdit(null);setQaForm(qaBlank);setQaDrawer(true);}}>+ Add Action</Btn>
+        </div>
+        <Drawer open={qaDrawer} onClose={()=>{setQaDrawer(false);setQaEdit(null);}} title={qaEdit?'Edit Action':'Add Action'}>
+          <FormGroup label="Display">
+            <div style={{padding:'12px 16px',display:'flex',gap:10,alignItems:'center'}}>
+              <Inp value={qaForm.icon} onChange={e=>setQaForm(p=>({...p,icon:e.target.value}))} style={{width:56,textAlign:'center',fontSize:22}} placeholder="⚡"/>
+              <Inp value={qaForm.label} onChange={e=>setQaForm(p=>({...p,label:e.target.value}))} placeholder="Lock front door" style={{flex:1}}/>
+            </div>
+          </FormGroup>
+          <FormGroup label="Request">
+            <div style={{padding:'12px 16px',display:'flex',gap:8,alignItems:'center'}}>
+              <SegControl value={qaForm.method} onChange={v=>setQaForm(p=>({...p,method:v}))} options={['GET','POST','PUT']}/>
+            </div>
+            <div style={{padding:'12px 16px',borderTop:`1px solid ${A.sep}`}}>
+              <Inp value={qaForm.url} onChange={e=>setQaForm(p=>({...p,url:e.target.value}))} placeholder="http://homeassistant.local:8123/api/services/lock/lock"/>
+            </div>
+          </FormGroup>
+          <FormGroup label="Headers (JSON, optional)" footer='e.g. {"Authorization":"Bearer xxx"}'>
+            <div style={{padding:'12px 16px'}}>
+              <textarea value={qaForm.headers} onChange={e=>setQaForm(p=>({...p,headers:e.target.value}))} rows={3} placeholder='{"Authorization": "Bearer your-token"}'
+                style={{width:'100%',padding:0,border:'none',background:'transparent',fontSize:13,color:A.label1,resize:'none',outline:'none',fontFamily:'JetBrains Mono,monospace',lineHeight:1.5}}/>
+            </div>
+          </FormGroup>
+          {qaForm.method!=='GET'&&(
+            <FormGroup label="Body (JSON, optional)" footer='e.g. {"entity_id":"lock.front_door"}'>
+              <div style={{padding:'12px 16px'}}>
+                <textarea value={qaForm.body} onChange={e=>setQaForm(p=>({...p,body:e.target.value}))} rows={3} placeholder='{"entity_id": "lock.front_door"}'
+                  style={{width:'100%',padding:0,border:'none',background:'transparent',fontSize:13,color:A.label1,resize:'none',outline:'none',fontFamily:'JetBrains Mono,monospace',lineHeight:1.5}}/>
+              </div>
+            </FormGroup>
+          )}
+          <div style={{padding:'16px'}}>
+            <Btn onClick={async()=>{
+              if(!qaForm.label.trim()||!qaForm.url.trim()){toastAdd('Label and URL are required','red');return;}
+              let next;
+              if(qaEdit){
+                next=qaList.map(a=>a.id===qaEdit.id?{...qaEdit,...qaForm}:a);
+              } else {
+                next=[...qaList,{id:Date.now().toString(36),...qaForm}];
+              }
+              await api.put('/api/quick-actions',{actions:next});
+              setQaList(next);
+              setQaDrawer(false);setQaEdit(null);
+              toastAdd(qaEdit?'Action updated':'Action added');
+            }} full>{qaEdit?'Save Changes':'Add Action'}</Btn>
+          </div>
+        </Drawer>
       </FormGroup>
 
       <FormGroup label="Home Assistant">
@@ -2958,7 +3066,7 @@ function GoalsScreen({goals,setGoals,toastAdd}){
   );
 }
 
-function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocery,setGrocery,meals,setMeals,icsSources,setIcsSources,inboxCount,setInboxCount,countdowns,setCountdowns,members,setMembers,photos,setPhotos,clockFormat,setClockFormat,weather,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd,setRefreshMs,parseRefreshMs,goals,setGoals,notes,setNotes,polls,setPolls}){
+function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocery,setGrocery,meals,setMeals,icsSources,setIcsSources,inboxCount,setInboxCount,countdowns,setCountdowns,members,setMembers,photos,setPhotos,clockFormat,setClockFormat,weather,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd,setRefreshMs,parseRefreshMs,goals,setGoals,notes,setNotes,polls,setPolls,quickActions,setQuickActions}){
   const isMobile=useIsMobile();
   const [screen,setScreen]=useState('dashboard');
   const {toasts,add:toastAdd}=useToast();
@@ -2986,7 +3094,7 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
   ];
 
   const screens={
-    dashboard:  <DashboardScreen events={events} setEvents={setEvents} chores={chores} grocery={grocery} meals={meals} countdowns={countdowns} weather={weather} clockFormat={clockFormat}/>,
+    dashboard:  <DashboardScreen events={events} setEvents={setEvents} chores={chores} grocery={grocery} meals={meals} countdowns={countdowns} weather={weather} clockFormat={clockFormat} quickActions={quickActions}/>,
     calendar:   <CalendarScreen events={events} setEvents={setEvents} icsSources={icsSources} toastAdd={toastAdd} members={members} clockFormat={clockFormat}/>,
     chores:     <ChoresScreen chores={chores} setChores={setChores} goals={goals} toastAdd={toastAdd}/>,
     grocery:    <GroceryScreen grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} toastAdd={toastAdd}/>,
@@ -3379,6 +3487,7 @@ function App(){
   const [goals,setGoals]=useState([]);
   const [notes,setNotes]=useState([]);
   const [polls,setPolls]=useState([]);
+  const [quickActions,setQuickActions]=useState([]);
   const [photos,setPhotos]=useState([]);
   const [clockFormat,setClockFormat]=useState('12h');
   const [nightModeStart,setNightModeStart]=useState('23:00');
@@ -3445,7 +3554,8 @@ function App(){
       api.get('/api/goals'),
       api.get('/api/notes'),
       api.get('/api/polls'),
-    ]).then(([ev,ch,gr,ml,ics,inb,cd,mb,ph,st,gl,nt,pl])=>{
+      api.get('/api/quick-actions'),
+    ]).then(([ev,ch,gr,ml,ics,inb,cd,mb,ph,st,gl,nt,pl,qa])=>{
       if(ev.status==='fulfilled') setEvents(ev.value);
       if(ch.status==='fulfilled') setChores(ch.value);
       if(gr.status==='fulfilled') setGrocery(gr.value);
@@ -3455,9 +3565,10 @@ function App(){
       if(cd.status==='fulfilled') setCountdowns(cd.value);
       if(mb.status==='fulfilled') setMembers(mb.value);
       if(ph.status==='fulfilled') setPhotos(ph.value);
-      if(gl.status==='fulfilled') setGoals(gl.value);
-      if(nt.status==='fulfilled') setNotes(nt.value);
-      if(pl.status==='fulfilled') setPolls(pl.value);
+      if(gl.status==='fulfilled'&&Array.isArray(gl.value)) setGoals(gl.value);
+      if(nt.status==='fulfilled'&&Array.isArray(nt.value)) setNotes(nt.value);
+      if(pl.status==='fulfilled'&&Array.isArray(pl.value)) setPolls(pl.value);
+      if(qa.status==='fulfilled'&&Array.isArray(qa.value)) setQuickActions(qa.value);
       if(st.status==='fulfilled'){
         const s=st.value;
         if(s.clock_format) setClockFormat(s.clock_format);
@@ -3520,7 +3631,7 @@ function App(){
 
   return mode==='display'
     ?<DisplayMode onManage={()=>setMode('manage')} events={events} chores={chores} setChores={setChores} meals={meals} grocery={grocery} countdowns={countdowns} photos={photos} clockFormat={clockFormat} weather={weather} nightModeStart={nightModeStart} nightModeEnd={nightModeEnd} goals={goals} notes={notes} polls={polls}/>
-    :<ManageMode onDisplay={()=>setMode('display')} onLogout={handleLogout} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources} inboxCount={inboxCount} setInboxCount={setInboxCount} countdowns={countdowns} setCountdowns={setCountdowns} members={members} setMembers={setMembers} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} weather={weather} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} goals={goals} setGoals={setGoals} notes={notes} setNotes={setNotes} polls={polls} setPolls={setPolls}/>;
+    :<ManageMode onDisplay={()=>setMode('display')} onLogout={handleLogout} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources} inboxCount={inboxCount} setInboxCount={setInboxCount} countdowns={countdowns} setCountdowns={setCountdowns} members={members} setMembers={setMembers} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} weather={weather} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} goals={goals} setGoals={setGoals} notes={notes} setNotes={setNotes} polls={polls} setPolls={setPolls} quickActions={quickActions} setQuickActions={setQuickActions}/>;
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);

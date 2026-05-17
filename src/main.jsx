@@ -454,6 +454,8 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
     },15000);
     return()=>{clearInterval(id);clearTimeout(newsFadeTimer.current);};
   },[news.length]);
+  const [centerIdx,setCenterIdx]=useState(0);
+  useEffect(()=>{const id=setInterval(()=>setCenterIdx(i=>i+1),10000);return()=>clearInterval(id);},[]);
   const h12=now.getHours()%12||12;
   const min=String(now.getMinutes()).padStart(2,'0');
   const ampm=now.getHours()>=12?'PM':'AM';
@@ -483,6 +485,16 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
     const label=offset===0?'Today':offset===1?'Tomorrow':DAYS[d.getDay()];
     return{label,date:localDate(d)};
   });
+  const dueC=chores.filter(c=>(c.status==='due'||c.status==='overdue')&&!c.done);
+  const upCD=(countdowns||[]).filter(c=>daysUntil(c.date)>=0);
+  const progressMembers=memberProgress.filter(m=>m.monthly_goal>0);
+  const centerPanels=[
+    ...(dueC.length>0?['chores']:[]),
+    ...(upCD.length>0?['countdowns']:[]),
+    ...(goals.length>0?['goals']:[]),
+    ...(progressMembers.length>0?['members']:[]),
+  ];
+  const activePanelId=centerPanels[centerIdx%Math.max(1,centerPanels.length)];
 
   const toggleChore=async id=>{
     try{
@@ -640,47 +652,104 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
               </div>
             </Widget>
 
-            {/* CENTER: chores (if due) OR countdowns (if no chores due) + dinner */}
+            {/* CENTER: rotating panel + dinner */}
             <div style={{display:'flex',flexDirection:'column',gap:12,minHeight:0}}>
-              {(()=>{
-                const dueC=chores.filter(c=>(c.status==='due'||c.status==='overdue')&&!c.done);
-                const upCD=(countdowns||[]).filter(c=>daysUntil(c.date)>=0);
-                if(dueC.length>0) return(
+              {centerPanels.length>0&&(
+                <div key={activePanelId} className='screen' style={{flex:1,display:'flex',flexDirection:'column',minHeight:0}}>
                   <Widget style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
-                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
-                      <WLabel>Chores</WLabel>
-                      <span style={{fontSize:11,fontWeight:700,color:A.amber}}>{dueC.length} due</span>
-                    </div>
-                    <div style={{flex:1,overflowY:'auto',WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
-                      {dueC.map(c=>(
-                        <div key={c.id} onClick={()=>toggleChore(c.id)} style={{display:'flex',alignItems:'center',gap:12,padding:'9px 0',borderBottom:`1px solid ${D.sep}`,cursor:'pointer'}}>
-                          <div style={{width:22,height:22,borderRadius:'50%',flexShrink:0,background:'transparent',border:`1.5px solid ${D.t4}`,display:'flex',alignItems:'center',justifyContent:'center'}}/>
-                          <span style={{flex:1,fontSize:14,color:D.t2,fontWeight:500}}>{c.name}</span>
-                          <span style={{fontSize:11,color:c.status==='overdue'?A.red:A.amber,fontWeight:700}}>{c.status==='overdue'?'Overdue':'Today'}</span>
+                    {centerPanels.length>1&&(
+                      <div style={{display:'flex',gap:5,marginBottom:10}}>
+                        {centerPanels.map((p,i)=>(
+                          <div key={p} style={{width:5,height:5,borderRadius:'50%',background:i===centerIdx%centerPanels.length?D.t2:D.t4,transition:'background .4s'}}/>
+                        ))}
+                      </div>
+                    )}
+                    {activePanelId==='chores'&&(
+                      <>
+                        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+                          <WLabel>Chores</WLabel>
+                          <span style={{fontSize:11,fontWeight:700,color:A.amber}}>{dueC.length} due</span>
                         </div>
-                      ))}
-                    </div>
+                        <div style={{flex:1,overflowY:'auto',WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
+                          {dueC.map(c=>(
+                            <div key={c.id} onClick={()=>toggleChore(c.id)} style={{display:'flex',alignItems:'center',gap:12,padding:'9px 0',borderBottom:`1px solid ${D.sep}`,cursor:'pointer'}}>
+                              <div style={{width:22,height:22,borderRadius:'50%',flexShrink:0,border:`1.5px solid ${D.t4}`,display:'flex',alignItems:'center',justifyContent:'center'}}/>
+                              <span style={{flex:1,fontSize:14,color:D.t2,fontWeight:500}}>{c.name}</span>
+                              <span style={{fontSize:11,color:c.status==='overdue'?A.red:A.amber,fontWeight:700}}>{c.status==='overdue'?'Overdue':'Today'}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                    {activePanelId==='countdowns'&&(
+                      <>
+                        <WLabel>Countdowns</WLabel>
+                        <div style={{flex:1,overflowY:'auto',marginTop:2}}>
+                          {upCD.map(c=>{
+                            const days=daysUntil(c.date);
+                            return(
+                              <div key={c.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 0',borderBottom:`1px solid ${D.sep}`}}>
+                                <span style={{fontSize:22}}>{c.emoji}</span>
+                                <span style={{flex:1,fontSize:15,color:D.t2,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.label}</span>
+                                <span style={{fontSize:18,fontWeight:800,color:D.t1,flexShrink:0}}>{days===0?'Today':days+'d'}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
+                    {activePanelId==='goals'&&(
+                      <>
+                        <WLabel>Goals</WLabel>
+                        <div style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:16,marginTop:2}}>
+                          {goals.map(g=>{
+                            const pct=g.progress_target>0?Math.min(100,Math.round((g.progress_current/g.progress_target)*100)):0;
+                            const done=pct>=100;
+                            const isCounter=g.progress_type==='counter';
+                            return(
+                              <div key={g.id}>
+                                <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:8}}>
+                                  <span style={{fontSize:15,fontWeight:600,color:D.t1}}>{g.name}</span>
+                                  <span style={{fontSize:14,fontWeight:700,color:done?A.green:D.t3}}>{isCounter?`${g.unit||''}${g.progress_current}/${g.unit||''}${g.progress_target}`:`${pct}%`}</span>
+                                </div>
+                                <div style={{height:6,borderRadius:3,background:'rgba(255,255,255,0.08)',overflow:'hidden'}}>
+                                  <div style={{height:'100%',borderRadius:3,width:`${pct}%`,background:done?A.green:pct>60?A.amber:'rgba(255,255,255,0.35)',transition:'width .6s'}}/>
+                                </div>
+                                {g.description&&<div style={{fontSize:11,color:D.t4,marginTop:5}}>{g.description}</div>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
+                    {activePanelId==='members'&&(
+                      <>
+                        <WLabel>Family Progress</WLabel>
+                        <div style={{flex:1,display:'flex',flexDirection:'column',gap:14,justifyContent:'center',overflowY:'auto',marginTop:2}}>
+                          {progressMembers.map(m=>{
+                            const pct=m.monthly_goal>0?Math.min(100,Math.round((m.points/m.monthly_goal)*100)):0;
+                            const hit=m.points>=m.monthly_goal;
+                            return(
+                              <div key={m.id} style={{display:'flex',alignItems:'center',gap:12}}>
+                                <div style={{width:42,height:42,borderRadius:'50%',background:m.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,fontWeight:700,color:'#fff',flexShrink:0}}>{m.initials}</div>
+                                <div style={{flex:1,minWidth:0}}>
+                                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:7}}>
+                                    <span style={{fontSize:15,fontWeight:600,color:D.t1}}>{m.name}</span>
+                                    <span style={{fontSize:14,fontWeight:700,color:hit?A.green:D.t2}}>{m.points}{m.monthly_goal>0?`/${m.monthly_goal} pts`:' pts'}</span>
+                                  </div>
+                                  <div style={{height:6,borderRadius:3,background:'rgba(255,255,255,0.08)',overflow:'hidden'}}>
+                                    <div style={{height:'100%',borderRadius:3,width:`${pct}%`,background:hit?A.green:pct>60?A.amber:'rgba(255,255,255,0.35)',transition:'width .6s'}}/>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
                   </Widget>
-                );
-                if(upCD.length>0) return(
-                  <Widget style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
-                    <WLabel style={{marginBottom:12}}>Countdowns</WLabel>
-                    <div style={{flex:1,overflowY:'auto'}}>
-                      {upCD.slice(0,6).map((c,i)=>{
-                        const days=daysUntil(c.date);
-                        return(
-                          <div key={c.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderTop:i>0?`1px solid ${D.sep}`:'none'}}>
-                            <span style={{fontSize:18}}>{c.emoji}</span>
-                            <span style={{flex:1,fontSize:14,color:D.t2,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.label}</span>
-                            <span style={{fontSize:16,fontWeight:800,color:D.t1,flexShrink:0}}>{days===0?'Today':days+'d'}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </Widget>
-                );
-                return null;
-              })()}
+                </div>
+              )}
               <Widget style={{flexShrink:0}}>
                 <WLabel>Dinner tonight</WLabel>
                 <div style={{fontSize:26,fontWeight:700,color:D.t1,letterSpacing:'-.02em',lineHeight:1.2,marginBottom:12}}>{todayDinner()||'—'}</div>
@@ -741,113 +810,10 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                   ))}
                 </Widget>
               )}
-              {/* Countdowns — right column only when chores are occupying center */}
-              {chores.filter(c=>(c.status==='due'||c.status==='overdue')&&!c.done).length>0&&(countdowns||[]).filter(c=>daysUntil(c.date)>=0).length>0&&(
-                <Widget style={{flexShrink:0}}>
-                  <WLabel>Countdowns</WLabel>
-                  {(countdowns||[]).filter(c=>daysUntil(c.date)>=0).slice(0,3).map((c,i)=>{
-                    const days=daysUntil(c.date);
-                    return(
-                      <div key={c.id} style={{display:'flex',alignItems:'center',gap:10,padding:'5px 0',borderTop:i>0?`1px solid ${D.sep}`:'none'}}>
-                        <span style={{fontSize:16}}>{c.emoji}</span>
-                        <span style={{flex:1,fontSize:13,color:D.t2,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.label}</span>
-                        <span style={{fontSize:14,fontWeight:800,color:D.t1,flexShrink:0}}>{days===0?'Today':days+'d'}</span>
-                      </div>
-                    );
-                  })}
-                </Widget>
-              )}
             </div>
 
           </div>{/* end main 3-col grid */}
 
-          {/* Bottom bar — full-width extras, only when any exist */}
-          {(memberProgress.length>0||goals.length>0||notes.filter(n=>n.pinned).length>0||polls.length>0)&&(
-            <div style={{flexShrink:0,display:'flex',gap:10,alignItems:'stretch',height:88}}>
-              {/* Member progress */}
-              {memberProgress.slice(0,4).map(m=>{
-                const pct=m.monthly_goal>0?Math.min(100,Math.round((m.points/m.monthly_goal)*100)):0;
-                const hit=m.monthly_goal>0&&m.points>=m.monthly_goal;
-                return(
-                  <div key={m.id} style={{flex:1,background:D.card,borderRadius:14,border:`1px solid ${hit?A.green+'44':D.border}`,padding:'10px 14px',display:'flex',alignItems:'center',gap:10,minWidth:0}}>
-                    <div style={{width:34,height:34,borderRadius:'50%',background:m.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:700,color:'#fff',flexShrink:0}}>{m.initials}</div>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',marginBottom:5}}>
-                        <span style={{fontSize:12,fontWeight:600,color:D.t1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.name}</span>
-                        <span style={{fontSize:12,color:hit?A.green:D.t2,fontWeight:700,fontVariantNumeric:'tabular-nums',flexShrink:0,marginLeft:6}}>{m.points}{m.monthly_goal>0?`/${m.monthly_goal}`:''}</span>
-                      </div>
-                      {m.monthly_goal>0&&(
-                        <div style={{height:4,borderRadius:2,background:'rgba(255,255,255,0.08)',overflow:'hidden'}}>
-                          <div style={{height:'100%',borderRadius:2,width:`${pct}%`,background:hit?A.green:pct>60?A.amber:'rgba(255,255,255,0.35)',transition:'width .6s'}}/>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-              {/* Household goals */}
-              {goals.length>0&&(
-                <Widget style={{flex:2,padding:'10px 14px',overflow:'hidden'}}>
-                  <div style={{fontSize:9,fontWeight:700,color:D.t3,textTransform:'uppercase',letterSpacing:'.10em',marginBottom:8}}>Goals</div>
-                  <div style={{display:'flex',gap:14,flexWrap:'wrap'}}>
-                    {goals.slice(0,3).map(g=>{
-                      const pct=g.progress_target>0?Math.min(100,Math.round((g.progress_current/g.progress_target)*100)):0;
-                      const isCounter=g.progress_type==='counter';
-                      const label=isCounter?`${g.unit}${g.progress_current}/${g.unit}${g.progress_target}`:`${pct}%`;
-                      return(
-                        <div key={g.id} style={{flex:'1 1 100px',minWidth:0}}>
-                          <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
-                            <span style={{fontSize:11,color:D.t2,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{g.name}</span>
-                            <span style={{fontSize:11,color:pct>=100?A.green:D.t3,fontWeight:700,marginLeft:8,flexShrink:0}}>{label}</span>
-                          </div>
-                          <div style={{height:4,borderRadius:2,background:'rgba(255,255,255,0.08)',overflow:'hidden'}}>
-                            <div style={{height:'100%',borderRadius:2,width:`${pct}%`,background:pct>=100?A.green:pct>60?A.amber:'rgba(255,255,255,0.35)',transition:'width .6s'}}/>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </Widget>
-              )}
-              {/* Pinned notes */}
-              {notes.filter(n=>n.pinned).length>0&&(
-                <div style={{flex:1,display:'flex',gap:8,overflow:'hidden',minWidth:0}}>
-                  {notes.filter(n=>n.pinned).slice(0,2).map(n=>(
-                    <div key={n.id} style={{flex:1,background:n.color||'#FAFAF5',borderRadius:12,padding:'10px 14px',overflow:'hidden',minWidth:0}}>
-                      <div style={{fontSize:12,fontWeight:700,color:'#1C1C1E',marginBottom:n.content?3:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{n.title}</div>
-                      {n.content&&<div style={{fontSize:11,color:'#3C3C43',overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical'}}>{n.content}</div>}
-                    </div>
-                  ))}
-                </div>
-              )}
-              {/* Active poll */}
-              {polls.length>0&&(()=>{
-                const poll=polls[0];
-                const votes={...(poll.votes||{}),...livePollVotes};
-                const total=Object.values(votes).reduce((a,b)=>a+Number(b),0);
-                return(
-                  <Widget style={{flex:1.5,padding:'10px 14px',overflow:'hidden'}}>
-                    <div style={{fontSize:9,fontWeight:700,color:D.t3,textTransform:'uppercase',letterSpacing:'.10em',marginBottom:5}}>Poll · {total} vote{total!==1?'s':''}</div>
-                    <div style={{fontSize:12,fontWeight:600,color:D.t1,marginBottom:7,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{poll.question}</div>
-                    <div style={{display:'flex',gap:6}}>
-                      {poll.options.slice(0,4).map((opt,idx)=>{
-                        const count=Number(votes[idx])||0;
-                        const pct=total>0?Math.round((count/total)*100):0;
-                        return(
-                          <div key={idx} style={{flex:1,minWidth:0}}>
-                            <div style={{height:4,borderRadius:2,background:'rgba(255,255,255,0.08)',overflow:'hidden',marginBottom:3}}>
-                              <div style={{height:'100%',borderRadius:2,width:`${pct}%`,background:'rgba(255,255,255,0.4)',transition:'width .5s'}}/>
-                            </div>
-                            <div style={{fontSize:9,color:D.t3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{opt} {pct}%</div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </Widget>
-                );
-              })()}
-            </div>
-          )}
 
         </div>
       )}

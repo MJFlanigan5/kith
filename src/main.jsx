@@ -2643,15 +2643,15 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
 
       <FormGroup label="Content" footer="News headlines and live sports show on the wall display when active.">
         <FormRow label="News feeds (RSS)">
-          <div style={{display:'flex',flexDirection:'column',gap:8,flex:1}}>
+          <div style={{display:'flex',flexDirection:'column',gap:6,flex:1,width:'100%'}}>
             {newsFeeds.map((url,i)=>(
-              <div key={i} style={{display:'flex',alignItems:'center',gap:8}}>
-                <span style={{flex:1,fontSize:13,color:A.label3,fontFamily:'JetBrains Mono,monospace',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{url}</span>
-                <button onClick={()=>{const next=newsFeeds.filter((_,j)=>j!==i);setNewsFeeds(next);saveSetting('news_feed',next.join(','));}} style={{background:'none',border:'none',color:A.red,fontSize:13,cursor:'pointer',fontWeight:500,flexShrink:0}}>Remove</button>
+              <div key={i} style={{display:'flex',alignItems:'center',gap:8,background:A.systemBg,borderRadius:A.rXs,padding:'6px 10px'}}>
+                <span style={{flex:1,fontSize:12,color:A.label3,fontFamily:'JetBrains Mono,monospace',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{url}</span>
+                <button onClick={()=>{const next=newsFeeds.filter((_,j)=>j!==i);setNewsFeeds(next);saveSetting('news_feed',next.join(','));}} style={{background:'none',border:'none',color:A.red,fontSize:13,cursor:'pointer',fontWeight:600,flexShrink:0,padding:'4px 8px',borderRadius:4,minWidth:60,textAlign:'center'}}>Remove</button>
               </div>
             ))}
-            <div style={{display:'flex',gap:8}}>
-              <Inp value={newsFeedInput} onChange={e=>setNewsFeedInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&newsFeedInput.trim()){const next=[...newsFeeds,newsFeedInput.trim()];setNewsFeeds(next);saveSetting('news_feed',next.join(','));setNewsFeedInput('');}}} placeholder="https://feeds.npr.org/1001/rss.xml" style={{flex:1}}/>
+            <div style={{display:'flex',gap:8,width:'100%'}}>
+              <Inp value={newsFeedInput} onChange={e=>setNewsFeedInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&newsFeedInput.trim()){const next=[...newsFeeds,newsFeedInput.trim()];setNewsFeeds(next);saveSetting('news_feed',next.join(','));setNewsFeedInput('');}}} placeholder="https://feeds.npr.org/1001/rss.xml" style={{flex:1,minWidth:0}}/>
               <Btn sm onClick={()=>{if(!newsFeedInput.trim())return;const next=[...newsFeeds,newsFeedInput.trim()];setNewsFeeds(next);saveSetting('news_feed',next.join(','));setNewsFeedInput('');}}>Add</Btn>
             </div>
           </div>

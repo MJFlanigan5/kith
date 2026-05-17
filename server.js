@@ -684,7 +684,7 @@ app.post('/api/push/test', requireAuth, async (req, res) => {
 });
 
 // ── Routes: Settings ──────────────────────────────────────────────────────────
-const SETTINGS_SENSITIVE = new Set(['email_webhook_secret','anthropic_api_key','ai_api_key','jwt_secret','vapid_public','vapid_private','admin_pin_hash','resend_api_key']);
+const SETTINGS_SENSITIVE = new Set(['email_webhook_secret','anthropic_api_key','ai_api_key','jwt_secret','vapid_public','vapid_private','admin_pin_hash','resend_api_key','ha_webhook_secret']);
 app.get('/api/settings', (req, res) => {
   const rows = db.prepare('SELECT key,value FROM settings').all();
   res.json(Object.fromEntries(rows.filter(r=>!SETTINGS_SENSITIVE.has(r.key)).map(r=>[r.key,r.value])));
@@ -1031,6 +1031,29 @@ app.post('/api/polls/:id/vote', requireAuth, (req, res) => {
 app.delete('/api/polls/:id', requireAdmin, (req, res) => {
   db.prepare('DELETE FROM polls WHERE id=?').run(req.params.id);
   res.json({ ok: true });
+});
+
+// ── Routes: Home Assistant webhook ───────────────────────────────────────────
+app.post('/api/webhook/ha', (req, res) => {
+  const secret = db.prepare("SELECT value FROM settings WHERE key='ha_webhook_secret'").get()?.value;
+  const provided = req.headers['x-ha-secret'] || req.query.secret;
+  if (!secret || provided !== secret) return res.status(401).json({ error: 'Unauthorized' });
+  const { title, message='', icon='🏠' } = req.body || {};
+  if (!title?.trim()) return res.status(400).json({ error: 'title is required' });
+  // Auto-clean events older than 24h
+  db.prepare("DELETE FROM ha_events WHERE created_at < datetime('now','-24 hours')").run();
+  const r = db.prepare('INSERT INTO ha_events (title,message,icon) VALUES (?,?,?)').run(title.trim(), message, icon);
+  res.json({ ok: true, id: r.lastInsertRowid });
+});
+
+app.get('/api/ha/events', requireAuth, (req, res) => {
+  db.prepare("DELETE FROM ha_events WHERE created_at < datetime('now','-24 hours')").run();
+  res.json(db.prepare("SELECT * FROM ha_events ORDER BY created_at DESC LIMIT 10").all());
+});
+
+app.get('/api/ha/secret', requireAdmin, (req, res) => {
+  const secret = db.prepare("SELECT value FROM settings WHERE key='ha_webhook_secret'").get()?.value || '';
+  res.json({ secret });
 });
 
 // ── Routes: Photos (screensaver) ──────────────────────────────────────────────

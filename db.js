@@ -155,6 +155,14 @@ CREATE TABLE IF NOT EXISTS polls (
   votes TEXT DEFAULT '{}',
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS ha_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  message TEXT DEFAULT '',
+  icon TEXT DEFAULT '🏠',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
 `);
 
 // migrations — safe to run on every boot
@@ -210,6 +218,7 @@ const defaults = {
   news_feed: 'https://feeds.npr.org/1001/rss.xml',
   night_mode_start: '23:00',
   night_mode_end: '06:00',
+  ha_webhook_secret: require('crypto').randomBytes(24).toString('hex'),
 };
 const insSetting = db.prepare('INSERT OR IGNORE INTO settings (key,value) VALUES (?,?)');
 for (const [k, v] of Object.entries(defaults)) insSetting.run(k, v);

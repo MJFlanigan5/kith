@@ -918,6 +918,7 @@ function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weath
   const [qaForm,setQaForm]=useState({title:'',date:localDate(),time:'',cal:'kith'});
   const [qaLoading,setQaLoading]=useState(false);
   const [leaderboard,setLeaderboard]=useState([]);
+  const [haEvents,setHaEvents]=useState([]);
   const [showConfetti,setShowConfetti]=useState(false);
   const prevDueRef=useRef(null);
 
@@ -955,6 +956,13 @@ function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weath
   useEffect(()=>{
     api.get('/api/chores/leaderboard').then(d=>setLeaderboard(Array.isArray(d)?d:[])).catch(()=>{});
   },[chores]);
+
+  useEffect(()=>{
+    const load=()=>api.get('/api/ha/events').then(d=>{if(Array.isArray(d))setHaEvents(d);}).catch(()=>{});
+    load();
+    const id=setInterval(load,60000);
+    return()=>clearInterval(id);
+  },[]);
 
   useEffect(()=>{
     if(prevDueRef.current!==null&&prevDueRef.current>0&&dueChores.length===0){
@@ -1027,6 +1035,26 @@ function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weath
           </div>
         );
       })()}
+
+      {/* Home Assistant events */}
+      {haEvents.length>0&&(
+        <Card style={{marginBottom:16,padding:0,overflow:'hidden'}}>
+          {haEvents.slice(0,5).map((ev,i)=>{
+            const ago=Math.round((Date.now()-new Date(ev.created_at+'Z').getTime())/60000);
+            const agoStr=ago<1?'just now':ago<60?`${ago}m ago`:ago<1440?`${Math.round(ago/60)}h ago`:'yesterday';
+            return(
+              <div key={ev.id} style={{display:'flex',alignItems:'center',gap:12,padding:'11px 16px',borderTop:i>0?`1px solid ${A.sep}`:'none'}}>
+                <span style={{fontSize:18,flexShrink:0}}>{ev.icon||'🏠'}</span>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:14,fontWeight:600,color:A.label1}}>{ev.title}</div>
+                  {ev.message&&<div style={{fontSize:13,color:A.label4,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ev.message}</div>}
+                </div>
+                <span style={{fontSize:12,color:A.label5,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{agoStr}</span>
+              </div>
+            );
+          })}
+        </Card>
+      )}
 
       {/* 7-day week strip */}
       <Card style={{marginBottom:16,padding:'12px 10px'}}>
@@ -2179,6 +2207,8 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [newsFeeds,setNewsFeeds]=useState([]);
   const [newsFeedInput,setNewsFeedInput]=useState('');
   const [sportsLeagues,setSportsLeagues]=useState({nfl:true,nba:true,mlb:true,nhl:true,wnba:false,mls:false,epl:false,ucl:false,wc:false,wwc:false,ncaaf:false,ncaab:false,pga:false,atp:false,nascar:false,f1:false});
+  const [haSecret,setHaSecret]=useState('');
+  const haWebhookUrl=`${window.location.origin}/api/webhook/ha`;
   useEffect(()=>{
     api.get('/api/settings').then(st=>{
       if(st.weather_lat) setWeatherLat(st.weather_lat);
@@ -2200,6 +2230,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
         setSportsLeagues({nfl:active.includes('nfl'),nba:active.includes('nba'),mlb:active.includes('mlb'),nhl:active.includes('nhl'),wnba:active.includes('wnba'),mls:active.includes('mls'),epl:active.includes('epl'),ucl:active.includes('ucl'),wc:active.includes('wc'),wwc:active.includes('wwc'),ncaaf:active.includes('ncaaf'),ncaab:active.includes('ncaab'),pga:active.includes('pga'),atp:active.includes('atp'),nascar:active.includes('nascar'),f1:active.includes('f1')});
       }
     }).catch(()=>{});
+    api.get('/api/ha/secret').then(d=>{if(d.secret) setHaSecret(d.secret);}).catch(()=>{});
   },[]);
   const geocodeCity=async()=>{
     if(!weatherCity.trim()) return;
@@ -2557,6 +2588,31 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
             ))}
           </div>
         </FormRow>
+      </FormGroup>
+
+      <FormGroup label="Home Assistant">
+        <div style={{padding:'14px 16px'}}>
+          <div style={{fontSize:14,color:A.label3,marginBottom:14,lineHeight:1.5}}>
+            Send any HA automation result to your dashboard. In a Home Assistant automation, use the <strong style={{color:A.label1}}>Make a web request</strong> action with this setup:
+          </div>
+          <div style={{background:A.systemBg,borderRadius:A.rSm,padding:'12px 14px',marginBottom:14,fontFamily:'JetBrains Mono,monospace',fontSize:12,color:A.label2,wordBreak:'break-all',lineHeight:1.7}}>
+            <div><span style={{color:A.label4}}>Method:</span> POST</div>
+            <div><span style={{color:A.label4}}>URL:</span> {haWebhookUrl}</div>
+            <div><span style={{color:A.label4}}>Header:</span> X-HA-Secret: <em style={{color:haSecret?A.label2:A.label5}}>{haSecret||'(loading…)'}</em></div>
+            <div><span style={{color:A.label4}}>Body (JSON):</span></div>
+            <div style={{paddingLeft:14}}>{'{ "title": "Front door unlocked", "message": "by Mike at 3:42 PM", "icon": "🚪" }'}</div>
+          </div>
+          <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+            <Btn sm onClick={()=>{navigator.clipboard.writeText(haWebhookUrl);toastAdd('URL copied','blue');}}>Copy URL</Btn>
+            <Btn sm variant="ghost" onClick={()=>{navigator.clipboard.writeText(haSecret);toastAdd('Secret copied','blue');}}>Copy secret</Btn>
+            <Btn sm variant="ghost" onClick={async()=>{
+              const r=await fetch('/api/ha/secret',{headers:{..._authHdr()}});
+              const d=await r.json();
+              if(d.secret) setHaSecret(d.secret);
+            }}>Refresh secret</Btn>
+          </div>
+          <div style={{fontSize:12,color:A.label5,marginTop:10}}>Events appear on your dashboard for 24 hours. The <code style={{fontSize:11}}>icon</code> field is optional — any emoji works.</div>
+        </div>
       </FormGroup>
 
     </div>

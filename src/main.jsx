@@ -443,6 +443,13 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
     const id=setInterval(load,30000);
     return()=>clearInterval(id);
   },[]);
+  const [haEvents,setHaEvents]=useState([]);
+  useEffect(()=>{
+    const load=()=>api.get('/api/ha/events').then(d=>{if(Array.isArray(d))setHaEvents(d);}).catch(()=>{});
+    load();
+    const id=setInterval(load,30000);
+    return()=>clearInterval(id);
+  },[]);
   const [newsIdx,setNewsIdx]=useState(0);
   const [newsVisible,setNewsVisible]=useState(true);
   const newsFadeTimer=useRef(null);
@@ -810,6 +817,19 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                   ))}
                 </Widget>
               )}
+              {/* News — fills remaining space */}
+              {news.length>0&&(
+                <Widget style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minHeight:0}}>
+                  <WLabel>News</WLabel>
+                  <div style={{flex:1,overflow:'hidden',display:'flex',flexDirection:'column'}}>
+                    {news.slice(0,6).map((item,i)=>(
+                      <div key={i} style={{padding:'7px 0',borderBottom:i<Math.min(5,news.length-1)?`1px solid ${D.sep}`:'none',opacity:i===newsIdx%news.length?1:0.38,transition:'opacity .5s',flexShrink:0}}>
+                        <div style={{fontSize:12,color:D.t1,lineHeight:1.4,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical'}}>{item.title}</div>
+                      </div>
+                    ))}
+                  </div>
+                </Widget>
+              )}
             </div>
 
           </div>{/* end main 3-col grid */}
@@ -818,31 +838,30 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
         </div>
       )}
 
-      {/* Live scores — only when games are in progress */}
-      {liveGames.length>0&&(
-        <div style={{flexShrink:0,display:'flex',alignItems:'center',gap:16,overflowX:'auto',WebkitMaskImage:'linear-gradient(to right,black 90%,transparent 100%)'}}>
-          <div style={{display:'flex',alignItems:'center',gap:5,flexShrink:0}}>
-            <div style={{width:6,height:6,borderRadius:'50%',background:A.red,animation:'pulse 1.2s ease infinite'}}/>
-            <span style={{fontSize:10,fontWeight:700,color:D.t3,textTransform:'uppercase',letterSpacing:'.10em'}}>Live</span>
-          </div>
-          {liveGames.slice(0,5).map((g,i)=>(
-            <div key={g.id||i} style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
-              <span style={{fontSize:10,fontWeight:700,color:D.t4,letterSpacing:'.05em'}}>{g.league}</span>
-              <span style={{fontSize:13,color:D.t1,fontVariantNumeric:'tabular-nums',fontWeight:600}}>{g.away?.abbr} {g.away?.score}–{g.home?.score} {g.home?.abbr}</span>
-              {g.detail&&<span style={{fontSize:11,color:D.t4}}>{g.detail}</span>}
-              {i<liveGames.slice(0,5).length-1&&<span style={{color:D.sep,marginLeft:4}}>·</span>}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Bottom strip — rotating news headline + manage button */}
-      <div style={{flexShrink:0,display:'flex',alignItems:'center',gap:16}}>
-        <div style={{flex:1,minWidth:0,opacity:newsVisible?1:0,transition:'opacity 0.5s ease'}}>
-          {news.length>0&&(
-            <span style={{fontSize:12,color:D.t3,display:'block',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',letterSpacing:'.01em'}}>
-              {news[newsIdx]?.title}
-            </span>
+      {/* Activity bar — HA events + live scores + manage */}
+      <div style={{flexShrink:0,display:'flex',alignItems:'center',gap:12}}>
+        <div style={{flex:1,minWidth:0,display:'flex',alignItems:'center',gap:10,overflow:'hidden'}}>
+          {haEvents.length>0&&(
+            <>
+              <div style={{width:6,height:6,borderRadius:'50%',background:A.blue,flexShrink:0}}/>
+              <span style={{fontSize:12,color:D.t2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                {haEvents[0].icon} {haEvents[0].title}{haEvents[0].message?` · ${haEvents[0].message}`:''}
+              </span>
+            </>
+          )}
+          {liveGames.length>0&&(
+            <>
+              {haEvents.length>0&&<span style={{color:D.sep,flexShrink:0}}>·</span>}
+              <div style={{width:6,height:6,borderRadius:'50%',background:A.red,animation:'pulse 1.2s ease infinite',flexShrink:0}}/>
+              <div style={{display:'flex',alignItems:'center',gap:12,overflow:'hidden'}}>
+                {liveGames.slice(0,4).map((g,i)=>(
+                  <span key={g.id||i} style={{fontSize:12,color:D.t1,fontVariantNumeric:'tabular-nums',fontWeight:600,flexShrink:0}}>
+                    {g.away?.abbr} {g.away?.score}–{g.home?.score} {g.home?.abbr}{g.detail&&<span style={{fontSize:11,color:D.t4,marginLeft:3}}>{g.detail}</span>}
+                    {i<Math.min(3,liveGames.length-1)&&<span style={{color:D.sep,marginLeft:8}}>·</span>}
+                  </span>
+                ))}
+              </div>
+            </>
           )}
         </div>
         <button onClick={onManage} style={{flexShrink:0,background:'rgba(255,255,255,0.08)',color:D.t2,border:'1px solid rgba(255,255,255,0.12)',borderRadius:A.rPill,padding:'9px 20px',fontSize:13,fontWeight:500,cursor:'pointer',transition:'background .15s'}}

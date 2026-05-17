@@ -227,10 +227,10 @@ function Card({children,style:s={}}){
   return <div style={{background:'#fff',borderRadius:A.r,boxShadow:A.shadowSm,border:'1px solid rgba(0,0,0,0.06)',...s}}>{children}</div>;
 }
 
-function Confetti({active}){
+function Confetti({active,count=48}){
   if(!active) return null;
   const colors=['#007AFF','#34C759','#FF9500','#FF3B30','#5856D6','#AF52DE','#FFD60A','#32ADE6'];
-  const pieces=Array.from({length:48},(_,i)=>({
+  const pieces=Array.from({length:count},(_,i)=>({
     id:i,x:Math.random()*100,delay:Math.random()*0.9,
     color:colors[i%colors.length],size:5+Math.random()*7,
     dur:2.2+Math.random()*1.4,pill:Math.random()>.45,
@@ -512,11 +512,13 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
   ];
   const activePanelId=centerPanels[centerIdx%Math.max(1,centerPanels.length)];
 
+  const [dmChoreConfetti,setDmChoreConfetti]=useState(false);
   const toggleChore=async id=>{
     try{
       const result=await api.put(`/api/chores/${id}/done`);
       if(result.error) return;
       setChores(p=>p.map(c=>c.id===id?{...c,done:result.done,next_due:result.next_due,status:result.status}:c));
+      if(result.done){setDmChoreConfetti(true);setTimeout(()=>setDmChoreConfetti(false),2500);}
     }catch(e){}
   };
 
@@ -552,6 +554,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
 
   return(
     <div style={{width:'100vw',height:'100vh',background:D.bg,overflow:'hidden',padding:isMobile?'16px 16px':'24px 28px',display:'flex',flexDirection:'column',gap:isMobile?10:14,position:'relative'}}>
+      <Confetti active={dmChoreConfetti} count={14}/>
 
       {/* Header — clock + date */}
       <div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-between',flexShrink:0}}>
@@ -1898,6 +1901,7 @@ function ChoresScreen({chores,setChores,goals=[],toastAdd}){
   const [drawerOpen,setDrawerOpen]=useState(false);
   const [editChore,setEditChore]=useState(null);
   const [form,setForm]=useState({name:'',recur:'Weekly',day:'Monday',start:'',points:1,outdoor:false,goal_id:'',goal_amount:1});
+  const [choreConfetti,setChoreConfetti]=useState(false);
 
   const openNew=()=>{
     setEditChore(null);
@@ -1949,7 +1953,11 @@ function ChoresScreen({chores,setChores,goals=[],toastAdd}){
       const result=await api.put(`/api/chores/${c.id}/done`);
       if(result.error){toastAdd(result.error,'red');return;}
       setChores(p=>p.map(x=>x.id===c.id?{...x,done:result.done,next_due:result.next_due,status:result.status}:x));
-      if(result.done) toastAdd(`${c.name} done!`);
+      if(result.done){
+        toastAdd(`${c.name} done!`);
+        setChoreConfetti(true);
+        setTimeout(()=>setChoreConfetti(false),2500);
+      }
     }catch{toastAdd('Failed to update','red');}
   };
 
@@ -1961,6 +1969,7 @@ function ChoresScreen({chores,setChores,goals=[],toastAdd}){
 
   return(
     <div>
+      <Confetti active={choreConfetti} count={14}/>
       <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:24}}>
         <div>
           <h1 style={{fontSize:isMobile?34:44,fontWeight:800,letterSpacing:'-.05em',lineHeight:1.05}}>Chores</h1>
@@ -3002,6 +3011,7 @@ function GoalsScreen({goals,setGoals,toastAdd}){
   const [open,setOpen]=useState(false);
   const [dragging,setDragging]=useState({});
   const [saving,setSaving]=useState({});
+  const [goalConfetti,setGoalConfetti]=useState(false);
 
   const pctOf=g=>dragging[g.id]??(g.progress_target>0?Math.min(100,Math.round((g.progress_current/g.progress_target)*100)):0);
 
@@ -3043,12 +3053,21 @@ function GoalsScreen({goals,setGoals,toastAdd}){
     const r=await api.put(`/api/goals/${g.id}`,{progress_current:newVal});
     setSaving(s=>{const n={...s};delete n[g.id];return n;});
     setDragging(d=>{const n={...d};delete n[g.id];return n;});
-    if(r?.id) setGoals(p=>p.map(x=>x.id===g.id?r:x));
+    if(r?.id){
+      const wasComplete=g.progress_current>=g.progress_target;
+      setGoals(p=>p.map(x=>x.id===g.id?r:x));
+      if(!wasComplete&&newVal>=g.progress_target){
+        toastAdd('Goal reached!','green');
+        setGoalConfetti(true);
+        setTimeout(()=>setGoalConfetti(false),3500);
+      }
+    }
     else toastAdd(r?.error||'Save failed','red');
   };
 
   return(
     <div>
+      <Confetti active={goalConfetti}/>
       <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:24}}>
         <div>
           <h1 style={{fontSize:isMobile?34:44,fontWeight:800,letterSpacing:'-.05em',lineHeight:1.05}}>Goals</h1>

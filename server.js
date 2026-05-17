@@ -913,6 +913,45 @@ app.get('/api/members/progress', requireAuth, (req, res) => {
   })));
 });
 
+// ── Routes: Household Goals ───────────────────────────────────────────────────
+app.get('/api/goals', requireAuth, (req, res) => {
+  res.json(db.prepare('SELECT * FROM household_goals ORDER BY created_at').all());
+});
+
+app.post('/api/goals', requireAdmin, (req, res) => {
+  const { name, description='', progress_type='percent', progress_current=0, progress_target=100, unit='', deadline='' } = req.body || {};
+  if (!name?.trim()) return res.status(400).json({ error: 'name is required' });
+  const target = Number(progress_target) || 100;
+  const r = db.prepare(
+    'INSERT INTO household_goals (name,description,progress_type,progress_current,progress_target,unit,deadline) VALUES (?,?,?,?,?,?,?)'
+  ).run(name.trim(), (description||'').trim(), progress_type||'percent', Number(progress_current)||0, target, (unit||'').trim(), deadline||'');
+  res.json(db.prepare('SELECT * FROM household_goals WHERE id=?').get(r.lastInsertRowid));
+});
+
+app.put('/api/goals/:id', requireAdmin, (req, res) => {
+  const g = db.prepare('SELECT * FROM household_goals WHERE id=?').get(req.params.id);
+  if (!g) return res.status(404).json({ error: 'Not found' });
+  const { name, description, progress_type, progress_current, progress_target, unit, deadline } = req.body || {};
+  db.prepare(
+    'UPDATE household_goals SET name=?,description=?,progress_type=?,progress_current=?,progress_target=?,unit=?,deadline=? WHERE id=?'
+  ).run(
+    (name ?? g.name).trim(),
+    ((description ?? g.description) || '').trim(),
+    progress_type ?? g.progress_type,
+    Number(progress_current ?? g.progress_current) || 0,
+    Number(progress_target ?? g.progress_target) || 100,
+    ((unit ?? g.unit) || '').trim(),
+    deadline ?? g.deadline,
+    req.params.id
+  );
+  res.json(db.prepare('SELECT * FROM household_goals WHERE id=?').get(req.params.id));
+});
+
+app.delete('/api/goals/:id', requireAdmin, (req, res) => {
+  db.prepare('DELETE FROM household_goals WHERE id=?').run(req.params.id);
+  res.json({ ok: true });
+});
+
 // ── Routes: Photos (screensaver) ──────────────────────────────────────────────
 app.get('/api/photos', (req, res) => {
   res.json(db.prepare('SELECT * FROM photos ORDER BY created_at DESC').all());

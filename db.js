@@ -126,6 +126,18 @@ CREATE TABLE IF NOT EXISTS chore_completions (
   points INTEGER DEFAULT 1,
   completed_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS household_goals (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  description TEXT DEFAULT '',
+  progress_type TEXT DEFAULT 'percent',
+  progress_current REAL DEFAULT 0,
+  progress_target REAL DEFAULT 100,
+  unit TEXT DEFAULT '',
+  deadline TEXT DEFAULT '',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
 `);
 
 // migrations — safe to run on every boot

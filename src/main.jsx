@@ -407,7 +407,7 @@ function FamilyScreen({members,setMembers,toastAdd}){
 }
 
 /* ── Display Mode ────────────────────────────────────────────────────── */
-function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,photos,weather,clockFormat='12h',nightModeStart='23:00',nightModeEnd='06:00'}){
+function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,photos,weather,clockFormat='12h',nightModeStart='23:00',nightModeEnd='06:00',goals=[]}){
   const isMobile=useIsMobile();
   const now=useClock();
   const [liveGames,setLiveGames]=useState([]);
@@ -609,7 +609,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
           )}
         </div>
       ):(
-        <div style={{flex:1,display:'grid',gridTemplateColumns:'1fr 1.6fr 1fr',gridTemplateRows:'1fr 1fr auto',gap:12,minHeight:0}}>
+        <div style={{flex:1,display:'grid',gridTemplateColumns:'1fr 1.6fr 1fr',gridTemplateRows:'1fr 1fr auto auto',gap:12,minHeight:0}}>
 
           {/* Upcoming — left, full height */}
           <Widget style={{gridRow:'1/3',display:'flex',flexDirection:'column',overflow:'hidden'}}>
@@ -782,6 +782,36 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                 );
               })}
             </div>
+          )}
+
+          {/* Household goals — full-width, only when goals exist */}
+          {goals.length>0&&(
+            <Widget style={{gridColumn:'1/4',gridRow:4,padding:'14px 18px'}}>
+              <WLabel>Household Goals</WLabel>
+              <div style={{display:'grid',gridTemplateColumns:`repeat(${Math.min(goals.length,4)},1fr)`,gap:16}}>
+                {goals.slice(0,4).map(g=>{
+                  const pct=g.progress_target>0?Math.min(100,Math.round((g.progress_current/g.progress_target)*100)):0;
+                  const done=pct>=100;
+                  const isCounter=g.progress_type==='counter';
+                  const progressLabel=isCounter
+                    ? `${g.unit}${g.progress_current} / ${g.unit}${g.progress_target}`
+                    : `${pct}%`;
+                  const daysLeft=g.deadline?Math.ceil((new Date(g.deadline)-new Date())/(1000*60*60*24)):null;
+                  return(
+                    <div key={g.id}>
+                      <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',marginBottom:6}}>
+                        <span style={{fontSize:13,fontWeight:600,color:D.t1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1,marginRight:8}}>{g.name}</span>
+                        <span style={{fontSize:12,color:done?A.green:D.t3,fontWeight:600,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{progressLabel}</span>
+                      </div>
+                      <div style={{height:5,borderRadius:3,background:'rgba(255,255,255,0.08)',overflow:'hidden',marginBottom:4}}>
+                        <div style={{height:'100%',borderRadius:3,width:`${pct}%`,background:done?A.green:pct>60?A.amber:'rgba(255,255,255,0.35)',transition:'width .6s ease'}}/>
+                      </div>
+                      {daysLeft!==null&&<div style={{fontSize:10,color:daysLeft<14?A.amber:D.t4}}>{daysLeft>0?`${daysLeft}d left`:'Due today'}</div>}
+                    </div>
+                  );
+                })}
+              </div>
+            </Widget>
           )}
 
         </div>
@@ -2437,7 +2467,139 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
 }
 
 /* ── Manage Shell ────────────────────────────────────────────────────── */
-function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocery,setGrocery,meals,setMeals,icsSources,setIcsSources,inboxCount,setInboxCount,countdowns,setCountdowns,members,setMembers,photos,setPhotos,clockFormat,setClockFormat,weather,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd,setRefreshMs,parseRefreshMs}){
+/* ── Goals Screen ────────────────────────────────────────────────────── */
+function GoalsScreen({goals,setGoals,toastAdd}){
+  const isMobile=useIsMobile();
+  const [drawerOpen,setDrawerOpen]=useState(false);
+  const [editGoal,setEditGoal]=useState(null);
+  const blankForm={name:'',description:'',progress_type:'percent',progress_current:'',progress_target:'100',unit:'',deadline:''};
+  const [form,setForm]=useState(blankForm);
+
+  const openNew=()=>{setEditGoal(null);setForm(blankForm);setDrawerOpen(true);};
+  const openEdit=g=>{
+    setEditGoal(g);
+    setForm({name:g.name,description:g.description||'',progress_type:g.progress_type,progress_current:String(g.progress_current),progress_target:String(g.progress_target),unit:g.unit||'',deadline:g.deadline||''});
+    setDrawerOpen(true);
+  };
+
+  const save=async()=>{
+    if(!form.name.trim()){toastAdd('Name is required','red');return;}
+    const body={name:form.name.trim(),description:form.description.trim(),progress_type:form.progress_type,progress_current:Number(form.progress_current)||0,progress_target:Number(form.progress_target)||100,unit:form.unit.trim(),deadline:form.deadline};
+    if(editGoal){
+      const updated=await api.put(`/api/goals/${editGoal.id}`,body);
+      setGoals(p=>p.map(g=>g.id===editGoal.id?updated:g));
+      toastAdd('Goal updated');
+    } else {
+      const created=await api.post('/api/goals',body);
+      setGoals(p=>[...p,created]);
+      toastAdd('Goal added');
+    }
+    setDrawerOpen(false);setEditGoal(null);setForm(blankForm);
+  };
+
+  const del=async id=>{
+    await api.del(`/api/goals/${id}`);
+    setGoals(p=>p.filter(g=>g.id!==id));
+    toastAdd('Deleted','blue');
+  };
+
+  const updateProgress=async(g,newVal)=>{
+    const clamped=Math.min(Math.max(0,Number(newVal)||0),g.progress_target);
+    const updated=await api.put(`/api/goals/${g.id}`,{progress_current:clamped});
+    setGoals(p=>p.map(x=>x.id===g.id?updated:x));
+  };
+
+  return(
+    <div>
+      <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:24}}>
+        <div>
+          <h1 style={{fontSize:isMobile?34:44,fontWeight:800,letterSpacing:'-.05em',lineHeight:1.05}}>Goals</h1>
+          <p style={{color:A.label4,fontSize:15,marginTop:6}}>{goals.length} household goal{goals.length!==1?'s':''}</p>
+        </div>
+        <Btn onClick={openNew}>+ Add Goal</Btn>
+      </div>
+
+      {goals.length===0?(
+        <Card style={{padding:'52px 24px',textAlign:'center'}}>
+          <div style={{fontSize:13,fontWeight:700,color:A.label5,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:10}}>No goals yet</div>
+          <div style={{fontSize:15,color:A.label3,fontWeight:500}}>Add big household projects and track progress here</div>
+        </Card>
+      ):(
+        <div style={{display:'flex',flexDirection:'column',gap:12}}>
+          {goals.map(g=>{
+            const pct=g.progress_target>0?Math.min(100,Math.round((g.progress_current/g.progress_target)*100)):0;
+            const done=pct>=100;
+            const isCounter=g.progress_type==='counter';
+            const daysLeft=g.deadline?Math.ceil((new Date(g.deadline)-new Date())/(1000*60*60*24)):null;
+            return(
+              <Card key={g.id} style={{padding:'18px 20px'}}>
+                <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:12,marginBottom:10}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:17,fontWeight:700,color:A.label1,marginBottom:g.description?4:0}}>{g.name}</div>
+                    {g.description&&<div style={{fontSize:13,color:A.label4,lineHeight:1.4}}>{g.description}</div>}
+                  </div>
+                  <div style={{display:'flex',gap:12,flexShrink:0,alignItems:'center'}}>
+                    {daysLeft!==null&&<span style={{fontSize:12,color:daysLeft<14?A.amber:A.label4,fontWeight:600}}>{daysLeft>0?`${daysLeft}d left`:'Due today'}</span>}
+                    <button onClick={()=>openEdit(g)} style={{background:'none',border:'none',color:A.blue,fontSize:13,cursor:'pointer',fontWeight:500}}>Edit</button>
+                    <button onClick={()=>del(g.id)} style={{background:'none',border:'none',color:A.red,fontSize:13,cursor:'pointer',fontWeight:500}}>Delete</button>
+                  </div>
+                </div>
+                <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:10}}>
+                  <div style={{flex:1,height:8,borderRadius:4,background:A.inputBg,overflow:'hidden'}}>
+                    <div style={{height:'100%',borderRadius:4,width:`${pct}%`,background:done?A.green:pct>60?A.amber:A.blue,transition:'width .5s ease'}}/>
+                  </div>
+                  <span style={{fontSize:13,fontWeight:700,color:done?A.green:A.label2,flexShrink:0,fontVariantNumeric:'tabular-nums',minWidth:48,textAlign:'right'}}>
+                    {isCounter?`${g.unit}${g.progress_current}/${g.unit}${g.progress_target}`:`${pct}%`}
+                  </span>
+                </div>
+                <div style={{display:'flex',alignItems:'center',gap:10}}>
+                  {isCounter?(
+                    <>
+                      <input type="number" min="0" max={g.progress_target} value={g.progress_current} onChange={e=>updateProgress(g,e.target.value)}
+                        style={{width:100,padding:'6px 10px',borderRadius:A.rXs,border:`1px solid ${A.sep}`,background:A.inputBg,fontSize:14,color:A.label1}}/>
+                      <span style={{fontSize:13,color:A.label4}}>of {g.unit}{g.progress_target} {g.unit?'':g.name.toLowerCase()}</span>
+                    </>
+                  ):(
+                    <>
+                      <input type="range" min="0" max="100" value={pct} onChange={e=>updateProgress(g,Number(e.target.value))}
+                        style={{flex:1,accentColor:A.blue}}/>
+                      <span style={{fontSize:13,color:A.label4,minWidth:32,textAlign:'right'}}>{pct}%</span>
+                    </>
+                  )}
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      <Drawer open={drawerOpen} onClose={()=>{setDrawerOpen(false);setEditGoal(null);}} title={editGoal?'Edit Goal':'Add Goal'}>
+        <FormGroup label="Details">
+          <div style={{padding:'12px 16px'}}><Inp value={form.name} onChange={e=>setForm(p=>({...p,name:e.target.value}))} placeholder="e.g. Rebuild the deck"/></div>
+          <div style={{padding:'12px 16px',borderTop:`1px solid ${A.sep}`}}><Inp value={form.description} onChange={e=>setForm(p=>({...p,description:e.target.value}))} placeholder="Optional description"/></div>
+        </FormGroup>
+        <FormGroup label="Progress type">
+          <div style={{padding:'12px 16px'}}>
+            <SegControl value={form.progress_type==='percent'?'Percent':'Counter'} onChange={v=>setForm(p=>({...p,progress_type:v==='Percent'?'percent':'counter'}))} options={['Percent','Counter']}/>
+          </div>
+          {form.progress_type==='counter'&&(
+            <div style={{padding:'12px 16px',borderTop:`1px solid ${A.sep}`,display:'flex',gap:8}}>
+              <Inp value={form.unit} onChange={e=>setForm(p=>({...p,unit:e.target.value}))} placeholder="Unit prefix (e.g. $)" style={{width:100}}/>
+              <Inp type="number" value={form.progress_current} onChange={e=>setForm(p=>({...p,progress_current:e.target.value}))} placeholder="Current" style={{flex:1}}/>
+              <Inp type="number" value={form.progress_target} onChange={e=>setForm(p=>({...p,progress_target:e.target.value}))} placeholder="Target" style={{flex:1}}/>
+            </div>
+          )}
+        </FormGroup>
+        <FormGroup label="Deadline (optional)">
+          <div style={{padding:'12px 16px'}}><Inp type="date" value={form.deadline} onChange={e=>setForm(p=>({...p,deadline:e.target.value}))}/></div>
+        </FormGroup>
+        <div style={{padding:'16px'}}><Btn onClick={save} full>{editGoal?'Save Changes':'Add Goal'}</Btn></div>
+      </Drawer>
+    </div>
+  );
+}
+
+function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocery,setGrocery,meals,setMeals,icsSources,setIcsSources,inboxCount,setInboxCount,countdowns,setCountdowns,members,setMembers,photos,setPhotos,clockFormat,setClockFormat,weather,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd,setRefreshMs,parseRefreshMs,goals,setGoals}){
   const isMobile=useIsMobile();
   const [screen,setScreen]=useState('dashboard');
   const {toasts,add:toastAdd}=useToast();
@@ -2457,6 +2619,7 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
     {id:'grocery',label:'Grocery',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><path d="M2 4h13l-1.5 8H3.5L2 4z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><path d="M6 4l.5-2.5h4L11 4" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>},
     {id:'countdowns',label:'Countdowns',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><circle cx="8.5" cy="9" r="6.5" stroke="currentColor" strokeWidth="1.5"/><path d="M8.5 5.5V9l2.5 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M6 1.5h5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
     {id:'family',label:'Family',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><circle cx="6" cy="5" r="2.5" stroke="currentColor" strokeWidth="1.5"/><circle cx="12" cy="5" r="2" stroke="currentColor" strokeWidth="1.5"/><path d="M1 14c0-2.76 2.24-5 5-5s5 2.24 5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M12 9c1.66 0 3 1.34 3 3v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
+    {id:'goals',label:'Goals',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><circle cx="8.5" cy="8.5" r="6.5" stroke="currentColor" strokeWidth="1.5"/><circle cx="8.5" cy="8.5" r="3" stroke="currentColor" strokeWidth="1.5"/><circle cx="8.5" cy="8.5" r="1" fill="currentColor"/></svg>},
     {id:'inbox',label:'Inbox',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="1.5" y="3.5" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M1.5 6.5l7 4 7-4" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>,badge:inboxCount},
     {id:'settings',label:'Settings',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><circle cx="8.5" cy="8.5" r="2.5" stroke="currentColor" strokeWidth="1.5"/><path d="M8.5 1v2M8.5 14v2M1 8.5h2M14 8.5h2M3.05 3.05l1.42 1.42M12.53 12.53l1.42 1.42M12.53 3.05l-1.42 1.42M4.47 12.53l-1.42 1.42" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
   ];
@@ -2468,6 +2631,7 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
     grocery:    <GroceryScreen grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} toastAdd={toastAdd}/>,
     countdowns: <CountdownsScreen countdowns={countdowns} setCountdowns={setCountdowns} toastAdd={toastAdd}/>,
     family:     <FamilyScreen members={members} setMembers={setMembers} toastAdd={toastAdd}/>,
+    goals:      <GoalsScreen goals={goals} setGoals={setGoals} toastAdd={toastAdd}/>,
     inbox:      <InboxScreen toastAdd={toastAdd} events={events} setEvents={setEvents} setInboxCount={setInboxCount}/>,
     settings:   <SettingsScreen toastAdd={toastAdd} icsSources={icsSources} setIcsSources={setIcsSources} onDisplay={onDisplay} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs}/>,
   };
@@ -2849,6 +3013,7 @@ function App(){
   const [inboxCount,setInboxCount]=useState(0);
   const [countdowns,setCountdowns]=useState([]);
   const [members,setMembers]=useState([]);
+  const [goals,setGoals]=useState([]);
   const [photos,setPhotos]=useState([]);
   const [clockFormat,setClockFormat]=useState('12h');
   const [nightModeStart,setNightModeStart]=useState('23:00');
@@ -2912,7 +3077,8 @@ function App(){
       api.get('/api/members'),
       api.get('/api/photos'),
       api.get('/api/settings'),
-    ]).then(([ev,ch,gr,ml,ics,inb,cd,mb,ph,st])=>{
+      api.get('/api/goals'),
+    ]).then(([ev,ch,gr,ml,ics,inb,cd,mb,ph,st,gl])=>{
       if(ev.status==='fulfilled') setEvents(ev.value);
       if(ch.status==='fulfilled') setChores(ch.value);
       if(gr.status==='fulfilled') setGrocery(gr.value);
@@ -2922,6 +3088,7 @@ function App(){
       if(cd.status==='fulfilled') setCountdowns(cd.value);
       if(mb.status==='fulfilled') setMembers(mb.value);
       if(ph.status==='fulfilled') setPhotos(ph.value);
+      if(gl.status==='fulfilled') setGoals(gl.value);
       if(st.status==='fulfilled'){
         const s=st.value;
         if(s.clock_format) setClockFormat(s.clock_format);
@@ -2983,8 +3150,8 @@ function App(){
   );
 
   return mode==='display'
-    ?<DisplayMode onManage={()=>setMode('manage')} events={events} chores={chores} setChores={setChores} meals={meals} grocery={grocery} countdowns={countdowns} photos={photos} clockFormat={clockFormat} weather={weather} nightModeStart={nightModeStart} nightModeEnd={nightModeEnd}/>
-    :<ManageMode onDisplay={()=>setMode('display')} onLogout={handleLogout} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources} inboxCount={inboxCount} setInboxCount={setInboxCount} countdowns={countdowns} setCountdowns={setCountdowns} members={members} setMembers={setMembers} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} weather={weather} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs}/>;
+    ?<DisplayMode onManage={()=>setMode('manage')} events={events} chores={chores} setChores={setChores} meals={meals} grocery={grocery} countdowns={countdowns} photos={photos} clockFormat={clockFormat} weather={weather} nightModeStart={nightModeStart} nightModeEnd={nightModeEnd} goals={goals}/>
+    :<ManageMode onDisplay={()=>setMode('display')} onLogout={handleLogout} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources} inboxCount={inboxCount} setInboxCount={setInboxCount} countdowns={countdowns} setCountdowns={setCountdowns} members={members} setMembers={setMembers} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} weather={weather} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} goals={goals} setGoals={setGoals}/>;
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);

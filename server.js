@@ -446,26 +446,33 @@ app.get('/api/chores/leaderboard', (req, res) => {
 });
 
 app.post('/api/chores', requireAdmin, (req, res) => {
-  const { name, recurrence, start, points } = req.body;
+  const { name, recurrence, start, points, outdoor=0, goal_id=null, goal_amount=1 } = req.body;
   if (!name?.trim() || !recurrence?.trim()) return res.status(400).json({ error: 'name and recurrence are required' });
   const today = localDate();
   const nextDue = start || today;
   const status = nextDue <= today ? 'due' : 'upcoming';
   const r = db.prepare(
-    'INSERT INTO chores (name,recurrence,next_due,status,points) VALUES (?,?,?,?,?)'
-  ).run(name.trim(), recurrence.trim(), nextDue, status, Number(points)||1);
-  res.json({ id: r.lastInsertRowid, name: name.trim(), recurrence: recurrence.trim(), last_done: '', next_due: nextDue, status, done: 0, points: Number(points)||1 });
+    'INSERT INTO chores (name,recurrence,next_due,status,points,outdoor,goal_id,goal_amount) VALUES (?,?,?,?,?,?,?,?)'
+  ).run(name.trim(), recurrence.trim(), nextDue, status, Number(points)||1, outdoor?1:0, goal_id||null, Number(goal_amount)||1);
+  res.json(db.prepare('SELECT * FROM chores WHERE id=?').get(r.lastInsertRowid));
 });
 
 app.put('/api/chores/:id', requireAdmin, (req, res) => {
   const c = db.prepare('SELECT * FROM chores WHERE id=?').get(req.params.id);
   if (!c) return res.status(404).json({ error: 'Not found' });
-  const { name, recurrence, next_due, points } = req.body;
+  const { name, recurrence, next_due, points, outdoor, goal_id, goal_amount } = req.body;
   const today = localDate();
   const nd = next_due || c.next_due;
   const status = nd < today ? 'overdue' : nd === today ? 'due' : 'upcoming';
-  db.prepare('UPDATE chores SET name=?,recurrence=?,next_due=?,status=?,points=? WHERE id=?')
-    .run(name || c.name, recurrence || c.recurrence, nd, status, points != null ? Number(points) : (c.points||1), c.id);
+  db.prepare('UPDATE chores SET name=?,recurrence=?,next_due=?,status=?,points=?,outdoor=?,goal_id=?,goal_amount=? WHERE id=?')
+    .run(
+      name || c.name, recurrence || c.recurrence, nd, status,
+      points != null ? Number(points) : (c.points||1),
+      outdoor != null ? (outdoor?1:0) : (c.outdoor||0),
+      goal_id !== undefined ? (goal_id||null) : c.goal_id,
+      goal_amount != null ? Number(goal_amount) : (c.goal_amount||1),
+      c.id
+    );
   res.json(db.prepare('SELECT * FROM chores WHERE id=?').get(c.id));
 });
 
@@ -483,6 +490,13 @@ app.put('/api/chores/:id/done', requireAuth, (req, res) => {
     if (member) {
       db.prepare('INSERT INTO chore_completions (chore_id,member_id,member_name,points) VALUES (?,?,?,?)')
         .run(c.id, member.id, member.name, c.points || 1);
+    }
+  }
+  if (done && c.goal_id) {
+    const g = db.prepare('SELECT * FROM household_goals WHERE id=?').get(c.goal_id);
+    if (g) {
+      const newProgress = Math.min(g.progress_target, g.progress_current + (c.goal_amount || 1));
+      db.prepare('UPDATE household_goals SET progress_current=? WHERE id=?').run(newProgress, g.id);
     }
   }
   updateChoreStatuses();
@@ -949,6 +963,73 @@ app.put('/api/goals/:id', requireAdmin, (req, res) => {
 
 app.delete('/api/goals/:id', requireAdmin, (req, res) => {
   db.prepare('DELETE FROM household_goals WHERE id=?').run(req.params.id);
+  res.json({ ok: true });
+});
+
+// ── Routes: Notes ─────────────────────────────────────────────────────────────
+app.get('/api/notes', requireAuth, (req, res) => {
+  res.json(db.prepare('SELECT * FROM notes ORDER BY pinned DESC, created_at DESC').all());
+});
+
+app.post('/api/notes', requireAdmin, (req, res) => {
+  const { title, content='', color='#FAFAF5', pinned=0 } = req.body || {};
+  if (!title?.trim()) return res.status(400).json({ error: 'title is required' });
+  const r = db.prepare('INSERT INTO notes (title,content,color,pinned) VALUES (?,?,?,?)').run(title.trim(), content, color, pinned?1:0);
+  res.json(db.prepare('SELECT * FROM notes WHERE id=?').get(r.lastInsertRowid));
+});
+
+app.put('/api/notes/:id', requireAdmin, (req, res) => {
+  const n = db.prepare('SELECT * FROM notes WHERE id=?').get(req.params.id);
+  if (!n) return res.status(404).json({ error: 'Not found' });
+  const { title, content, color, pinned } = req.body || {};
+  db.prepare('UPDATE notes SET title=?,content=?,color=?,pinned=? WHERE id=?')
+    .run(
+      (title ?? n.title).trim(),
+      content ?? n.content,
+      color ?? n.color,
+      pinned != null ? (pinned ? 1 : 0) : n.pinned,
+      req.params.id
+    );
+  res.json(db.prepare('SELECT * FROM notes WHERE id=?').get(req.params.id));
+});
+
+app.delete('/api/notes/:id', requireAdmin, (req, res) => {
+  db.prepare('DELETE FROM notes WHERE id=?').run(req.params.id);
+  res.json({ ok: true });
+});
+
+// ── Routes: Polls ─────────────────────────────────────────────────────────────
+app.get('/api/polls', requireAuth, (req, res) => {
+  res.json(db.prepare('SELECT * FROM polls ORDER BY created_at DESC').all().map(p => ({
+    ...p, options: JSON.parse(p.options), votes: JSON.parse(p.votes || '{}'),
+  })));
+});
+
+app.post('/api/polls', requireAdmin, (req, res) => {
+  const { question, options } = req.body || {};
+  if (!question?.trim() || !Array.isArray(options) || options.filter(o=>o?.trim()).length < 2)
+    return res.status(400).json({ error: 'question and at least 2 options required' });
+  const opts = options.filter(o => o?.trim()).map(o => o.trim());
+  const r = db.prepare('INSERT INTO polls (question,options,votes) VALUES (?,?,?)').run(question.trim(), JSON.stringify(opts), '{}');
+  const p = db.prepare('SELECT * FROM polls WHERE id=?').get(r.lastInsertRowid);
+  res.json({ ...p, options: JSON.parse(p.options), votes: {} });
+});
+
+app.post('/api/polls/:id/vote', requireAuth, (req, res) => {
+  const p = db.prepare('SELECT * FROM polls WHERE id=?').get(req.params.id);
+  if (!p) return res.status(404).json({ error: 'Not found' });
+  const options = JSON.parse(p.options);
+  const { option } = req.body || {};
+  if (typeof option !== 'number' || option < 0 || option >= options.length)
+    return res.status(400).json({ error: 'Invalid option index' });
+  const votes = JSON.parse(p.votes || '{}');
+  votes[option] = (votes[option] || 0) + 1;
+  db.prepare('UPDATE polls SET votes=? WHERE id=?').run(JSON.stringify(votes), p.id);
+  res.json({ votes });
+});
+
+app.delete('/api/polls/:id', requireAdmin, (req, res) => {
+  db.prepare('DELETE FROM polls WHERE id=?').run(req.params.id);
   res.json({ ok: true });
 });
 

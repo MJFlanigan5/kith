@@ -138,6 +138,23 @@ CREATE TABLE IF NOT EXISTS household_goals (
   deadline TEXT DEFAULT '',
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS notes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  content TEXT DEFAULT '',
+  color TEXT DEFAULT '#FAFAF5',
+  pinned INTEGER DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS polls (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  question TEXT NOT NULL,
+  options TEXT NOT NULL,
+  votes TEXT DEFAULT '{}',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
 `);
 
 // migrations — safe to run on every boot
@@ -147,6 +164,9 @@ try { db.exec(`ALTER TABLE events ADD COLUMN recurring_rule TEXT DEFAULT ''`); }
 try { db.exec('ALTER TABLE family_members ADD COLUMN pin_hash TEXT'); } catch {}
 try { db.exec('ALTER TABLE chores ADD COLUMN points INTEGER DEFAULT 1'); } catch {}
 try { db.exec('ALTER TABLE family_members ADD COLUMN monthly_goal INTEGER DEFAULT 0'); } catch {}
+try { db.exec('ALTER TABLE chores ADD COLUMN outdoor INTEGER DEFAULT 0'); } catch {}
+try { db.exec('ALTER TABLE chores ADD COLUMN goal_id INTEGER'); } catch {}
+try { db.exec('ALTER TABLE chores ADD COLUMN goal_amount REAL DEFAULT 1'); } catch {}
 try { db.exec("ALTER TABLE family_members ADD COLUMN reward TEXT DEFAULT ''"); } catch {}
 db.prepare("UPDATE events SET calendar='kith' WHERE calendar IN ('personal','work','family','hearth')").run();
 db.prepare("UPDATE events SET time='All day' WHERE time IS NULL OR time=''").run();

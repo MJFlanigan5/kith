@@ -407,7 +407,7 @@ function FamilyScreen({members,setMembers,toastAdd}){
 }
 
 /* ── Display Mode ────────────────────────────────────────────────────── */
-function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,photos,weather,clockFormat='12h',nightModeStart='23:00',nightModeEnd='06:00',goals=[]}){
+function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,photos,weather,clockFormat='12h',nightModeStart='23:00',nightModeEnd='06:00',goals=[],notes=[],polls=[]}){
   const isMobile=useIsMobile();
   const now=useClock();
   const [liveGames,setLiveGames]=useState([]);
@@ -431,6 +431,16 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
     const load=()=>api.get('/api/members/progress').then(d=>{if(Array.isArray(d))setMemberProgress(d);}).catch(()=>{});
     load();
     const id=setInterval(load,5*60*1000);
+    return()=>clearInterval(id);
+  },[]);
+
+  const [livePollVotes,setLivePollVotes]=useState({});
+  useEffect(()=>{
+    const load=()=>api.get('/api/polls').then(d=>{
+      if(Array.isArray(d)&&d.length) setLivePollVotes(d[0].votes||{});
+    }).catch(()=>{});
+    load();
+    const id=setInterval(load,30000);
     return()=>clearInterval(id);
   },[]);
   const [newsIdx,setNewsIdx]=useState(0);
@@ -814,6 +824,51 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
             </Widget>
           )}
 
+          {/* Pinned notes — full-width, only when pinned notes exist */}
+          {notes.filter(n=>n.pinned).length>0&&(
+            <div style={{gridColumn:'1/4',display:'grid',gridTemplateColumns:`repeat(${Math.min(notes.filter(n=>n.pinned).length,4)},1fr)`,gap:12}}>
+              {notes.filter(n=>n.pinned).slice(0,4).map(n=>(
+                <div key={n.id} style={{background:n.color||'#FAFAF5',borderRadius:14,padding:'16px 18px',border:'1px solid rgba(0,0,0,0.04)'}}>
+                  <div style={{fontSize:14,fontWeight:700,color:'#1C1C1E',marginBottom:n.content?6:0}}>{n.title}</div>
+                  {n.content&&<div style={{fontSize:12,color:'#3C3C43',lineHeight:1.5,whiteSpace:'pre-wrap'}}>{n.content}</div>}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Active poll — most recent poll */}
+          {polls.length>0&&(()=>{
+            const poll=polls[0];
+            const votes={...(poll.votes||{}),...livePollVotes};
+            const total=Object.values(votes).reduce((a,b)=>a+Number(b),0);
+            return(
+              <Widget style={{gridColumn:'1/4',padding:'14px 18px'}}>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+                  <WLabel>Poll</WLabel>
+                  <span style={{fontSize:11,color:D.t4}}>{total} vote{total!==1?'s':''} · vote from the app</span>
+                </div>
+                <div style={{fontSize:15,fontWeight:600,color:D.t1,marginBottom:12}}>{poll.question}</div>
+                <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
+                  {poll.options.map((opt,idx)=>{
+                    const count=Number(votes[idx])||0;
+                    const pct=total>0?Math.round((count/total)*100):0;
+                    return(
+                      <div key={idx} style={{flex:'1 1 120px',minWidth:0}}>
+                        <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',marginBottom:4}}>
+                          <span style={{fontSize:12,color:D.t2,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{opt}</span>
+                          <span style={{fontSize:13,fontWeight:700,color:D.t1,flexShrink:0,marginLeft:8,fontVariantNumeric:'tabular-nums'}}>{pct}%</span>
+                        </div>
+                        <div style={{height:6,borderRadius:3,background:'rgba(255,255,255,0.10)',overflow:'hidden'}}>
+                          <div style={{height:'100%',borderRadius:3,width:`${pct}%`,background:'rgba(255,255,255,0.45)',transition:'width .5s ease'}}/>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Widget>
+            );
+          })()}
+
         </div>
       )}
 
@@ -956,6 +1011,22 @@ function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weath
           )}
         </Card>
       </div>
+
+      {/* Outdoor chore rain warning */}
+      {(()=>{
+        const outdoorDue=dueChores.filter(c=>c.outdoor);
+        const isRaining=weather&&['Drizzle','Rain','Showers','Thunderstorm'].includes(weather.condition);
+        if(!isRaining||!outdoorDue.length) return null;
+        return(
+          <div style={{background:A.blueFill,borderRadius:A.r,padding:'12px 16px',marginBottom:16,display:'flex',alignItems:'center',gap:12,border:`1px solid ${A.blue}22`}}>
+            <span style={{fontSize:22,flexShrink:0}}>{weather.icon}</span>
+            <div>
+              <div style={{fontSize:14,fontWeight:700,color:A.blue}}>Rain today — outdoor chores flagged</div>
+              <div style={{fontSize:13,color:A.label3,marginTop:2}}>{outdoorDue.map(c=>c.name).join(', ')}</div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* 7-day week strip */}
       <Card style={{marginBottom:16,padding:'12px 10px'}}>
@@ -1765,15 +1836,15 @@ function InboxScreen({toastAdd,events,setEvents,setInboxCount}){
 }
 
 /* ── Chores ──────────────────────────────────────────────────────────── */
-function ChoresScreen({chores,setChores,toastAdd}){
+function ChoresScreen({chores,setChores,goals=[],toastAdd}){
   const isMobile=useIsMobile();
   const [drawerOpen,setDrawerOpen]=useState(false);
   const [editChore,setEditChore]=useState(null);
-  const [form,setForm]=useState({name:'',recur:'Weekly',day:'Monday',start:'',points:1});
+  const [form,setForm]=useState({name:'',recur:'Weekly',day:'Monday',start:'',points:1,outdoor:false,goal_id:'',goal_amount:1});
 
   const openNew=()=>{
     setEditChore(null);
-    setForm({name:'',recur:'Weekly',day:'Monday',start:'',points:1});
+    setForm({name:'',recur:'Weekly',day:'Monday',start:'',points:1,outdoor:false,goal_id:'',goal_amount:1});
     setDrawerOpen(true);
   };
 
@@ -1788,25 +1859,26 @@ function ChoresScreen({chores,setChores,toastAdd}){
       if(m) day=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'].find(d=>d.startsWith(m[1]))||'Monday';
     } else recur='Custom';
     setEditChore(c);
-    setForm({name:c.name,recur,day,start:c.next_due||'',points:c.points||1});
+    setForm({name:c.name,recur,day,start:c.next_due||'',points:c.points||1,outdoor:!!c.outdoor,goal_id:c.goal_id||'',goal_amount:c.goal_amount||1});
     setDrawerOpen(true);
   };
 
   const saveChore=async()=>{
     if(!form.name.trim()) return;
     const recurrence=form.recur==='Weekly'?`Weekly (${form.day.slice(0,3)})`:form.recur;
+    const body={name:form.name,recurrence,next_due:form.start,points:form.points,outdoor:form.outdoor?1:0,goal_id:form.goal_id||null,goal_amount:Number(form.goal_amount)||1};
     if(editChore){
-      const updated=await api.put(`/api/chores/${editChore.id}`,{name:form.name,recurrence,next_due:form.start,points:form.points});
+      const updated=await api.put(`/api/chores/${editChore.id}`,body);
       setChores(p=>p.map(c=>c.id===editChore.id?updated:c));
       toastAdd('Chore updated');
     } else {
-      const newChore=await api.post('/api/chores',{name:form.name,recurrence,start:form.start,points:form.points});
+      const newChore=await api.post('/api/chores',{...body,start:form.start});
       setChores(p=>[...p,newChore]);
       toastAdd('Chore added');
     }
     setDrawerOpen(false);
     setEditChore(null);
-    setForm({name:'',recur:'Weekly',day:'Monday',start:'',points:1});
+    setForm({name:'',recur:'Weekly',day:'Monday',start:'',points:1,outdoor:false,goal_id:'',goal_amount:1});
   };
 
   const deleteChore=async id=>{
@@ -1926,6 +1998,31 @@ function ChoresScreen({chores,setChores,toastAdd}){
             <div style={{fontSize:12,color:A.label4}}>{form.points} point{form.points!==1?'s':''} when completed</div>
           </div>
         </FormGroup>
+        <FormGroup label="Options">
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 16px'}}>
+            <span style={{fontSize:15,color:A.label1,fontWeight:500}}>Outdoor chore</span>
+            <button onClick={()=>setForm(p=>({...p,outdoor:!p.outdoor}))} style={{width:44,height:26,borderRadius:13,background:form.outdoor?A.blue:A.label5,border:'none',cursor:'pointer',position:'relative',transition:'background .2s',flexShrink:0}}>
+              <div style={{position:'absolute',top:3,left:form.outdoor?21:3,width:20,height:20,borderRadius:'50%',background:'#fff',transition:'left .2s',boxShadow:'0 1px 3px rgba(0,0,0,0.18)'}}/>
+            </button>
+          </div>
+        </FormGroup>
+        {goals.length>0&&(
+          <FormGroup label="Link to goal (optional)">
+            <div style={{padding:'12px 16px'}}>
+              <select value={form.goal_id} onChange={e=>setForm(p=>({...p,goal_id:e.target.value}))}
+                style={{width:'100%',padding:'10px 12px',borderRadius:A.rXs,border:`1px solid ${A.sep}`,background:A.inputBg,fontSize:15,color:A.label1}}>
+                <option value="">None</option>
+                {goals.map(g=><option key={g.id} value={g.id}>{g.name}</option>)}
+              </select>
+              {form.goal_id&&(
+                <div style={{marginTop:10}}>
+                  <label style={{fontSize:13,color:A.label4,display:'block',marginBottom:6}}>Amount to add when completed</label>
+                  <Inp type="number" min="0.1" step="0.1" value={form.goal_amount} onChange={e=>setForm(p=>({...p,goal_amount:e.target.value}))} style={{width:120}}/>
+                </div>
+              )}
+            </div>
+          </FormGroup>
+        )}
         <div style={{display:'flex',gap:8,marginTop:4}}>
           <Btn onClick={saveChore} full>{editChore?'Update Chore':'Save Chore'}</Btn>
           <Btn variant="ghost" onClick={()=>{setDrawerOpen(false);setEditChore(null);}} full>Cancel</Btn>
@@ -2466,6 +2563,212 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   );
 }
 
+/* ── Notes Screen ────────────────────────────────────────────────────── */
+const NOTE_COLORS=['#FAFAF5','#FFFBCC','#E8F5E9','#E3F2FD','#FCE4EC','#F3E5F5'];
+function NotesScreen({notes,setNotes,toastAdd}){
+  const isMobile=useIsMobile();
+  const [drawerOpen,setDrawerOpen]=useState(false);
+  const [editNote,setEditNote]=useState(null);
+  const blank={title:'',content:'',color:'#FAFAF5',pinned:false};
+  const [form,setForm]=useState(blank);
+
+  const openNew=()=>{setEditNote(null);setForm(blank);setDrawerOpen(true);};
+  const openEdit=n=>{setEditNote(n);setForm({title:n.title,content:n.content||'',color:n.color||'#FAFAF5',pinned:!!n.pinned});setDrawerOpen(true);};
+
+  const save=async()=>{
+    if(!form.title.trim()){toastAdd('Title is required','red');return;}
+    const body={title:form.title.trim(),content:form.content,color:form.color,pinned:form.pinned?1:0};
+    if(editNote){
+      const updated=await api.put(`/api/notes/${editNote.id}`,body);
+      setNotes(p=>p.map(n=>n.id===editNote.id?updated:n).sort((a,b)=>b.pinned-a.pinned||b.id-a.id));
+      toastAdd('Note updated');
+    } else {
+      const created=await api.post('/api/notes',body);
+      setNotes(p=>[created,...p].sort((a,b)=>b.pinned-a.pinned||b.id-a.id));
+      toastAdd('Note added');
+    }
+    setDrawerOpen(false);setEditNote(null);setForm(blank);
+  };
+
+  const togglePin=async n=>{
+    const updated=await api.put(`/api/notes/${n.id}`,{pinned:n.pinned?0:1});
+    setNotes(p=>p.map(x=>x.id===n.id?updated:x).sort((a,b)=>b.pinned-a.pinned||b.id-a.id));
+  };
+
+  const del=async id=>{
+    await api.del(`/api/notes/${id}`);
+    setNotes(p=>p.filter(n=>n.id!==id));
+    toastAdd('Deleted','blue');
+  };
+
+  return(
+    <div>
+      <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:24}}>
+        <div>
+          <h1 style={{fontSize:isMobile?34:44,fontWeight:800,letterSpacing:'-.05em',lineHeight:1.05}}>Notes</h1>
+          <p style={{color:A.label4,fontSize:15,marginTop:6}}>{notes.length} note{notes.length!==1?'s':''} · {notes.filter(n=>n.pinned).length} pinned to display</p>
+        </div>
+        <Btn onClick={openNew}>+ Add Note</Btn>
+      </div>
+
+      {notes.length===0?(
+        <Card style={{padding:'52px 24px',textAlign:'center'}}>
+          <div style={{fontSize:13,fontWeight:700,color:A.label5,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:10}}>No notes yet</div>
+          <div style={{fontSize:15,color:A.label3,fontWeight:500}}>WiFi password, trash day, plumber number — pin a note to show it on the wall display</div>
+        </Card>
+      ):(
+        <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'repeat(auto-fill,minmax(240px,1fr))',gap:12}}>
+          {notes.map(n=>(
+            <div key={n.id} style={{background:n.color||'#FAFAF5',borderRadius:A.r,padding:'18px 20px',position:'relative',border:'1px solid rgba(0,0,0,0.06)'}}>
+              {n.pinned&&<div style={{position:'absolute',top:12,right:14,width:8,height:8,borderRadius:'50%',background:A.blue}}/>}
+              <div style={{fontSize:15,fontWeight:700,color:'#1C1C1E',marginBottom:n.content?8:0,paddingRight:16}}>{n.title}</div>
+              {n.content&&<div style={{fontSize:13,color:'#3C3C43',lineHeight:1.5,whiteSpace:'pre-wrap'}}>{n.content}</div>}
+              <div style={{display:'flex',gap:10,marginTop:14,alignItems:'center'}}>
+                <button onClick={()=>togglePin(n)} style={{background:'none',border:'none',fontSize:12,color:n.pinned?A.blue:A.label4,cursor:'pointer',fontWeight:600,padding:0}}>{n.pinned?'Unpin':'Pin to display'}</button>
+                <button onClick={()=>openEdit(n)} style={{background:'none',border:'none',fontSize:12,color:A.blue,cursor:'pointer',fontWeight:500,padding:0}}>Edit</button>
+                <button onClick={()=>del(n.id)} style={{background:'none',border:'none',fontSize:12,color:A.red,cursor:'pointer',fontWeight:500,padding:0}}>Delete</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <Drawer open={drawerOpen} onClose={()=>{setDrawerOpen(false);setEditNote(null);}} title={editNote?'Edit Note':'Add Note'}>
+        <FormGroup label="Note">
+          <div style={{padding:'12px 16px'}}><Inp value={form.title} onChange={e=>setForm(p=>({...p,title:e.target.value}))} placeholder="Title (e.g. WiFi Password)"/></div>
+          <div style={{padding:'12px 16px',borderTop:`1px solid ${A.sep}`}}>
+            <textarea value={form.content} onChange={e=>setForm(p=>({...p,content:e.target.value}))} placeholder="Content (optional)" rows={4}
+              style={{width:'100%',padding:0,border:'none',background:'transparent',fontSize:15,color:A.label1,resize:'none',outline:'none',fontFamily:'inherit',lineHeight:1.5}}/>
+          </div>
+        </FormGroup>
+        <FormGroup label="Color">
+          <div style={{padding:'12px 16px',display:'flex',gap:10}}>
+            {NOTE_COLORS.map(c=>(
+              <button key={c} onClick={()=>setForm(p=>({...p,color:c}))} style={{width:28,height:28,borderRadius:'50%',background:c,border:form.color===c?`2px solid ${A.blue}`:'2px solid transparent',cursor:'pointer'}}/>
+            ))}
+          </div>
+        </FormGroup>
+        <FormGroup label="Options">
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 16px'}}>
+            <span style={{fontSize:15,color:A.label1,fontWeight:500}}>Pin to wall display</span>
+            <button onClick={()=>setForm(p=>({...p,pinned:!p.pinned}))} style={{width:44,height:26,borderRadius:13,background:form.pinned?A.blue:A.label5,border:'none',cursor:'pointer',position:'relative',transition:'background .2s',flexShrink:0}}>
+              <div style={{position:'absolute',top:3,left:form.pinned?21:3,width:20,height:20,borderRadius:'50%',background:'#fff',transition:'left .2s',boxShadow:'0 1px 3px rgba(0,0,0,0.18)'}}/>
+            </button>
+          </div>
+        </FormGroup>
+        <div style={{padding:'16px'}}><Btn onClick={save} full>{editNote?'Save Changes':'Add Note'}</Btn></div>
+      </Drawer>
+    </div>
+  );
+}
+
+/* ── Polls Screen ────────────────────────────────────────────────────── */
+function PollsScreen({polls,setPolls,toastAdd}){
+  const isMobile=useIsMobile();
+  const [drawerOpen,setDrawerOpen]=useState(false);
+  const [question,setQuestion]=useState('');
+  const [options,setOptions]=useState(['','']);
+  const [voting,setVoting]=useState({});
+
+  const vote=async(poll,idx)=>{
+    if(voting[poll.id]) return;
+    setVoting(v=>({...v,[poll.id]:true}));
+    try{
+      const result=await api.post(`/api/polls/${poll.id}/vote`,{option:idx});
+      setPolls(p=>p.map(x=>x.id===poll.id?{...x,votes:result.votes}:x));
+      toastAdd('Vote counted');
+    }catch{toastAdd('Vote failed','red');}
+    finally{setVoting(v=>({...v,[poll.id]:false}));}
+  };
+
+  const savePoll=async()=>{
+    const filtered=options.filter(o=>o.trim());
+    if(!question.trim()||filtered.length<2){toastAdd('Need a question and at least 2 options','red');return;}
+    const created=await api.post('/api/polls',{question:question.trim(),options:filtered});
+    setPolls(p=>[created,...p]);
+    setDrawerOpen(false);setQuestion('');setOptions(['','']);
+    toastAdd('Poll created');
+  };
+
+  const del=async id=>{
+    await api.del(`/api/polls/${id}`);
+    setPolls(p=>p.filter(x=>x.id!==id));
+    toastAdd('Deleted','blue');
+  };
+
+  return(
+    <div>
+      <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:24}}>
+        <div>
+          <h1 style={{fontSize:isMobile?34:44,fontWeight:800,letterSpacing:'-.05em',lineHeight:1.05}}>Polls</h1>
+          <p style={{color:A.label4,fontSize:15,marginTop:6}}>Vote from here · live results show on the wall display</p>
+        </div>
+        <Btn onClick={()=>setDrawerOpen(true)}>+ New Poll</Btn>
+      </div>
+
+      {polls.length===0?(
+        <Card style={{padding:'52px 24px',textAlign:'center'}}>
+          <div style={{fontSize:13,fontWeight:700,color:A.label5,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:10}}>No polls yet</div>
+          <div style={{fontSize:15,color:A.label3,fontWeight:500}}>Create a poll — household votes from their phones, results show on the wall display</div>
+        </Card>
+      ):(
+        <div style={{display:'flex',flexDirection:'column',gap:16}}>
+          {polls.map(poll=>{
+            const total=Object.values(poll.votes||{}).reduce((a,b)=>a+b,0);
+            return(
+              <Card key={poll.id} style={{padding:'20px'}}>
+                <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:16,gap:12}}>
+                  <div style={{fontSize:17,fontWeight:700,color:A.label1,flex:1}}>{poll.question}</div>
+                  <div style={{display:'flex',gap:8,flexShrink:0}}>
+                    <span style={{fontSize:12,color:A.label4}}>{total} vote{total!==1?'s':''}</span>
+                    <button onClick={()=>del(poll.id)} style={{background:'none',border:'none',color:A.red,fontSize:13,cursor:'pointer',fontWeight:500}}>Delete</button>
+                  </div>
+                </div>
+                <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                  {poll.options.map((opt,idx)=>{
+                    const count=poll.votes?.[idx]||0;
+                    const pct=total>0?Math.round((count/total)*100):0;
+                    return(
+                      <button key={idx} onClick={()=>vote(poll,idx)} disabled={!!voting[poll.id]}
+                        style={{width:'100%',textAlign:'left',background:A.inputBg,border:`1px solid ${A.sep}`,borderRadius:A.rXs,padding:'10px 14px',cursor:'pointer',position:'relative',overflow:'hidden'}}>
+                        <div style={{position:'absolute',top:0,left:0,height:'100%',width:`${pct}%`,background:`${A.blue}18`,transition:'width .4s ease'}}/>
+                        <div style={{position:'relative',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                          <span style={{fontSize:14,fontWeight:500,color:A.label1}}>{opt}</span>
+                          <span style={{fontSize:13,fontWeight:700,color:A.blue,fontVariantNumeric:'tabular-nums'}}>{pct}%</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      <Drawer open={drawerOpen} onClose={()=>{setDrawerOpen(false);setQuestion('');setOptions(['','']);}} title="New Poll">
+        <FormGroup label="Question">
+          <div style={{padding:'12px 16px'}}><Inp value={question} onChange={e=>setQuestion(e.target.value)} placeholder="What's for dinner this week?"/></div>
+        </FormGroup>
+        <FormGroup label="Options">
+          {options.map((opt,i)=>(
+            <div key={i} style={{padding:'10px 16px',borderTop:`1px solid ${A.sep}`,display:'flex',gap:8,alignItems:'center'}}>
+              <Inp value={opt} onChange={e=>setOptions(p=>{const n=[...p];n[i]=e.target.value;return n;})} placeholder={`Option ${i+1}`} style={{flex:1}}/>
+              {options.length>2&&<button onClick={()=>setOptions(p=>p.filter((_,j)=>j!==i))} style={{background:'none',border:'none',color:A.red,cursor:'pointer',fontSize:18,lineHeight:1,padding:'0 4px'}}>×</button>}
+            </div>
+          ))}
+          {options.length<6&&(
+            <div style={{padding:'10px 16px',borderTop:`1px solid ${A.sep}`}}>
+              <button onClick={()=>setOptions(p=>[...p,''])} style={{background:'none',border:'none',color:A.blue,fontSize:14,cursor:'pointer',fontWeight:500}}>+ Add option</button>
+            </div>
+          )}
+        </FormGroup>
+        <div style={{padding:'16px'}}><Btn onClick={savePoll} full>Create Poll</Btn></div>
+      </Drawer>
+    </div>
+  );
+}
+
 /* ── Manage Shell ────────────────────────────────────────────────────── */
 /* ── Goals Screen ────────────────────────────────────────────────────── */
 function GoalsScreen({goals,setGoals,toastAdd}){
@@ -2599,7 +2902,7 @@ function GoalsScreen({goals,setGoals,toastAdd}){
   );
 }
 
-function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocery,setGrocery,meals,setMeals,icsSources,setIcsSources,inboxCount,setInboxCount,countdowns,setCountdowns,members,setMembers,photos,setPhotos,clockFormat,setClockFormat,weather,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd,setRefreshMs,parseRefreshMs,goals,setGoals}){
+function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocery,setGrocery,meals,setMeals,icsSources,setIcsSources,inboxCount,setInboxCount,countdowns,setCountdowns,members,setMembers,photos,setPhotos,clockFormat,setClockFormat,weather,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd,setRefreshMs,parseRefreshMs,goals,setGoals,notes,setNotes,polls,setPolls}){
   const isMobile=useIsMobile();
   const [screen,setScreen]=useState('dashboard');
   const {toasts,add:toastAdd}=useToast();
@@ -2620,6 +2923,8 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
     {id:'countdowns',label:'Countdowns',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><circle cx="8.5" cy="9" r="6.5" stroke="currentColor" strokeWidth="1.5"/><path d="M8.5 5.5V9l2.5 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M6 1.5h5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
     {id:'family',label:'Family',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><circle cx="6" cy="5" r="2.5" stroke="currentColor" strokeWidth="1.5"/><circle cx="12" cy="5" r="2" stroke="currentColor" strokeWidth="1.5"/><path d="M1 14c0-2.76 2.24-5 5-5s5 2.24 5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M12 9c1.66 0 3 1.34 3 3v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
     {id:'goals',label:'Goals',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><circle cx="8.5" cy="8.5" r="6.5" stroke="currentColor" strokeWidth="1.5"/><circle cx="8.5" cy="8.5" r="3" stroke="currentColor" strokeWidth="1.5"/><circle cx="8.5" cy="8.5" r="1" fill="currentColor"/></svg>},
+    {id:'notes',label:'Notes',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="2" y="2" width="13" height="13" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M5 6h7M5 9h5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
+    {id:'polls',label:'Polls',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="2" y="9" width="3" height="6" rx="1" fill="currentColor" opacity=".5"/><rect x="7" y="5" width="3" height="10" rx="1" fill="currentColor" opacity=".7"/><rect x="12" y="2" width="3" height="13" rx="1" fill="currentColor"/></svg>},
     {id:'inbox',label:'Inbox',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="1.5" y="3.5" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M1.5 6.5l7 4 7-4" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>,badge:inboxCount},
     {id:'settings',label:'Settings',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><circle cx="8.5" cy="8.5" r="2.5" stroke="currentColor" strokeWidth="1.5"/><path d="M8.5 1v2M8.5 14v2M1 8.5h2M14 8.5h2M3.05 3.05l1.42 1.42M12.53 12.53l1.42 1.42M12.53 3.05l-1.42 1.42M4.47 12.53l-1.42 1.42" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
   ];
@@ -2627,11 +2932,13 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
   const screens={
     dashboard:  <DashboardScreen events={events} setEvents={setEvents} chores={chores} grocery={grocery} meals={meals} countdowns={countdowns} weather={weather} clockFormat={clockFormat}/>,
     calendar:   <CalendarScreen events={events} setEvents={setEvents} icsSources={icsSources} toastAdd={toastAdd} members={members} clockFormat={clockFormat}/>,
-    chores:     <ChoresScreen chores={chores} setChores={setChores} toastAdd={toastAdd}/>,
+    chores:     <ChoresScreen chores={chores} setChores={setChores} goals={goals} toastAdd={toastAdd}/>,
     grocery:    <GroceryScreen grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} toastAdd={toastAdd}/>,
     countdowns: <CountdownsScreen countdowns={countdowns} setCountdowns={setCountdowns} toastAdd={toastAdd}/>,
     family:     <FamilyScreen members={members} setMembers={setMembers} toastAdd={toastAdd}/>,
     goals:      <GoalsScreen goals={goals} setGoals={setGoals} toastAdd={toastAdd}/>,
+    notes:      <NotesScreen notes={notes} setNotes={setNotes} toastAdd={toastAdd}/>,
+    polls:      <PollsScreen polls={polls} setPolls={setPolls} toastAdd={toastAdd}/>,
     inbox:      <InboxScreen toastAdd={toastAdd} events={events} setEvents={setEvents} setInboxCount={setInboxCount}/>,
     settings:   <SettingsScreen toastAdd={toastAdd} icsSources={icsSources} setIcsSources={setIcsSources} onDisplay={onDisplay} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs}/>,
   };
@@ -3014,6 +3321,8 @@ function App(){
   const [countdowns,setCountdowns]=useState([]);
   const [members,setMembers]=useState([]);
   const [goals,setGoals]=useState([]);
+  const [notes,setNotes]=useState([]);
+  const [polls,setPolls]=useState([]);
   const [photos,setPhotos]=useState([]);
   const [clockFormat,setClockFormat]=useState('12h');
   const [nightModeStart,setNightModeStart]=useState('23:00');
@@ -3078,7 +3387,9 @@ function App(){
       api.get('/api/photos'),
       api.get('/api/settings'),
       api.get('/api/goals'),
-    ]).then(([ev,ch,gr,ml,ics,inb,cd,mb,ph,st,gl])=>{
+      api.get('/api/notes'),
+      api.get('/api/polls'),
+    ]).then(([ev,ch,gr,ml,ics,inb,cd,mb,ph,st,gl,nt,pl])=>{
       if(ev.status==='fulfilled') setEvents(ev.value);
       if(ch.status==='fulfilled') setChores(ch.value);
       if(gr.status==='fulfilled') setGrocery(gr.value);
@@ -3089,6 +3400,8 @@ function App(){
       if(mb.status==='fulfilled') setMembers(mb.value);
       if(ph.status==='fulfilled') setPhotos(ph.value);
       if(gl.status==='fulfilled') setGoals(gl.value);
+      if(nt.status==='fulfilled') setNotes(nt.value);
+      if(pl.status==='fulfilled') setPolls(pl.value);
       if(st.status==='fulfilled'){
         const s=st.value;
         if(s.clock_format) setClockFormat(s.clock_format);
@@ -3150,8 +3463,8 @@ function App(){
   );
 
   return mode==='display'
-    ?<DisplayMode onManage={()=>setMode('manage')} events={events} chores={chores} setChores={setChores} meals={meals} grocery={grocery} countdowns={countdowns} photos={photos} clockFormat={clockFormat} weather={weather} nightModeStart={nightModeStart} nightModeEnd={nightModeEnd} goals={goals}/>
-    :<ManageMode onDisplay={()=>setMode('display')} onLogout={handleLogout} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources} inboxCount={inboxCount} setInboxCount={setInboxCount} countdowns={countdowns} setCountdowns={setCountdowns} members={members} setMembers={setMembers} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} weather={weather} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} goals={goals} setGoals={setGoals}/>;
+    ?<DisplayMode onManage={()=>setMode('manage')} events={events} chores={chores} setChores={setChores} meals={meals} grocery={grocery} countdowns={countdowns} photos={photos} clockFormat={clockFormat} weather={weather} nightModeStart={nightModeStart} nightModeEnd={nightModeEnd} goals={goals} notes={notes} polls={polls}/>
+    :<ManageMode onDisplay={()=>setMode('display')} onLogout={handleLogout} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources} inboxCount={inboxCount} setInboxCount={setInboxCount} countdowns={countdowns} setCountdowns={setCountdowns} members={members} setMembers={setMembers} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} weather={weather} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} goals={goals} setGoals={setGoals} notes={notes} setNotes={setNotes} polls={polls} setPolls={setPolls}/>;
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);

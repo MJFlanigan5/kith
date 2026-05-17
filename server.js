@@ -911,7 +911,7 @@ app.put('/api/members/:id/goal', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
-app.get('/api/members/progress', requireAuth, (req, res) => {
+app.get('/api/members/progress', (req, res) => {
   const now = new Date();
   const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
   const members = db.prepare('SELECT * FROM family_members ORDER BY created_at').all();

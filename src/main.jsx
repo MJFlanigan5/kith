@@ -2222,7 +2222,7 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,toastAdd}){
 }
 
 /* ── Settings ────────────────────────────────────────────────────────── */
-function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setPhotos,clockFormat,setClockFormat,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd,setRefreshMs,parseRefreshMs}){
+function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setPhotos,clockFormat,setClockFormat,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd,setRefreshMs,parseRefreshMs,setQuickActions}){
   const isMobile=useIsMobile();
   const [weatherCity,setWeatherCity]=useState('');
   const [weatherLat,setWeatherLat]=useState('33.749');
@@ -2644,7 +2644,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
                     <div style={{fontSize:11,color:A.label5,fontFamily:'JetBrains Mono,monospace',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{action.method} {action.url}</div>
                   </div>
                   <button onClick={()=>{setQaEdit(action);setQaForm({label:action.label,icon:action.icon||'⚡',url:action.url,method:action.method||'POST',headers:action.headers||'',body:action.body||''});setQaDrawer(true);}} style={{background:'none',border:'none',color:A.blue,fontSize:13,cursor:'pointer',fontWeight:500}}>Edit</button>
-                  <button onClick={async()=>{const next=qaList.filter(a=>a.id!==action.id);await api.put('/api/quick-actions',{actions:next});setQaList(next);toastAdd('Removed','blue');}} style={{background:'none',border:'none',color:A.red,fontSize:13,cursor:'pointer',fontWeight:500}}>Remove</button>
+                  <button onClick={async()=>{const next=qaList.filter(a=>a.id!==action.id);await api.put('/api/quick-actions',{actions:next});setQaList(next);if(setQuickActions)setQuickActions(next);toastAdd('Removed','blue');}} style={{background:'none',border:'none',color:A.red,fontSize:13,cursor:'pointer',fontWeight:500}}>Remove</button>
                 </div>
               ))}
             </div>
@@ -2691,6 +2691,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
               }
               await api.put('/api/quick-actions',{actions:next});
               setQaList(next);
+              if(setQuickActions) setQuickActions(next);
               setQaDrawer(false);setQaEdit(null);
               toastAdd(qaEdit?'Action updated':'Action added');
             }} full>{qaEdit?'Save Changes':'Add Action'}</Btn>
@@ -3028,7 +3029,7 @@ function GoalsScreen({goals,setGoals,toastAdd}){
                     </>
                   ):(
                     <>
-                      <input type="range" min="0" max="100" value={pct} onChange={e=>updateProgress(g,Number(e.target.value))}
+                      <input type="range" min="0" max="100" value={pct} onChange={e=>updateProgress(g,Math.round((Number(e.target.value)/100)*g.progress_target))}
                         style={{flex:1,accentColor:A.blue}}/>
                       <span style={{fontSize:13,color:A.label4,minWidth:32,textAlign:'right'}}>{pct}%</span>
                     </>
@@ -3104,7 +3105,7 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
     notes:      <NotesScreen notes={notes} setNotes={setNotes} toastAdd={toastAdd}/>,
     polls:      <PollsScreen polls={polls} setPolls={setPolls} toastAdd={toastAdd}/>,
     inbox:      <InboxScreen toastAdd={toastAdd} events={events} setEvents={setEvents} setInboxCount={setInboxCount}/>,
-    settings:   <SettingsScreen toastAdd={toastAdd} icsSources={icsSources} setIcsSources={setIcsSources} onDisplay={onDisplay} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs}/>,
+    settings:   <SettingsScreen toastAdd={toastAdd} icsSources={icsSources} setIcsSources={setIcsSources} onDisplay={onDisplay} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} setQuickActions={setQuickActions}/>,
   };
 
   if(isMobile){
@@ -3556,15 +3557,15 @@ function App(){
       api.get('/api/polls'),
       api.get('/api/quick-actions'),
     ]).then(([ev,ch,gr,ml,ics,inb,cd,mb,ph,st,gl,nt,pl,qa])=>{
-      if(ev.status==='fulfilled') setEvents(ev.value);
-      if(ch.status==='fulfilled') setChores(ch.value);
-      if(gr.status==='fulfilled') setGrocery(gr.value);
-      if(ml.status==='fulfilled') setMeals(ml.value);
-      if(ics.status==='fulfilled') setIcsSources(ics.value);
-      if(inb.status==='fulfilled') setInboxCount(inb.value.pending.length);
-      if(cd.status==='fulfilled') setCountdowns(cd.value);
-      if(mb.status==='fulfilled') setMembers(mb.value);
-      if(ph.status==='fulfilled') setPhotos(ph.value);
+      if(ev.status==='fulfilled'&&Array.isArray(ev.value)) setEvents(ev.value);
+      if(ch.status==='fulfilled'&&Array.isArray(ch.value)) setChores(ch.value);
+      if(gr.status==='fulfilled'&&Array.isArray(gr.value)) setGrocery(gr.value);
+      if(ml.status==='fulfilled'&&Array.isArray(ml.value)) setMeals(ml.value);
+      if(ics.status==='fulfilled'&&Array.isArray(ics.value)) setIcsSources(ics.value);
+      if(inb.status==='fulfilled'&&Array.isArray(inb.value?.pending)) setInboxCount(inb.value.pending.length);
+      if(cd.status==='fulfilled'&&Array.isArray(cd.value)) setCountdowns(cd.value);
+      if(mb.status==='fulfilled'&&Array.isArray(mb.value)) setMembers(mb.value);
+      if(ph.status==='fulfilled'&&Array.isArray(ph.value)) setPhotos(ph.value);
       if(gl.status==='fulfilled'&&Array.isArray(gl.value)) setGoals(gl.value);
       if(nt.status==='fulfilled'&&Array.isArray(nt.value)) setNotes(nt.value);
       if(pl.status==='fulfilled'&&Array.isArray(pl.value)) setPolls(pl.value);

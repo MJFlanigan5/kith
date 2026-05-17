@@ -640,25 +640,47 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
               </div>
             </Widget>
 
-            {/* CENTER: chores (conditional) + dinner */}
+            {/* CENTER: chores (if due) OR countdowns (if no chores due) + dinner */}
             <div style={{display:'flex',flexDirection:'column',gap:12,minHeight:0}}>
-              {chores.filter(c=>(c.status==='due'||c.status==='overdue')&&!c.done).length>0&&(
-                <Widget style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
-                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
-                    <WLabel>Chores</WLabel>
-                    <span style={{fontSize:11,fontWeight:700,color:A.amber}}>{chores.filter(c=>(c.status==='due'||c.status==='overdue')&&!c.done).length} due</span>
-                  </div>
-                  <div style={{flex:1,overflowY:'auto',WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
-                    {chores.filter(c=>(c.status==='due'||c.status==='overdue')&&!c.done).map(c=>(
-                      <div key={c.id} onClick={()=>toggleChore(c.id)} style={{display:'flex',alignItems:'center',gap:12,padding:'9px 0',borderBottom:`1px solid ${D.sep}`,cursor:'pointer'}}>
-                        <div style={{width:22,height:22,borderRadius:'50%',flexShrink:0,background:'transparent',border:`1.5px solid ${D.t4}`,display:'flex',alignItems:'center',justifyContent:'center'}}/>
-                        <span style={{flex:1,fontSize:14,color:D.t2,fontWeight:500}}>{c.name}</span>
-                        <span style={{fontSize:11,color:c.status==='overdue'?A.red:A.amber,fontWeight:700}}>{c.status==='overdue'?'Overdue':'Today'}</span>
-                      </div>
-                    ))}
-                  </div>
-                </Widget>
-              )}
+              {(()=>{
+                const dueC=chores.filter(c=>(c.status==='due'||c.status==='overdue')&&!c.done);
+                const upCD=(countdowns||[]).filter(c=>daysUntil(c.date)>=0);
+                if(dueC.length>0) return(
+                  <Widget style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+                      <WLabel>Chores</WLabel>
+                      <span style={{fontSize:11,fontWeight:700,color:A.amber}}>{dueC.length} due</span>
+                    </div>
+                    <div style={{flex:1,overflowY:'auto',WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
+                      {dueC.map(c=>(
+                        <div key={c.id} onClick={()=>toggleChore(c.id)} style={{display:'flex',alignItems:'center',gap:12,padding:'9px 0',borderBottom:`1px solid ${D.sep}`,cursor:'pointer'}}>
+                          <div style={{width:22,height:22,borderRadius:'50%',flexShrink:0,background:'transparent',border:`1.5px solid ${D.t4}`,display:'flex',alignItems:'center',justifyContent:'center'}}/>
+                          <span style={{flex:1,fontSize:14,color:D.t2,fontWeight:500}}>{c.name}</span>
+                          <span style={{fontSize:11,color:c.status==='overdue'?A.red:A.amber,fontWeight:700}}>{c.status==='overdue'?'Overdue':'Today'}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </Widget>
+                );
+                if(upCD.length>0) return(
+                  <Widget style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+                    <WLabel style={{marginBottom:12}}>Countdowns</WLabel>
+                    <div style={{flex:1,overflowY:'auto'}}>
+                      {upCD.slice(0,6).map((c,i)=>{
+                        const days=daysUntil(c.date);
+                        return(
+                          <div key={c.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderTop:i>0?`1px solid ${D.sep}`:'none'}}>
+                            <span style={{fontSize:18}}>{c.emoji}</span>
+                            <span style={{flex:1,fontSize:14,color:D.t2,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.label}</span>
+                            <span style={{fontSize:16,fontWeight:800,color:D.t1,flexShrink:0}}>{days===0?'Today':days+'d'}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </Widget>
+                );
+                return null;
+              })()}
               <Widget style={{flexShrink:0}}>
                 <WLabel>Dinner tonight</WLabel>
                 <div style={{fontSize:26,fontWeight:700,color:D.t1,letterSpacing:'-.02em',lineHeight:1.2,marginBottom:12}}>{todayDinner()||'—'}</div>
@@ -719,8 +741,8 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                   ))}
                 </Widget>
               )}
-              {/* Countdowns — if upcoming */}
-              {(countdowns||[]).filter(c=>daysUntil(c.date)>=0).length>0&&(
+              {/* Countdowns — right column only when chores are occupying center */}
+              {chores.filter(c=>(c.status==='due'||c.status==='overdue')&&!c.done).length>0&&(countdowns||[]).filter(c=>daysUntil(c.date)>=0).length>0&&(
                 <Widget style={{flexShrink:0}}>
                   <WLabel>Countdowns</WLabel>
                   {(countdowns||[]).filter(c=>daysUntil(c.date)>=0).slice(0,3).map((c,i)=>{
@@ -2900,6 +2922,7 @@ function GoalsScreen({goals,setGoals,toastAdd}){
   const [editGoal,setEditGoal]=useState(null);
   const blankForm={name:'',description:'',progress_type:'percent',progress_current:'',progress_target:'100',unit:'',deadline:''};
   const [form,setForm]=useState(blankForm);
+  const [localPct,setLocalPct]=useState({});
 
   const openNew=()=>{setEditGoal(null);setForm(blankForm);setDrawerOpen(true);};
   const openEdit=g=>{
@@ -2989,9 +3012,13 @@ function GoalsScreen({goals,setGoals,toastAdd}){
                     </>
                   ):(
                     <>
-                      <input type="range" min="0" max="100" value={pct} onChange={e=>updateProgress(g,Math.round((Number(e.target.value)/100)*g.progress_target))}
+                      <input type="range" min="0" max="100"
+                        value={localPct[g.id]??pct}
+                        onChange={e=>setLocalPct(p=>({...p,[g.id]:Number(e.target.value)}))}
+                        onMouseUp={e=>{const v=localPct[g.id]??pct;setLocalPct(p=>{const n={...p};delete n[g.id];return n;});updateProgress(g,Math.round((v/100)*(g.progress_target||100)));}}
+                        onTouchEnd={e=>{const v=localPct[g.id]??pct;setLocalPct(p=>{const n={...p};delete n[g.id];return n;});updateProgress(g,Math.round((v/100)*(g.progress_target||100)));}}
                         style={{flex:1,accentColor:A.blue}}/>
-                      <span style={{fontSize:13,color:A.label4,minWidth:32,textAlign:'right'}}>{pct}%</span>
+                      <span style={{fontSize:13,color:A.label4,minWidth:32,textAlign:'right'}}>{localPct[g.id]??pct}%</span>
                     </>
                   )}
                 </div>

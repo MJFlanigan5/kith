@@ -35,7 +35,7 @@ function daysUntil(dateStr){
 /* ── API helper ──────────────────────────────────────────────────────── */
 const _authHdr=()=>{const t=localStorage.getItem('kith_token');return t?{'Authorization':`Bearer ${t}`}:{};};
 const api={
-  get:(path)=>fetch(path).then(r=>r.json()),
+  get:(path)=>fetch(path,{headers:{..._authHdr()}}).then(r=>r.json()),
   post:(path,data)=>fetch(path,{method:'POST',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify(data)}).then(r=>r.json()),
   put:(path,data)=>fetch(path,{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify(data)}).then(r=>r.json()),
   del:(path)=>fetch(path,{method:'DELETE',headers:{..._authHdr()}}).then(r=>r.json()),
@@ -444,12 +444,20 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
     return()=>clearInterval(id);
   },[]);
   const [haEvents,setHaEvents]=useState([]);
+  const [smEvents,setSmEvents]=useState([]);
   useEffect(()=>{
     const load=()=>api.get('/api/ha/events').then(d=>{if(Array.isArray(d))setHaEvents(d);}).catch(()=>{});
     load();
     const id=setInterval(load,30000);
     return()=>clearInterval(id);
   },[]);
+  useEffect(()=>{
+    const load=()=>fetch('/api/ha/pull').then(r=>r.json()).then(d=>{if(Array.isArray(d))setSmEvents(d);}).catch(()=>{});
+    load();
+    const id=setInterval(load,60000);
+    return()=>clearInterval(id);
+  },[]);
+  const allSmartEvents=useMemo(()=>[...smEvents,...haEvents].slice(0,10),[smEvents,haEvents]);
   const [newsIdx,setNewsIdx]=useState(0);
   const [newsVisible,setNewsVisible]=useState(true);
   const newsFadeTimer=useRef(null);
@@ -495,6 +503,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
   const dueC=chores.filter(c=>(c.status==='due'||c.status==='overdue')&&!c.done);
   const upCD=(countdowns||[]).filter(c=>daysUntil(c.date)>=0);
   const progressMembers=memberProgress.filter(m=>m.monthly_goal>0);
+  const pinnedNotes=useMemo(()=>(notes||[]).filter(n=>n.pinned),[notes]);
   const centerPanels=[
     ...(dueC.length>0?['chores']:[]),
     ...(upCD.length>0?['countdowns']:[]),
@@ -817,14 +826,15 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                   ))}
                 </Widget>
               )}
-              {/* News — fills remaining space */}
-              {news.length>0&&(
+              {/* Pinned notes — fills remaining space */}
+              {pinnedNotes.length>0&&(
                 <Widget style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minHeight:0}}>
-                  <WLabel>News</WLabel>
-                  <div style={{flex:1,overflow:'hidden',display:'flex',flexDirection:'column'}}>
-                    {news.slice(0,6).map((item,i)=>(
-                      <div key={i} style={{padding:'7px 0',borderBottom:i<Math.min(5,news.length-1)?`1px solid ${D.sep}`:'none',opacity:i===newsIdx%news.length?1:0.38,transition:'opacity .5s',flexShrink:0}}>
-                        <div style={{fontSize:12,color:D.t1,lineHeight:1.4,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical'}}>{item.title}</div>
+                  <WLabel>Notes</WLabel>
+                  <div style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:8}}>
+                    {pinnedNotes.map(n=>(
+                      <div key={n.id} style={{background:n.color&&n.color!=='#FAFAF5'?n.color+'28':'rgba(255,255,255,0.05)',borderRadius:8,padding:'10px 12px',borderLeft:`3px solid ${n.color&&n.color!=='#FAFAF5'?n.color:'rgba(255,255,255,0.15)'}`}}>
+                        <div style={{fontSize:14,fontWeight:700,color:D.t1,marginBottom:n.content?5:0,lineHeight:1.3}}>{n.title}</div>
+                        {n.content&&<div style={{fontSize:12,color:D.t3,lineHeight:1.5,whiteSpace:'pre-wrap'}}>{n.content}</div>}
                       </div>
                     ))}
                   </div>
@@ -838,20 +848,29 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
         </div>
       )}
 
-      {/* Activity bar — HA events + live scores + manage */}
+      {/* Activity bar — news ticker + smart home events + live scores + manage */}
       <div style={{flexShrink:0,display:'flex',alignItems:'center',gap:12}}>
         <div style={{flex:1,minWidth:0,display:'flex',alignItems:'center',gap:10,overflow:'hidden'}}>
-          {haEvents.length>0&&(
+          {news.length>0&&(
             <>
+              <div style={{width:5,height:5,borderRadius:'50%',background:D.t4,flexShrink:0}}/>
+              <span style={{fontSize:12,color:D.t3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',transition:'opacity .5s',opacity:newsVisible?1:0}}>
+                {news[newsIdx%news.length]?.title}
+              </span>
+            </>
+          )}
+          {allSmartEvents.length>0&&(
+            <>
+              {news.length>0&&<span style={{color:D.sep,flexShrink:0}}>·</span>}
               <div style={{width:6,height:6,borderRadius:'50%',background:A.blue,flexShrink:0}}/>
-              <span style={{fontSize:12,color:D.t2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-                {haEvents[0].icon} {haEvents[0].title}{haEvents[0].message?` · ${haEvents[0].message}`:''}
+              <span style={{fontSize:12,color:D.t2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flexShrink:0,maxWidth:'30%'}}>
+                {allSmartEvents[0].icon} {allSmartEvents[0].title}{allSmartEvents[0].message?` · ${allSmartEvents[0].message}`:''}
               </span>
             </>
           )}
           {liveGames.length>0&&(
             <>
-              {haEvents.length>0&&<span style={{color:D.sep,flexShrink:0}}>·</span>}
+              {(news.length>0||allSmartEvents.length>0)&&<span style={{color:D.sep,flexShrink:0}}>·</span>}
               <div style={{width:6,height:6,borderRadius:'50%',background:A.red,animation:'pulse 1.2s ease infinite',flexShrink:0}}/>
               <div style={{display:'flex',alignItems:'center',gap:12,overflow:'hidden'}}>
                 {liveGames.slice(0,4).map((g,i)=>(
@@ -929,6 +948,15 @@ function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weath
     const id=setInterval(load,60000);
     return()=>clearInterval(id);
   },[]);
+
+  const [smEvents,setSmEvents]=useState([]);
+  useEffect(()=>{
+    const load=()=>fetch('/api/ha/pull').then(r=>r.json()).then(d=>{if(Array.isArray(d))setSmEvents(d);}).catch(()=>{});
+    load();
+    const id=setInterval(load,60000);
+    return()=>clearInterval(id);
+  },[]);
+  const allSmartEvents=useMemo(()=>[...smEvents,...haEvents].slice(0,10),[smEvents,haEvents]);
 
   useEffect(()=>{
     if(prevDueRef.current!==null&&prevDueRef.current>0&&dueChores.length===0){
@@ -1036,14 +1064,15 @@ function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weath
         </Card>
       )}
 
-      {/* Home Assistant events */}
-      {haEvents.length>0&&(
+      {/* Smart home events */}
+      {allSmartEvents.length>0&&(
         <Card style={{marginBottom:16,padding:0,overflow:'hidden'}}>
-          {haEvents.slice(0,5).map((ev,i)=>{
-            const ago=Math.round((Date.now()-new Date(ev.created_at+'Z').getTime())/60000);
+          {allSmartEvents.slice(0,5).map((ev,i)=>{
+            const ts=ev.created_at?new Date(ev.created_at.endsWith('Z')||ev.created_at.includes('+')?ev.created_at:ev.created_at+'Z'):new Date();
+            const ago=Math.round((Date.now()-ts.getTime())/60000);
             const agoStr=ago<1?'just now':ago<60?`${ago}m ago`:ago<1440?`${Math.round(ago/60)}h ago`:'yesterday';
             return(
-              <div key={ev.id} style={{display:'flex',alignItems:'center',gap:12,padding:'11px 16px',borderTop:i>0?`1px solid ${A.sep}`:'none'}}>
+              <div key={ev.id||i} style={{display:'flex',alignItems:'center',gap:12,padding:'11px 16px',borderTop:i>0?`1px solid ${A.sep}`:'none'}}>
                 <span style={{fontSize:18,flexShrink:0}}>{ev.icon||'🏠'}</span>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:14,fontWeight:600,color:A.label1}}>{ev.title}</div>
@@ -2246,6 +2275,11 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [sportsLeagues,setSportsLeagues]=useState({nfl:true,nba:true,mlb:true,nhl:true,wnba:false,mls:false,epl:false,ucl:false,wc:false,wwc:false,ncaaf:false,ncaab:false,pga:false,atp:false,nascar:false,f1:false});
   const [haSecret,setHaSecret]=useState('');
   const haWebhookUrl=`${window.location.origin}/api/webhook/ha`;
+  const [smUrl,setSmUrl]=useState('');
+  const [smToken,setSmToken]=useState('');
+  const [smHasToken,setSmHasToken]=useState(false);
+  const [smSaving,setSmSaving]=useState(false);
+  const [smTesting,setSmTesting]=useState(false);
   const [qaList,setQaList]=useState([]);
   const [qaDrawer,setQaDrawer]=useState(false);
   const [qaEdit,setQaEdit]=useState(null);
@@ -2273,6 +2307,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
       }
     }).catch(()=>{});
     api.get('/api/ha/secret').then(d=>{if(d.secret) setHaSecret(d.secret);}).catch(()=>{});
+    fetch('/api/ha/smart-home-status',{headers:{..._authHdr()}}).then(r=>r.json()).then(d=>{if(d.url)setSmUrl(d.url);if(d.hasToken)setSmHasToken(true);}).catch(()=>{});
     api.get('/api/quick-actions').then(d=>{if(Array.isArray(d)) setQaList(d);}).catch(()=>{});
   },[]);
   const geocodeCity=async()=>{
@@ -2694,10 +2729,39 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
         </Drawer>
       </FormGroup>
 
-      <FormGroup label="Home Assistant">
+      <FormGroup label="Smart Home">
+        <div style={{padding:'14px 16px',borderBottom:`1px solid ${A.sep}`}}>
+          <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:10}}>Pull notifications (Home Assistant or Homey)</div>
+          <div style={{fontSize:14,color:A.label3,marginBottom:12,lineHeight:1.5}}>
+            Enter your smart home URL and a long-lived access token. Kith will read active notifications and display them on your dashboard. Works with Home Assistant and Homey Pro.
+          </div>
+          <div style={{marginBottom:10}}><Inp value={smUrl} onChange={e=>setSmUrl(e.target.value)} placeholder="http://homeassistant.local:8123  or  https://xxx.connect.athom.com"/></div>
+          <div style={{marginBottom:12}}><Inp value={smToken} onChange={e=>setSmToken(e.target.value)} placeholder={smHasToken?'Token saved — paste to replace':'Long-lived access token'} type="password"/></div>
+          <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+            <Btn sm onClick={async()=>{
+              if(!smUrl.trim()){toastAdd('URL is required','red');return;}
+              setSmSaving(true);
+              const body={url:smUrl.trim()};
+              if(smToken.trim()) body.token=smToken.trim();
+              const r=await fetch('/api/settings/smart-home',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify(body)}).then(x=>x.json()).catch(()=>({error:'Failed'}));
+              setSmSaving(false);
+              if(r.ok){toastAdd('Saved');if(smToken.trim())setSmHasToken(true);setSmToken('');}
+              else toastAdd(r.error||'Save failed','red');
+            }} disabled={smSaving}>{smSaving?'Saving…':'Save'}</Btn>
+            <Btn sm variant="ghost" onClick={async()=>{
+              setSmTesting(true);
+              const r=await fetch('/api/ha/pull').then(x=>x.json()).catch(()=>({error:'Request failed'}));
+              setSmTesting(false);
+              if(Array.isArray(r)) toastAdd(r.length>0?`Connected — ${r.length} notification${r.length!==1?'s':''}  found`:'Connected — no notifications right now');
+              else toastAdd(r.error||'Connection failed','red');
+            }} disabled={smTesting}>{smTesting?'Testing…':'Test connection'}</Btn>
+          </div>
+          <div style={{fontSize:12,color:A.label5,marginTop:10}}>HA: create a long-lived token in your profile. Homey: generate a token in Account &rsaquo; API Keys. The URL must be reachable from this server.</div>
+        </div>
         <div style={{padding:'14px 16px'}}>
+          <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:10}}>Push events (webhook)</div>
           <div style={{fontSize:14,color:A.label3,marginBottom:14,lineHeight:1.5}}>
-            Send any HA automation result to your dashboard. In a Home Assistant automation, use the <strong style={{color:A.label1}}>Make a web request</strong> action with this setup:
+            Send any automation result to your dashboard. Use the <strong style={{color:A.label1}}>Make a web request</strong> action in HA or a Homey flow:
           </div>
           <div style={{background:A.systemBg,borderRadius:A.rSm,padding:'12px 14px',marginBottom:14,fontFamily:'JetBrains Mono,monospace',fontSize:12,color:A.label2,wordBreak:'break-all',lineHeight:1.7}}>
             <div><span style={{color:A.label4}}>Method:</span> POST</div>

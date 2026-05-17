@@ -684,7 +684,7 @@ app.post('/api/push/test', requireAuth, async (req, res) => {
 });
 
 // ── Routes: Settings ──────────────────────────────────────────────────────────
-const SETTINGS_SENSITIVE = new Set(['email_webhook_secret','anthropic_api_key','ai_api_key','jwt_secret','vapid_public','vapid_private','admin_pin_hash','resend_api_key','ha_webhook_secret']);
+const SETTINGS_SENSITIVE = new Set(['email_webhook_secret','anthropic_api_key','ai_api_key','jwt_secret','vapid_public','vapid_private','admin_pin_hash','resend_api_key','ha_webhook_secret','smart_home_token']);
 app.get('/api/settings', (req, res) => {
   const rows = db.prepare('SELECT key,value FROM settings').all();
   res.json(Object.fromEntries(rows.filter(r=>!SETTINGS_SENSITIVE.has(r.key)).map(r=>[r.key,r.value])));
@@ -785,13 +785,18 @@ let _newsCache = null;
 let _newsCacheAt = 0;
 const NEWS_TTL = 15 * 60 * 1000;
 
+function decodeXmlEntities(s) {
+  return s.replace(/&apos;/g,"'").replace(/&quot;/g,'"').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&').replace(/&#(\d+);/g,(_,n)=>String.fromCharCode(Number(n))).replace(/&#x([0-9a-f]+);/gi,(_,h)=>String.fromCharCode(parseInt(h,16)));
+}
+
 function parseRSS(xml) {
   const items = [];
   const re = /<item>([\s\S]*?)<\/item>/g;
   let m;
   while ((m = re.exec(xml)) !== null && items.length < 5) {
     const block = m[1];
-    const title = (/<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>/s.exec(block)||[])[1]?.trim();
+    const rawTitle = (/<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>/s.exec(block)||[])[1]?.trim();
+    const title = rawTitle ? decodeXmlEntities(rawTitle) : undefined;
     const link = (/<link>\s*(https?:\/\/[^<]+)\s*<\/link>/s.exec(block)||[])[1]?.trim() ||
                  (/<guid[^>]*>\s*(https?:\/\/[^<]+)\s*<\/guid>/s.exec(block)||[])[1]?.trim();
     if (title && link) items.push({ title, link });
@@ -1057,6 +1062,60 @@ app.get('/api/ha/events', (req, res) => {
 app.get('/api/ha/secret', requireAdmin, (req, res) => {
   const secret = db.prepare("SELECT value FROM settings WHERE key='ha_webhook_secret'").get()?.value || '';
   res.json({ secret });
+});
+
+app.put('/api/settings/smart-home', requireAdmin, (req, res) => {
+  const { url, token } = req.body || {};
+  const upd = db.prepare('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)');
+  if (url !== undefined) upd.run('smart_home_url', String(url));
+  if (token !== undefined && token !== '') upd.run('smart_home_token', String(token));
+  res.json({ ok: true });
+});
+
+app.get('/api/ha/smart-home-status', requireAdmin, (req, res) => {
+  const url = db.prepare("SELECT value FROM settings WHERE key='smart_home_url'").get()?.value || '';
+  const hasToken = !!(db.prepare("SELECT value FROM settings WHERE key='smart_home_token'").get()?.value);
+  res.json({ url, hasToken });
+});
+
+app.get('/api/ha/pull', async (req, res) => {
+  const url = db.prepare("SELECT value FROM settings WHERE key='smart_home_url'").get()?.value;
+  const token = db.prepare("SELECT value FROM settings WHERE key='smart_home_token'").get()?.value;
+  if (!url || !token) return res.json([]);
+  try {
+    const base = url.replace(/\/$/, '');
+    const isHomey = /athom\.com|homey/i.test(base);
+    let events = [];
+    if (isHomey) {
+      const r = await fetch(`${base}/api/manager/notifications/notification/`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+        signal: AbortSignal.timeout(6000),
+      }).then(r => r.json());
+      const items = r.result || {};
+      events = Object.values(items)
+        .map(n => ({ title: n.excerpt || 'Homey notification', message: '', icon: '🏠', created_at: n.dateCreated || new Date().toISOString() }))
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+        .slice(0, 10);
+    } else {
+      const states = await fetch(`${base}/api/states`, {
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(6000),
+      }).then(r => r.json());
+      events = (Array.isArray(states) ? states : [])
+        .filter(s => s.entity_id?.startsWith('persistent_notification.') && s.state !== 'dismissed')
+        .map(s => ({
+          title: s.attributes?.title || s.entity_id.replace('persistent_notification.', ''),
+          message: s.attributes?.message || '',
+          icon: '🏠',
+          created_at: s.last_changed || new Date().toISOString(),
+        }))
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+        .slice(0, 10);
+    }
+    res.json(events);
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
 });
 
 // ── Routes: Quick Actions ─────────────────────────────────────────────────────

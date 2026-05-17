@@ -3075,8 +3075,10 @@ function GoalsScreen({goals,setGoals,toastAdd}){
           <div style={{padding:'12px 16px'}}><Inp value={form.description} onChange={e=>setForm(p=>({...p,description:e.target.value}))} placeholder="Notes"/></div>
         </FormGroup>
         <FormGroup label="Progress type">
-          <div style={{padding:'12px 16px'}}>
-            <SegControl value={form.progress_type==='percent'?'Percent':'Counter'} onChange={v=>setForm(p=>({...p,progress_type:v==='Percent'?'percent':'counter'}))} options={['Percent','Counter']}/>
+          <div style={{padding:'12px 16px',display:'flex',gap:8}}>
+            {['percent','counter'].map(t=>(
+              <button key={t} onClick={()=>setForm(p=>({...p,progress_type:t}))} style={{flex:1,padding:'8px',borderRadius:A.rXs,border:`1px solid ${form.progress_type===t?A.blue:A.sep}`,background:form.progress_type===t?A.blue+'22':'transparent',color:form.progress_type===t?A.blue:A.label3,fontWeight:600,fontSize:13,cursor:'pointer',textTransform:'capitalize'}}>{t}</button>
+            ))}
           </div>
         </FormGroup>
         {form.progress_type==='counter'&&(

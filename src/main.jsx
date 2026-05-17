@@ -2645,9 +2645,9 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
         <FormRow label="News feeds (RSS)">
           <div style={{display:'flex',flexDirection:'column',gap:6,flex:1,width:'100%'}}>
             {newsFeeds.map((url,i)=>(
-              <div key={i} style={{display:'flex',alignItems:'center',gap:8,background:A.systemBg,borderRadius:A.rXs,padding:'6px 10px'}}>
-                <span style={{flex:1,fontSize:12,color:A.label3,fontFamily:'JetBrains Mono,monospace',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{url}</span>
-                <button onClick={()=>{const next=newsFeeds.filter((_,j)=>j!==i);setNewsFeeds(next);saveSetting('news_feed',next.join(','));}} style={{background:'none',border:'none',color:A.red,fontSize:13,cursor:'pointer',fontWeight:600,flexShrink:0,padding:'4px 8px',borderRadius:4,minWidth:60,textAlign:'center'}}>Remove</button>
+              <div key={i} style={{background:A.systemBg,borderRadius:A.rXs,padding:'8px 10px',display:'flex',flexDirection:'column',gap:6}}>
+                <span style={{fontSize:12,color:A.label3,fontFamily:'JetBrains Mono,monospace',wordBreak:'break-all',lineHeight:1.4}}>{url}</span>
+                <button onClick={()=>{const next=newsFeeds.filter((_,j)=>j!==i);setNewsFeeds(next);saveSetting('news_feed',next.join(','));}} style={{alignSelf:'flex-end',background:'none',border:`1px solid ${A.red}`,color:A.red,fontSize:12,cursor:'pointer',fontWeight:600,padding:'4px 12px',borderRadius:A.rPill}}>Remove</button>
               </div>
             ))}
             <div style={{display:'flex',gap:8,width:'100%'}}>

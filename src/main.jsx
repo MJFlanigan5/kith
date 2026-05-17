@@ -164,11 +164,15 @@ function FormGroup({children,label,footer}){
   );
 }
 
-function FormRow({label,children}){
+function FormRow({label,children,footer}){
+  const isMobile=useIsMobile();
   return(
-    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px',gap:12}}>
-      {label&&<span style={{fontSize:15,color:A.label1,flexShrink:0}}>{label}</span>}
-      <div style={{flex:1,display:'flex',justifyContent:'flex-end'}}>{children}</div>
+    <div style={{padding:'12px 16px'}}>
+      <div style={{display:'flex',alignItems:isMobile?'flex-start':'center',justifyContent:'space-between',gap:12,flexDirection:isMobile?'column':'row'}}>
+        {label&&<span style={{fontSize:15,color:A.label1,flexShrink:0,fontWeight:500}}>{label}</span>}
+        <div style={{flex:1,display:'flex',justifyContent:isMobile?'flex-start':'flex-end',width:isMobile?'100%':undefined}}>{children}</div>
+      </div>
+      {footer&&<div style={{fontSize:12,color:A.label4,marginTop:6}}>{footer}</div>}
     </div>
   );
 }
@@ -454,7 +458,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
   useEffect(()=>{
     const load=()=>fetch('/api/ha/pull').then(r=>r.json()).then(d=>{if(Array.isArray(d))setSmEvents(d);}).catch(()=>{});
     load();
-    const id=setInterval(load,60000);
+    const id=setInterval(load,20000);
     return()=>clearInterval(id);
   },[]);
   const allSmartEvents=useMemo(()=>[...smEvents,...haEvents].slice(0,10),[smEvents,haEvents]);
@@ -956,7 +960,7 @@ function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weath
   useEffect(()=>{
     const load=()=>fetch('/api/ha/pull').then(r=>r.json()).then(d=>{if(Array.isArray(d))setSmEvents(d);}).catch(()=>{});
     load();
-    const id=setInterval(load,60000);
+    const id=setInterval(load,20000);
     return()=>clearInterval(id);
   },[]);
   const allSmartEvents=useMemo(()=>[...smEvents,...haEvents].slice(0,10),[smEvents,haEvents]);
@@ -2889,8 +2893,8 @@ function NotesScreen({notes,setNotes,toastAdd}){
         <FormGroup label="Note">
           <div style={{padding:'12px 16px'}}><Inp value={form.title} onChange={e=>setForm(p=>({...p,title:e.target.value}))} placeholder="Title (e.g. WiFi Password)"/></div>
           <div style={{padding:'12px 16px',borderTop:`1px solid ${A.sep}`}}>
-            <textarea value={form.content} onChange={e=>setForm(p=>({...p,content:e.target.value}))} placeholder="Content (optional)" rows={4}
-              style={{width:'100%',padding:0,border:'none',background:'transparent',fontSize:15,color:A.label1,resize:'none',outline:'none',fontFamily:'inherit',lineHeight:1.5}}/>
+            <textarea value={form.content} onChange={e=>setForm(p=>({...p,content:e.target.value}))} placeholder="Content (optional)" rows={6}
+              style={{width:'100%',padding:0,border:'none',background:'transparent',fontSize:15,color:A.label1,resize:'vertical',outline:'none',fontFamily:'inherit',lineHeight:1.5,minHeight:100}}/>
           </div>
         </FormGroup>
         <FormGroup label="Color">

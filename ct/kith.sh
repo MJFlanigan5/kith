@@ -4,10 +4,10 @@ source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxV
 
 # Copyright (c) 2026 Mike Flanigan
 # Author: MJFlanigan5
-# License: MIT | https://github.com/MJFlanigan5/hearth/raw/main/LICENSE
-# Source: https://github.com/MJFlanigan5/hearth
+# License: MIT | https://github.com/MJFlanigan5/kith/raw/main/LICENSE
+# Source: https://github.com/MJFlanigan5/kith
 
-APP="Hearth"
+APP="Kith"
 var_tags="${var_tags:-dashboard}"
 var_cpu="${var_cpu:-1}"
 var_ram="${var_ram:-512}"
@@ -26,19 +26,19 @@ function update_script() {
   check_container_storage
   check_container_resources
 
-  if [[ ! -d /opt/hearth ]]; then
+  if [[ ! -d /opt/kith ]]; then
     msg_error "No ${APP} Installation Found!"
     exit
   fi
 
   msg_info "Updating ${APP}"
-  cd /opt/hearth
+  cd /opt/kith
   $STD git pull
   $STD npm install --omit=dev
   msg_ok "Updated ${APP}"
 
   msg_info "Restarting Service"
-  $STD systemctl restart hearth
+  $STD systemctl restart kith
   msg_ok "Service Restarted"
 
   msg_ok "Updated successfully!"

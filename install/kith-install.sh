@@ -2,8 +2,8 @@
 
 # Copyright (c) 2026 Mike Flanigan
 # Author: MJFlanigan5
-# License: MIT | https://github.com/MJFlanigan5/hearth/raw/main/LICENSE
-# Source: https://github.com/MJFlanigan5/hearth
+# License: MIT | https://github.com/MJFlanigan5/kith/raw/main/LICENSE
+# Source: https://github.com/MJFlanigan5/kith
 
 source /dev/stdin <<<"$FUNCTIONS_FILE_PATH"
 
@@ -20,24 +20,24 @@ msg_ok "Installed Dependencies"
 
 NODE_VERSION="22" setup_nodejs
 
-msg_info "Installing Hearth"
-mkdir -p /opt/hearth /data
-$STD git clone https://github.com/MJFlanigan5/hearth.git /opt/hearth
-cd /opt/hearth
+msg_info "Installing Kith"
+mkdir -p /opt/kith /data
+$STD git clone https://github.com/MJFlanigan5/kith.git /opt/kith
+cd /opt/kith
 $STD npm install --omit=dev
-echo "v$(node -p "require('./package.json').version")" >/opt/hearth/.version
-msg_ok "Installed Hearth"
+echo "v$(node -p "require('./package.json').version")" >/opt/kith/.version
+msg_ok "Installed Kith"
 
 msg_info "Creating Service"
-cat <<EOF >/etc/systemd/system/hearth.service
+cat <<EOF >/etc/systemd/system/kith.service
 [Unit]
-Description=Hearth Family Dashboard
+Description=Kith Family Dashboard
 After=network.target
 
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/opt/hearth
+WorkingDirectory=/opt/kith
 Environment=DATA_DIR=/data
 Environment=PORT=7400
 Environment=NODE_ENV=production
@@ -49,7 +49,7 @@ RestartSec=5
 WantedBy=multi-user.target
 EOF
 
-systemctl enable -q --now hearth
+systemctl enable -q --now kith
 msg_ok "Created Service"
 
 motd_ssh

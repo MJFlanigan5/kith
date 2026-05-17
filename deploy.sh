@@ -7,23 +7,23 @@ cd "$SCRIPT_DIR"
 echo "==> Pulling latest code..."
 git pull
 
-echo "==> Rebuilding Hearth..."
+echo "==> Rebuilding Kith..."
 docker compose build --no-cache
 docker compose up -d
 
-echo "==> Waiting for Hearth to be ready..."
+echo "==> Waiting for Kith to be ready..."
 for i in $(seq 1 20); do
-  if docker compose exec -T hearth sqlite3 /data/hearth.db "SELECT 1;" &>/dev/null; then
+  if docker compose exec -T kith sqlite3 /data/kith.db "SELECT 1;" &>/dev/null; then
     break
   fi
   sleep 2
 done
 
-echo "==> Reading webhook secret from Hearth DB..."
-SECRET=$(docker compose exec -T hearth sqlite3 /data/hearth.db "SELECT value FROM settings WHERE key='email_webhook_secret';")
+echo "==> Reading webhook secret from Kith DB..."
+SECRET=$(docker compose exec -T kith sqlite3 /data/kith.db "SELECT value FROM settings WHERE key='email_webhook_secret';")
 
 if [ -z "$SECRET" ]; then
-  echo "ERROR: Could not read email_webhook_secret from Hearth DB" >&2
+  echo "ERROR: Could not read email_webhook_secret from Kith DB" >&2
   exit 1
 fi
 
@@ -36,5 +36,4 @@ echo "==> Deploying email worker..."
 npx wrangler deploy
 
 echo ""
-echo "Done. Hearth is up and email worker is deployed."
-echo "Email address: hearth@mjflanigan.com"
+echo "Done. Kith is up and email worker is deployed."

@@ -2956,8 +2956,12 @@ function GoalsScreen({goals,setGoals,toastAdd}){
 
   const updateProgress=async(g,newVal)=>{
     const clamped=Math.min(Math.max(0,Number(newVal)||0),g.progress_target||100);
-    const updated=await api.put(`/api/goals/${g.id}`,{progress_current:clamped});
-    if(updated&&updated.id) setGoals(p=>p.map(x=>x.id===g.id?updated:x));
+    try{
+      const updated=await api.put(`/api/goals/${g.id}`,{progress_current:clamped});
+      if(updated&&updated.id) setGoals(p=>p.map(x=>x.id===g.id?updated:x));
+      else toastAdd(updated?.error||'Could not save','red');
+    }catch(e){toastAdd('Could not save','red');}
+    setLocalPct(p=>{const n={...p};delete n[g.id];return n;});
   };
 
   return(
@@ -3006,7 +3010,10 @@ function GoalsScreen({goals,setGoals,toastAdd}){
                 <div style={{display:'flex',alignItems:'center',gap:10}}>
                   {isCounter?(
                     <>
-                      <input type="number" min="0" max={g.progress_target} value={g.progress_current} onChange={e=>updateProgress(g,e.target.value)}
+                      <input type="number" min="0" max={g.progress_target}
+                        defaultValue={g.progress_current}
+                        key={g.progress_current}
+                        onBlur={e=>updateProgress(g,e.target.value)}
                         style={{width:100,padding:'6px 10px',borderRadius:A.rXs,border:`1px solid ${A.sep}`,background:A.inputBg,fontSize:14,color:A.label1}}/>
                       <span style={{fontSize:13,color:A.label4}}>of {g.unit}{g.progress_target} {g.unit?'':g.name.toLowerCase()}</span>
                     </>
@@ -3015,8 +3022,8 @@ function GoalsScreen({goals,setGoals,toastAdd}){
                       <input type="range" min="0" max="100"
                         value={localPct[g.id]??pct}
                         onChange={e=>setLocalPct(p=>({...p,[g.id]:Number(e.target.value)}))}
-                        onMouseUp={e=>{const v=localPct[g.id]??pct;setLocalPct(p=>{const n={...p};delete n[g.id];return n;});updateProgress(g,Math.round((v/100)*(g.progress_target||100)));}}
-                        onTouchEnd={e=>{const v=localPct[g.id]??pct;setLocalPct(p=>{const n={...p};delete n[g.id];return n;});updateProgress(g,Math.round((v/100)*(g.progress_target||100)));}}
+                        onMouseUp={e=>{const v=localPct[g.id]??pct;updateProgress(g,Math.round((v/100)*(g.progress_target||100)));}}
+                        onTouchEnd={e=>{const v=localPct[g.id]??pct;updateProgress(g,Math.round((v/100)*(g.progress_target||100)));}}
                         style={{flex:1,accentColor:A.blue}}/>
                       <span style={{fontSize:13,color:A.label4,minWidth:32,textAlign:'right'}}>{localPct[g.id]??pct}%</span>
                     </>

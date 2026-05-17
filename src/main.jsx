@@ -407,7 +407,7 @@ function FamilyScreen({members,setMembers,toastAdd}){
 }
 
 /* ── Display Mode ────────────────────────────────────────────────────── */
-function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,photos,weather,clockFormat='12h',nightModeStart='23:00',nightModeEnd='06:00',goals=[],notes=[],polls=[]}){
+function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,weather,clockFormat='12h',nightModeStart='23:00',nightModeEnd='06:00',goals=[],notes=[],polls=[]}){
   const isMobile=useIsMobile();
   const now=useClock();
   const [liveGames,setLiveGames]=useState([]);
@@ -460,12 +460,6 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
   const dateStr=`${DAYS[now.getDay()]}, ${MONTHS[now.getMonth()]} ${now.getDate()}`;
 
   // Photo frame — cycles every 12s when photos are present
-  const [photoIdx,setPhotoIdx]=useState(0);
-  useEffect(()=>{
-    if(!photos||photos.length<=1) return;
-    const id=setInterval(()=>setPhotoIdx(p=>(p+1)%photos.length),12000);
-    return()=>clearInterval(id);
-  },[photos]);
 
   // Night mode
   const [nightDismissed,setNightDismissed]=useState(false);
@@ -713,18 +707,6 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                   <div style={{fontSize:13,color:D.t4}}>Loading…</div>
                 )}
               </Widget>
-              {/* Photos — if uploaded */}
-              {photos&&photos.length>0&&(
-                <Widget style={{flex:1,padding:0,overflow:'hidden',position:'relative',minHeight:80}}>
-                  <img key={photoIdx} src={`/photos/${photos[photoIdx%photos.length]?.filename}`}
-                    style={{width:'100%',height:'100%',objectFit:'cover',display:'block',animation:'fadeIn .6s ease'}} alt=""/>
-                  {photos.length>1&&(
-                    <div style={{position:'absolute',bottom:8,left:'50%',transform:'translateX(-50%)',display:'flex',gap:5}}>
-                      {photos.map((_,i)=><div key={i} style={{width:5,height:5,borderRadius:'50%',background:i===photoIdx%photos.length?'#fff':'rgba(255,255,255,0.35)'}}/>)}
-                    </div>
-                  )}
-                </Widget>
-              )}
               {/* Grocery — if items exist */}
               {(grocery||[]).filter(g=>!g.checked).length>0&&(
                 <Widget style={{flexShrink:0}}>
@@ -3609,7 +3591,7 @@ function App(){
   );
 
   return mode==='display'
-    ?<DisplayMode onManage={()=>setMode('manage')} events={events} chores={chores} setChores={setChores} meals={meals} grocery={grocery} countdowns={countdowns} photos={photos} clockFormat={clockFormat} weather={weather} nightModeStart={nightModeStart} nightModeEnd={nightModeEnd} goals={goals} notes={notes} polls={polls}/>
+    ?<DisplayMode onManage={()=>setMode('manage')} events={events} chores={chores} setChores={setChores} meals={meals} grocery={grocery} countdowns={countdowns} clockFormat={clockFormat} weather={weather} nightModeStart={nightModeStart} nightModeEnd={nightModeEnd} goals={goals} notes={notes} polls={polls}/>
     :<ManageMode onDisplay={()=>setMode('display')} onLogout={handleLogout} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources} inboxCount={inboxCount} setInboxCount={setInboxCount} countdowns={countdowns} setCountdowns={setCountdowns} members={members} setMembers={setMembers} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} weather={weather} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} goals={goals} setGoals={setGoals} notes={notes} setNotes={setNotes} polls={polls} setPolls={setPolls} quickActions={quickActions} setQuickActions={setQuickActions}/>;
 }
 

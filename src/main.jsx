@@ -490,6 +490,14 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
   },[news.length]);
   const [centerIdx,setCenterIdx]=useState(0);
   useEffect(()=>{const id=setInterval(()=>setCenterIdx(i=>i+1),rotationMs);return()=>clearInterval(id);},[rotationMs]);
+  const [showControls,setShowControls]=useState(false);
+  const hideTimer=useRef(null);
+  useEffect(()=>{
+    const show=()=>{setShowControls(true);clearTimeout(hideTimer.current);hideTimer.current=setTimeout(()=>setShowControls(false),3000);};
+    window.addEventListener('mousemove',show);
+    window.addEventListener('touchstart',show);
+    return()=>{window.removeEventListener('mousemove',show);window.removeEventListener('touchstart',show);clearTimeout(hideTimer.current);};
+  },[]);
   const h12=now.getHours()%12||12;
   const min=String(now.getMinutes()).padStart(2,'0');
   const ampm=now.getHours()>=12?'PM':'AM';
@@ -1102,7 +1110,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
             </>
           )}
         </div>
-        <button onClick={onManage} style={{flexShrink:0,background:'rgba(255,255,255,0.08)',color:D.t2,border:'1px solid rgba(255,255,255,0.12)',borderRadius:A.rPill,padding:'9px 20px',fontSize:13,fontWeight:500,cursor:'pointer',transition:'background .15s'}}
+        <button onClick={onManage} style={{flexShrink:0,background:'rgba(255,255,255,0.08)',color:D.t2,border:'1px solid rgba(255,255,255,0.12)',borderRadius:A.rPill,padding:'9px 20px',fontSize:13,fontWeight:500,cursor:'pointer',transition:'background .15s,opacity .4s',opacity:showControls?1:0,pointerEvents:showControls?'auto':'none'}}
           onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.13)'}
           onMouseLeave={e=>e.currentTarget.style.background='rgba(255,255,255,0.08)'}
         >Manage</button>

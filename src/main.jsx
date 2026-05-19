@@ -462,11 +462,11 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
     return()=>clearInterval(id);
   },[]);
   const allSmartEvents=useMemo(()=>[...smEvents,...haEvents].slice(0,10),[smEvents,haEvents]);
-  const [claudeUsage,setClaudeUsage]=useState(null);
+  const [widgetData,setWidgetData]=useState({});
   useEffect(()=>{
-    const load=()=>api.get('/api/claude-usage').then(d=>setClaudeUsage(d)).catch(()=>{});
+    const load=()=>api.get('/api/widgets/data').then(d=>setWidgetData(d||{})).catch(()=>{});
     load();
-    const id=setInterval(load,60000);
+    const id=setInterval(load,10*60*1000);
     return()=>clearInterval(id);
   },[]);
 
@@ -521,6 +521,14 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
     ...(upCD.length>0?['countdowns']:[]),
     ...(goals.length>0?['goals']:[]),
     ...(progressMembers.length>0?['members']:[]),
+    ...(widgetData.quote?['w_quote']:[]),
+    ...(widgetData.stocks?.length?['w_stocks']:[]),
+    ...(widgetData.producthunt?.length?['w_producthunt']:[]),
+    ...(widgetData.github?['w_github']:[]),
+    ...(widgetData.reddit?.posts?.length?['w_reddit']:[]),
+    ...(widgetData.beehiiv?['w_beehiiv']:[]),
+    ...(widgetData.youtube?['w_youtube']:[]),
+    ...(widgetData.etsy?['w_etsy']:[]),
   ];
   const activePanelId=centerPanels[centerIdx%Math.max(1,centerPanels.length)];
 
@@ -778,6 +786,118 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         </div>
                       </>
                     )}
+                    {activePanelId==='w_quote'&&(
+                      <>
+                        <WLabel>Quote</WLabel>
+                        <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center'}}>
+                          <div style={{fontSize:17,color:D.t1,fontWeight:500,lineHeight:1.5,fontStyle:'italic',marginBottom:10}}>"{widgetData.quote?.text}"</div>
+                          <div style={{fontSize:13,color:D.t3}}>— {widgetData.quote?.author}</div>
+                        </div>
+                      </>
+                    )}
+                    {activePanelId==='w_stocks'&&(
+                      <>
+                        <WLabel>Markets</WLabel>
+                        <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',gap:10,marginTop:4}}>
+                          {widgetData.stocks?.map(s=>{
+                            const up=parseFloat(s.change)>=0;
+                            return(
+                              <div key={s.ticker} style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                                <span style={{fontSize:16,fontWeight:700,color:D.t1,letterSpacing:'.02em'}}>{s.ticker}</span>
+                                <div style={{textAlign:'right'}}>
+                                  <div style={{fontSize:17,fontWeight:800,color:D.t1,fontVariantNumeric:'tabular-nums'}}>${s.price}</div>
+                                  <div style={{fontSize:12,fontWeight:600,color:up?A.green:A.red}}>{up?'+':''}{s.change}%</div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
+                    {activePanelId==='w_producthunt'&&(
+                      <>
+                        <WLabel>Product Hunt today</WLabel>
+                        <div style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:8,marginTop:4}}>
+                          {widgetData.producthunt?.slice(0,4).map((p,i)=>(
+                            <div key={i} style={{display:'flex',gap:10,alignItems:'flex-start'}}>
+                              <span style={{fontSize:12,color:D.t4,fontWeight:700,flexShrink:0,minWidth:14,marginTop:2}}>{i+1}</span>
+                              <div>
+                                <div style={{fontSize:14,color:D.t1,fontWeight:600,lineHeight:1.3}}>{p.title}</div>
+                                {p.tagline&&<div style={{fontSize:11,color:D.t3,marginTop:2}}>{p.tagline}</div>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                    {activePanelId==='w_github'&&(
+                      <>
+                        <WLabel>GitHub — {widgetData.github?.username}</WLabel>
+                        <div style={{fontSize:12,color:D.t3,marginBottom:8}}>{widgetData.github?.total} contributions · last 30 days</div>
+                        <div style={{display:'flex',flexWrap:'wrap',gap:3}}>
+                          {widgetData.github?.days?.map((count,i)=>(
+                            <div key={i} style={{width:11,height:11,borderRadius:2,background:count===0?'rgba(255,255,255,0.07)':count<3?'#1a7f37':count<6?'#2ea04326':count<9?'#40c463':'#9be9a8',opacity:count===0?1:undefined}}/>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                    {activePanelId==='w_reddit'&&(
+                      <>
+                        <WLabel>r/{widgetData.reddit?.sub}</WLabel>
+                        <div style={{flex:1,overflowY:'auto',marginTop:2}}>
+                          {widgetData.reddit?.posts?.map((post,i)=>(
+                            <div key={i} style={{padding:'7px 0',borderBottom:`1px solid ${D.sep}`}}>
+                              <div style={{fontSize:13,color:D.t2,fontWeight:500,lineHeight:1.35}}>{post.title}</div>
+                              <div style={{fontSize:11,color:D.t4,marginTop:2}}>{post.score?.toLocaleString()} pts</div>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                    {activePanelId==='w_beehiiv'&&(
+                      <>
+                        <WLabel>Newsletter</WLabel>
+                        <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',alignItems:'center',textAlign:'center'}}>
+                          <div style={{fontSize:52,fontWeight:800,color:D.t1,letterSpacing:'-.04em',lineHeight:1}}>{widgetData.beehiiv?.subscribers?.toLocaleString()}</div>
+                          <div style={{fontSize:14,color:D.t3,marginTop:8}}>active subscribers</div>
+                          {widgetData.beehiiv?.name&&<div style={{fontSize:11,color:D.t4,marginTop:4}}>{widgetData.beehiiv.name}</div>}
+                        </div>
+                      </>
+                    )}
+                    {activePanelId==='w_youtube'&&(
+                      <>
+                        <WLabel>YouTube — {widgetData.youtube?.name}</WLabel>
+                        <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',gap:16,marginTop:4}}>
+                          <div style={{textAlign:'center'}}>
+                            <div style={{fontSize:44,fontWeight:800,color:D.t1,letterSpacing:'-.04em',lineHeight:1}}>{widgetData.youtube?.subscribers?.toLocaleString()}</div>
+                            <div style={{fontSize:13,color:D.t3,marginTop:4}}>subscribers</div>
+                          </div>
+                          <div style={{display:'flex',gap:8}}>
+                            <div style={{flex:1,background:'rgba(255,255,255,0.06)',borderRadius:8,padding:'10px',textAlign:'center'}}>
+                              <div style={{fontSize:16,fontWeight:700,color:D.t1}}>{(widgetData.youtube?.views/1000000)>=1?(widgetData.youtube.views/1000000).toFixed(1)+'M':(widgetData.youtube?.views/1000).toFixed(0)+'K'}</div>
+                              <div style={{fontSize:10,color:D.t4,marginTop:2}}>total views</div>
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                    {activePanelId==='w_etsy'&&(
+                      <>
+                        <WLabel>Etsy — {widgetData.etsy?.name}</WLabel>
+                        <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',gap:16,marginTop:4}}>
+                          <div style={{display:'flex',gap:8}}>
+                            <div style={{flex:1,background:'rgba(255,255,255,0.06)',borderRadius:8,padding:'12px',textAlign:'center'}}>
+                              <div style={{fontSize:28,fontWeight:800,color:D.t1}}>{widgetData.etsy?.sales?.toLocaleString()}</div>
+                              <div style={{fontSize:11,color:D.t4,marginTop:4}}>total sales</div>
+                            </div>
+                            <div style={{flex:1,background:'rgba(255,255,255,0.06)',borderRadius:8,padding:'12px',textAlign:'center'}}>
+                              <div style={{fontSize:28,fontWeight:800,color:D.t1}}>{widgetData.etsy?.listings}</div>
+                              <div style={{fontSize:11,color:D.t4,marginTop:4}}>active listings</div>
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </Widget>
                 </div>
               )}
@@ -895,15 +1015,6 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                   </span>
                 ))}
               </div>
-            </>
-          )}
-          {claudeUsage?.available&&(
-            <>
-              {(news.length>0||allSmartEvents.length>0||liveGames.length>0)&&<span style={{color:D.sep,flexShrink:0}}>·</span>}
-              <div style={{width:6,height:6,borderRadius:'50%',background:'#8b5cf6',flexShrink:0}}/>
-              <span style={{fontSize:12,color:D.t3,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>
-                AI {claudeUsage.session_pct}%{claudeUsage.reset_mins!=null?` · ${claudeUsage.reset_mins}m`:''}
-              </span>
             </>
           )}
         </div>
@@ -2318,7 +2429,24 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [hasAnthropicKey,setHasAnthropicKey]=useState(false);
   const [beehiivKey,setBeehiivKey]=useState('');
   const [hasBeehiivKey,setHasBeehiivKey]=useState(false);
+  const [youtubeKey,setYoutubeKey]=useState('');
+  const [hasYoutubeKey,setHasYoutubeKey]=useState(false);
+  const [etsyKey,setEtsyKey]=useState('');
+  const [hasEtsyKey,setHasEtsyKey]=useState(false);
   const [intSaving,setIntSaving]=useState(false);
+  const [wQuote,setWQuote]=useState(false);
+  const [wStocks,setWStocks]=useState(false);
+  const [wStocksTickers,setWStocksTickers]=useState('');
+  const [wPH,setWPH]=useState(false);
+  const [wGithub,setWGithub]=useState(false);
+  const [wGithubUser,setWGithubUser]=useState('');
+  const [wReddit,setWReddit]=useState(false);
+  const [wRedditSub,setWRedditSub]=useState('');
+  const [wBeehiiv,setWBeehiiv]=useState(false);
+  const [wYoutube,setWYoutube]=useState(false);
+  const [wYoutubeHandle,setWYoutubeHandle]=useState('');
+  const [wEtsy,setWEtsy]=useState(false);
+  const [wEtsyShop,setWEtsyShop]=useState('');
   const [qaList,setQaList]=useState([]);
   const [qaDrawer,setQaDrawer]=useState(false);
   const [qaEdit,setQaEdit]=useState(null);
@@ -2339,6 +2467,19 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
       if(st.weekly_digest_enabled) setWeeklyDigest(st.weekly_digest_enabled==='1');
       if(st.daily_summary_enabled) setDailySummary(st.daily_summary_enabled==='1');
       if(st.news_feed) setNewsFeeds(st.news_feed.split(',').map(s=>s.trim()).filter(Boolean));
+      setWQuote(st.widget_quote_enabled==='1');
+      setWStocks(st.widget_stocks_enabled==='1');
+      if(st.widget_stocks_tickers) setWStocksTickers(st.widget_stocks_tickers);
+      setWPH(st.widget_producthunt_enabled==='1');
+      setWGithub(st.widget_github_enabled==='1');
+      if(st.widget_github_username) setWGithubUser(st.widget_github_username);
+      setWReddit(st.widget_reddit_enabled==='1');
+      if(st.widget_reddit_subreddit) setWRedditSub(st.widget_reddit_subreddit);
+      setWBeehiiv(st.widget_beehiiv_enabled==='1');
+      setWYoutube(st.widget_youtube_enabled==='1');
+      if(st.widget_youtube_handle) setWYoutubeHandle(st.widget_youtube_handle);
+      setWEtsy(st.widget_etsy_enabled==='1');
+      if(st.widget_etsy_shop) setWEtsyShop(st.widget_etsy_shop);
       if(st.custom_sport_paths) setCustomSportPath(st.custom_sport_paths);
       if(st.sports_leagues){
         const active=st.sports_leagues.split(',').map(s=>s.trim().toLowerCase());
@@ -2347,7 +2488,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
     }).catch(()=>{});
     api.get('/api/ha/secret').then(d=>{if(d.secret) setHaSecret(d.secret);}).catch(()=>{});
     fetch('/api/ha/smart-home-status',{headers:{..._authHdr()}}).then(r=>r.json()).then(d=>{if(d.ha){if(d.ha.url)setHaUrl(d.ha.url);if(d.ha.hasToken)setHaHasToken(true);}if(d.homey){if(d.homey.url)setHomeyUrl(d.homey.url);if(d.homey.hasToken)setHomeyHasToken(true);}}).catch(()=>{});
-    api.get('/api/settings/integrations').then(d=>{setHasAnthropicKey(!!d.has_anthropic);setHasBeehiivKey(!!d.has_beehiiv);}).catch(()=>{});
+    api.get('/api/settings/integrations').then(d=>{setHasAnthropicKey(!!d.has_anthropic);setHasBeehiivKey(!!d.has_beehiiv);setHasYoutubeKey(!!d.has_youtube);setHasEtsyKey(!!d.has_etsy);}).catch(()=>{});
     api.get('/api/quick-actions').then(d=>{if(Array.isArray(d)) setQaList(d);}).catch(()=>{});
   },[]);
   const geocodeCity=async()=>{
@@ -2852,7 +2993,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
           }} disabled={intSaving}>{intSaving?'Saving…':'Save'}</Btn>
           <div style={{fontSize:12,color:A.label5,marginTop:8}}>Powers the AI usage meter on your display. Get a key at console.anthropic.com.</div>
         </div>
-        <div style={{padding:'14px 16px'}}>
+        <div style={{padding:'14px 16px',borderBottom:`1px solid ${A.sep}`}}>
           <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:8}}>Beehiiv (newsletter stats)</div>
           <div style={{marginBottom:10}}><Inp value={beehiivKey} onChange={e=>setBeehiivKey(e.target.value)} placeholder={hasBeehiivKey?'Saved — paste to replace':'Beehiiv API key'} type="password"/></div>
           <Btn sm onClick={async()=>{
@@ -2863,8 +3004,71 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
             if(r.ok){setHasBeehiivKey(true);setBeehiivKey('');toastAdd('Saved');}
             else toastAdd(r.error||'Save failed','red');
           }} disabled={intSaving}>{intSaving?'Saving…':'Save'}</Btn>
-          <div style={{fontSize:12,color:A.label5,marginTop:8}}>Shows subscriber count on your display. Get a key at app.beehiiv.com → Settings → API.</div>
+          <div style={{fontSize:12,color:A.label5,marginTop:8}}>Get a key at app.beehiiv.com → Settings → API.</div>
         </div>
+        <div style={{padding:'14px 16px',borderBottom:`1px solid ${A.sep}`}}>
+          <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:8}}>YouTube (channel stats)</div>
+          <div style={{marginBottom:10}}><Inp value={youtubeKey} onChange={e=>setYoutubeKey(e.target.value)} placeholder={hasYoutubeKey?'Saved — paste to replace':'YouTube Data API v3 key'} type="password"/></div>
+          <Btn sm onClick={async()=>{
+            if(!youtubeKey.trim()){toastAdd('Paste a key first','red');return;}
+            setIntSaving(true);
+            const r=await fetch('/api/settings/integrations',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify({youtube_api_key:youtubeKey.trim()})}).then(x=>x.json()).catch(()=>({error:'Failed'}));
+            setIntSaving(false);
+            if(r.ok){setHasYoutubeKey(true);setYoutubeKey('');toastAdd('Saved');}
+            else toastAdd(r.error||'Save failed','red');
+          }} disabled={intSaving}>{intSaving?'Saving…':'Save'}</Btn>
+          <div style={{fontSize:12,color:A.label5,marginTop:8}}>Get a key at console.cloud.google.com → YouTube Data API v3.</div>
+        </div>
+        <div style={{padding:'14px 16px'}}>
+          <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:8}}>Etsy (shop stats)</div>
+          <div style={{marginBottom:10}}><Inp value={etsyKey} onChange={e=>setEtsyKey(e.target.value)} placeholder={hasEtsyKey?'Saved — paste to replace':'Etsy API key (keystring)'} type="password"/></div>
+          <Btn sm onClick={async()=>{
+            if(!etsyKey.trim()){toastAdd('Paste a key first','red');return;}
+            setIntSaving(true);
+            const r=await fetch('/api/settings/integrations',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify({etsy_api_key:etsyKey.trim()})}).then(x=>x.json()).catch(()=>({error:'Failed'}));
+            setIntSaving(false);
+            if(r.ok){setHasEtsyKey(true);setEtsyKey('');toastAdd('Saved');}
+            else toastAdd(r.error||'Save failed','red');
+          }} disabled={intSaving}>{intSaving?'Saving…':'Save'}</Btn>
+          <div style={{fontSize:12,color:A.label5,marginTop:8}}>Get a key at etsy.com/developers → Create app.</div>
+        </div>
+      </FormGroup>
+
+      <FormGroup label="Widgets">
+        {[
+          {id:'quote',label:'Quote of the day',enabled:wQuote,setEnabled:v=>{setWQuote(v);saveSetting('widget_quote_enabled',v?'1':'0');},config:null},
+          {id:'stocks',label:'Stock prices',enabled:wStocks,setEnabled:v=>{setWStocks(v);saveSetting('widget_stocks_enabled',v?'1':'0');},config:(
+            <Inp value={wStocksTickers} onChange={e=>setWStocksTickers(e.target.value)} onBlur={()=>saveSetting('widget_stocks_tickers',wStocksTickers)} placeholder="AAPL, TSLA, SPY" style={{marginTop:8}}/>
+          )},
+          {id:'ph',label:'Product Hunt today',enabled:wPH,setEnabled:v=>{setWPH(v);saveSetting('widget_producthunt_enabled',v?'1':'0');},config:null},
+          {id:'github',label:'GitHub commit graph',enabled:wGithub,setEnabled:v=>{setWGithub(v);saveSetting('widget_github_enabled',v?'1':'0');},config:(
+            <Inp value={wGithubUser} onChange={e=>setWGithubUser(e.target.value)} onBlur={()=>saveSetting('widget_github_username',wGithubUser)} placeholder="username" style={{marginTop:8}}/>
+          )},
+          {id:'reddit',label:'Reddit hot posts',enabled:wReddit,setEnabled:v=>{setWReddit(v);saveSetting('widget_reddit_enabled',v?'1':'0');},config:(
+            <Inp value={wRedditSub} onChange={e=>setWRedditSub(e.target.value)} onBlur={()=>saveSetting('widget_reddit_subreddit',wRedditSub)} placeholder="woodworking" style={{marginTop:8}}/>
+          )},
+          {id:'beehiiv',label:'Beehiiv subscribers',enabled:wBeehiiv,setEnabled:v=>{setWBeehiiv(v);saveSetting('widget_beehiiv_enabled',v?'1':'0');},config:!hasBeehiivKey?<div style={{fontSize:11,color:A.amber,marginTop:6}}>Add Beehiiv key in Integrations above</div>:null},
+          {id:'youtube',label:'YouTube channel',enabled:wYoutube,setEnabled:v=>{setWYoutube(v);saveSetting('widget_youtube_enabled',v?'1':'0');},config:(
+            <div style={{marginTop:8}}>
+              {!hasYoutubeKey&&<div style={{fontSize:11,color:A.amber,marginBottom:6}}>Add YouTube key in Integrations above</div>}
+              <Inp value={wYoutubeHandle} onChange={e=>setWYoutubeHandle(e.target.value)} onBlur={()=>saveSetting('widget_youtube_handle',wYoutubeHandle)} placeholder="@YourChannel"/>
+            </div>
+          )},
+          {id:'etsy',label:'Etsy shop',enabled:wEtsy,setEnabled:v=>{setWEtsy(v);saveSetting('widget_etsy_enabled',v?'1':'0');},config:(
+            <div style={{marginTop:8}}>
+              {!hasEtsyKey&&<div style={{fontSize:11,color:A.amber,marginBottom:6}}>Add Etsy key in Integrations above</div>}
+              <Inp value={wEtsyShop} onChange={e=>setWEtsyShop(e.target.value)} onBlur={()=>saveSetting('widget_etsy_shop',wEtsyShop)} placeholder="YourShopName"/>
+            </div>
+          )},
+        ].map((w,i,arr)=>(
+          <div key={w.id} style={{padding:'12px 16px',borderBottom:i<arr.length-1?`1px solid ${A.sep}`:'none'}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+              <span style={{fontSize:14,fontWeight:500,color:A.label1}}>{w.label}</span>
+              <Toggle checked={w.enabled} onChange={w.setEnabled}/>
+            </div>
+            {w.enabled&&w.config}
+          </div>
+        ))}
       </FormGroup>
 
     </div>

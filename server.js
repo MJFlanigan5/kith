@@ -684,7 +684,7 @@ app.post('/api/push/test', requireAuth, async (req, res) => {
 });
 
 // ── Routes: Settings ──────────────────────────────────────────────────────────
-const SETTINGS_SENSITIVE = new Set(['email_webhook_secret','anthropic_api_key','ai_api_key','beehiiv_api_key','jwt_secret','vapid_public','vapid_private','admin_pin_hash','resend_api_key','ha_webhook_secret','smart_home_token','ha_token','homey_token']);
+const SETTINGS_SENSITIVE = new Set(['email_webhook_secret','anthropic_api_key','ai_api_key','beehiiv_api_key','youtube_api_key','etsy_api_key','jwt_secret','vapid_public','vapid_private','admin_pin_hash','resend_api_key','ha_webhook_secret','smart_home_token','ha_token','homey_token']);
 app.get('/api/settings', (req, res) => {
   const rows = db.prepare('SELECT key,value FROM settings').all();
   res.json(Object.fromEntries(rows.filter(r=>!SETTINGS_SENSITIVE.has(r.key)).map(r=>[r.key,r.value])));
@@ -724,12 +724,16 @@ app.get('/api/settings/integrations', requireAdmin, (req, res) => {
   res.json({
     has_anthropic: !!(get('anthropic_api_key') || process.env.ANTHROPIC_API_KEY),
     has_beehiiv:   !!get('beehiiv_api_key'),
+    has_youtube:   !!get('youtube_api_key'),
+    has_etsy:      !!get('etsy_api_key'),
   });
 });
 app.put('/api/settings/integrations', requireAdmin, (req, res) => {
   const upd = db.prepare('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)');
   if (req.body.anthropic_api_key !== undefined) upd.run('anthropic_api_key', String(req.body.anthropic_api_key));
   if (req.body.beehiiv_api_key   !== undefined) upd.run('beehiiv_api_key',   String(req.body.beehiiv_api_key));
+  if (req.body.youtube_api_key   !== undefined) upd.run('youtube_api_key',   String(req.body.youtube_api_key));
+  if (req.body.etsy_api_key      !== undefined) upd.run('etsy_api_key',      String(req.body.etsy_api_key));
   res.json({ ok: true });
 });
 
@@ -1167,36 +1171,103 @@ app.post('/api/quick-actions/trigger', requireAuth, async (req, res) => {
   }
 });
 
-// ── Routes: Claude / AI usage ─────────────────────────────────────────────────
-let _claudeUsageCache = null;
-let _claudeUsageCacheAt = 0;
-
-app.get('/api/claude-usage', async (req, res) => {
-  if (_claudeUsageCache && Date.now() - _claudeUsageCacheAt < 60000) {
-    return res.json(_claudeUsageCache);
-  }
-  const apiKey = db.prepare("SELECT value FROM settings WHERE key='anthropic_api_key' AND value != ''").get()?.value
-    || process.env.ANTHROPIC_API_KEY
-    || db.prepare("SELECT value FROM settings WHERE key='ai_api_key' AND value LIKE 'sk-ant-%'").get()?.value
-    || '';
-  if (!apiKey) return res.json({ available: false });
+// ── Routes: Widgets ───────────────────────────────────────────────────────────
+const _wCache = {};
+async function _wFetch(key, ttlMs, fn) {
+  if (_wCache[key] && Date.now() - _wCache[key].at < ttlMs) return _wCache[key].data;
   try {
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 1, messages: [{ role: 'user', content: '.' }] }),
-      signal: AbortSignal.timeout(10000),
-    });
-    const sessionPct = Math.round(parseFloat(r.headers.get('anthropic-ratelimit-unified-5h-utilization') || '0') * 100);
-    const resetAt = r.headers.get('anthropic-ratelimit-unified-5h-reset');
-    const tokensRemaining = parseInt(r.headers.get('anthropic-ratelimit-unified-5h-remaining') || r.headers.get('anthropic-ratelimit-tokens-remaining') || '0');
-    const resetMins = resetAt ? Math.max(0, Math.round((new Date(resetAt) - Date.now()) / 60000)) : null;
-    _claudeUsageCache = { available: true, session_pct: sessionPct, tokens_remaining: tokensRemaining, reset_mins: resetMins };
-    _claudeUsageCacheAt = Date.now();
-    res.json(_claudeUsageCache);
-  } catch {
-    res.json({ available: false });
+    const data = await fn();
+    _wCache[key] = { data, at: Date.now() };
+    return data;
+  } catch { return _wCache[key]?.data ?? null; }
+}
+
+app.get('/api/widgets/data', async (req, res) => {
+  const gs = k => db.prepare('SELECT value FROM settings WHERE key=?').get(k)?.value || '';
+  const result = {};
+  const p = [];
+
+  if (gs('widget_quote_enabled') === '1')
+    p.push(_wFetch('quote', 3600000, async () => {
+      const r = await fetch('https://zenquotes.io/api/today', { signal: AbortSignal.timeout(6000) });
+      const d = await r.json(); return { text: d[0].q, author: d[0].a };
+    }).then(d => { if (d) result.quote = d; }));
+
+  const tickers = gs('widget_stocks_tickers');
+  if (gs('widget_stocks_enabled') === '1' && tickers)
+    p.push(_wFetch(`stocks:${tickers}`, 300000, async () => {
+      const syms = tickers.split(',').map(s => s.trim().toUpperCase()).filter(Boolean).slice(0, 5).join(',');
+      const r = await fetch(`https://query1.finance.yahoo.com/v7/finance/quote?symbols=${syms}&fields=symbol,regularMarketPrice,regularMarketChangePercent,shortName`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(8000),
+      });
+      const d = await r.json();
+      return (d.quoteResponse?.result || []).map(q => ({
+        ticker: q.symbol, price: q.regularMarketPrice?.toFixed(2),
+        change: q.regularMarketChangePercent?.toFixed(2),
+      }));
+    }).then(d => { if (d?.length) result.stocks = d; }));
+
+  if (gs('widget_producthunt_enabled') === '1')
+    p.push(_wFetch('producthunt', 3600000, async () => {
+      const r = await fetch('https://www.producthunt.com/feed', { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(8000) });
+      const text = await r.text();
+      return [...text.matchAll(/<item>([\s\S]*?)<\/item>/g)].slice(0, 5).map(m => ({
+        title: (m[1].match(/<title><!\[CDATA\[(.*?)\]\]>/)?.[1] || m[1].match(/<title>(.*?)<\/title>/)?.[1] || '').trim(),
+        tagline: (m[1].match(/<description><!\[CDATA\[(.*?)\]\]>/)?.[1] || '').replace(/<[^>]+>/g, '').trim().slice(0, 80),
+      })).filter(i => i.title);
+    }).then(d => { if (d?.length) result.producthunt = d; }));
+
+  const ghUser = gs('widget_github_username');
+  if (gs('widget_github_enabled') === '1' && ghUser)
+    p.push(_wFetch(`github:${ghUser}`, 3600000, async () => {
+      const r = await fetch(`https://github-contributions-api.jogruber.de/v4/${ghUser}?y=last`, { signal: AbortSignal.timeout(8000) });
+      const d = await r.json();
+      const days = (d.contributions || []).slice(-30);
+      return { username: ghUser, days: days.map(c => c.count), total: days.reduce((s, c) => s + c.count, 0) };
+    }).then(d => { if (d) result.github = d; }));
+
+  const sub = gs('widget_reddit_subreddit').replace(/^r\//i, '');
+  if (gs('widget_reddit_enabled') === '1' && sub)
+    p.push(_wFetch(`reddit:${sub}`, 600000, async () => {
+      const r = await fetch(`https://www.reddit.com/r/${sub}/hot.json?limit=6`, { headers: { 'User-Agent': 'kith-dashboard/1.0' }, signal: AbortSignal.timeout(8000) });
+      const d = await r.json();
+      return { sub, posts: (d.data?.children || []).slice(0, 5).map(c => ({ title: c.data.title, score: c.data.score })) };
+    }).then(d => { if (d?.posts?.length) result.reddit = d; }));
+
+  const beehiivKey = gs('beehiiv_api_key');
+  if (gs('widget_beehiiv_enabled') === '1' && beehiivKey)
+    p.push(_wFetch('beehiiv', 3600000, async () => {
+      const pr = await fetch('https://api.beehiiv.com/v2/publications', { headers: { 'Authorization': `Bearer ${beehiivKey}` }, signal: AbortSignal.timeout(8000) });
+      const pd = await pr.json();
+      const pub = pd.data?.[0]; if (!pub) return null;
+      const r = await fetch(`https://api.beehiiv.com/v2/publications/${pub.id}`, { headers: { 'Authorization': `Bearer ${beehiivKey}` }, signal: AbortSignal.timeout(8000) });
+      const d = await r.json();
+      return { name: d.data?.name, subscribers: d.data?.stats?.total_active_subscriptions };
+    }).then(d => { if (d) result.beehiiv = d; }));
+
+  const ytKey = gs('youtube_api_key');
+  const ytHandle = gs('widget_youtube_handle');
+  if (gs('widget_youtube_enabled') === '1' && ytKey && ytHandle) {
+    const handle = ytHandle.startsWith('@') ? ytHandle : `@${ytHandle}`;
+    p.push(_wFetch(`youtube:${handle}`, 3600000, async () => {
+      const r = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&forHandle=${encodeURIComponent(handle)}&key=${ytKey}`, { signal: AbortSignal.timeout(8000) });
+      const d = await r.json();
+      const ch = d.items?.[0]; if (!ch) return null;
+      return { name: ch.snippet?.title, subscribers: parseInt(ch.statistics?.subscriberCount || 0), views: parseInt(ch.statistics?.viewCount || 0) };
+    }).then(d => { if (d) result.youtube = d; }));
   }
+
+  const etsyKey = gs('etsy_api_key');
+  const etsyShop = gs('widget_etsy_shop');
+  if (gs('widget_etsy_enabled') === '1' && etsyKey && etsyShop)
+    p.push(_wFetch(`etsy:${etsyShop}`, 3600000, async () => {
+      const r = await fetch(`https://openapi.etsy.com/v3/application/shops/${etsyShop}`, { headers: { 'x-api-key': etsyKey }, signal: AbortSignal.timeout(8000) });
+      const d = await r.json();
+      return { name: d.shop_name, sales: d.transaction_sold_count, listings: d.listing_active_count };
+    }).then(d => { if (d) result.etsy = d; }));
+
+  await Promise.allSettled(p);
+  res.json(result);
 });
 
 // ── Routes: Photos (screensaver) ──────────────────────────────────────────────

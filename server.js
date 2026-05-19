@@ -684,7 +684,7 @@ app.post('/api/push/test', requireAuth, async (req, res) => {
 });
 
 // ── Routes: Settings ──────────────────────────────────────────────────────────
-const SETTINGS_SENSITIVE = new Set(['email_webhook_secret','anthropic_api_key','ai_api_key','beehiiv_api_key','youtube_api_key','etsy_api_key','jwt_secret','vapid_public','vapid_private','admin_pin_hash','resend_api_key','ha_webhook_secret','smart_home_token','ha_token','homey_token']);
+const SETTINGS_SENSITIVE = new Set(['email_webhook_secret','anthropic_api_key','ai_api_key','beehiiv_api_key','youtube_api_key','etsy_api_key','teslemetry_api_key','aviationstack_api_key','jwt_secret','vapid_public','vapid_private','admin_pin_hash','resend_api_key','ha_webhook_secret','smart_home_token','ha_token','homey_token']);
 app.get('/api/settings', (req, res) => {
   const rows = db.prepare('SELECT key,value FROM settings').all();
   res.json(Object.fromEntries(rows.filter(r=>!SETTINGS_SENSITIVE.has(r.key)).map(r=>[r.key,r.value])));
@@ -722,18 +722,22 @@ app.put('/api/settings/ai-key', requireAdmin, (req, res) => {
 app.get('/api/settings/integrations', requireAdmin, (req, res) => {
   const get = k => db.prepare('SELECT value FROM settings WHERE key=?').get(k)?.value || '';
   res.json({
-    has_anthropic: !!(get('anthropic_api_key') || process.env.ANTHROPIC_API_KEY),
-    has_beehiiv:   !!get('beehiiv_api_key'),
-    has_youtube:   !!get('youtube_api_key'),
-    has_etsy:      !!get('etsy_api_key'),
+    has_anthropic:     !!(get('anthropic_api_key') || process.env.ANTHROPIC_API_KEY),
+    has_beehiiv:       !!get('beehiiv_api_key'),
+    has_youtube:       !!get('youtube_api_key'),
+    has_etsy:          !!get('etsy_api_key'),
+    has_teslemetry:    !!get('teslemetry_api_key'),
+    has_aviationstack: !!get('aviationstack_api_key'),
   });
 });
 app.put('/api/settings/integrations', requireAdmin, (req, res) => {
   const upd = db.prepare('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)');
-  if (req.body.anthropic_api_key !== undefined) upd.run('anthropic_api_key', String(req.body.anthropic_api_key));
-  if (req.body.beehiiv_api_key   !== undefined) upd.run('beehiiv_api_key',   String(req.body.beehiiv_api_key));
-  if (req.body.youtube_api_key   !== undefined) upd.run('youtube_api_key',   String(req.body.youtube_api_key));
-  if (req.body.etsy_api_key      !== undefined) upd.run('etsy_api_key',      String(req.body.etsy_api_key));
+  if (req.body.anthropic_api_key     !== undefined) upd.run('anthropic_api_key',     String(req.body.anthropic_api_key));
+  if (req.body.beehiiv_api_key       !== undefined) upd.run('beehiiv_api_key',       String(req.body.beehiiv_api_key));
+  if (req.body.youtube_api_key       !== undefined) upd.run('youtube_api_key',       String(req.body.youtube_api_key));
+  if (req.body.etsy_api_key          !== undefined) upd.run('etsy_api_key',          String(req.body.etsy_api_key));
+  if (req.body.teslemetry_api_key    !== undefined) upd.run('teslemetry_api_key',    String(req.body.teslemetry_api_key));
+  if (req.body.aviationstack_api_key !== undefined) upd.run('aviationstack_api_key', String(req.body.aviationstack_api_key));
   res.json({ ok: true });
 });
 
@@ -1270,6 +1274,58 @@ app.get('/api/widgets/data', async (req, res) => {
       if (!d.shop_name) return null;
       return { name: d.shop_name, sales: d.transaction_sold_count ?? 0, listings: d.listing_active_count ?? 0 };
     }).then(d => { if (d) result.etsy = d; }));
+
+  const teslaKey = gs('teslemetry_api_key');
+  if (teslaKey)
+    p.push(_wFetch(`teslemetry`, 60000, async () => {
+      // Auto-discover energy site ID
+      let siteId = _wCache['teslemetry:site_id']?.data;
+      if (!siteId) {
+        const pr = await fetch('https://api.teslemetry.com/api/1/products', {
+          headers: { 'Authorization': `Bearer ${teslaKey}` }, signal: AbortSignal.timeout(8000),
+        });
+        const pd = await pr.json();
+        siteId = pd.response?.find(p => p.energy_site_id)?.energy_site_id;
+        if (!siteId) return null;
+        _wCache['teslemetry:site_id'] = { data: siteId, at: Date.now() };
+      }
+      const r = await fetch(`https://api.teslemetry.com/api/1/energy_sites/${siteId}/live_status`, {
+        headers: { 'Authorization': `Bearer ${teslaKey}` }, signal: AbortSignal.timeout(8000),
+      });
+      const d = await r.json();
+      const s = d.response;
+      if (!s) return null;
+      return {
+        battery_pct:  Math.round(s.percentage_charged ?? 0),
+        solar_kw:     Math.round((s.solar_power ?? 0) / 100) / 10,
+        grid_kw:      Math.round((s.grid_power  ?? 0) / 100) / 10,
+        load_kw:      Math.round((s.load_power  ?? 0) / 100) / 10,
+        battery_kw:   Math.round((s.battery_power ?? 0) / 100) / 10,
+        grid_status:  s.grid_status ?? 'Active',
+      };
+    }).then(d => { if (d) result.powerwall = d; }));
+
+  const aviationKey = gs('aviationstack_api_key');
+  const flightNum = gs('widget_flight_number').toUpperCase().replace(/\s/g, '');
+  if (aviationKey && flightNum)
+    p.push(_wFetch(`flight:${flightNum}`, 120000, async () => {
+      const r = await fetch(`http://api.aviationstack.com/v1/flights?access_key=${aviationKey}&flight_iata=${flightNum}&limit=1`, { signal: AbortSignal.timeout(8000) });
+      const d = await r.json();
+      const f = d.data?.[0]; if (!f) return null;
+      return {
+        flight:    f.flight?.iata,
+        airline:   f.airline?.name,
+        status:    f.flight_status,
+        dep_iata:  f.departure?.iata,
+        dep_city:  f.departure?.airport,
+        dep_sched: f.departure?.scheduled?.slice(11, 16),
+        dep_actual:f.departure?.actual?.slice(11, 16) || f.departure?.estimated?.slice(11, 16),
+        arr_iata:  f.arrival?.iata,
+        arr_city:  f.arrival?.airport,
+        arr_sched: f.arrival?.scheduled?.slice(11, 16),
+        arr_actual:f.arrival?.actual?.slice(11, 16) || f.arrival?.estimated?.slice(11, 16),
+      };
+    }).then(d => { if (d) result.flight = d; }));
 
   await Promise.allSettled(p);
   res.json(result);

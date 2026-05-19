@@ -529,6 +529,8 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
     ...(widgetData.beehiiv?['w_beehiiv']:[]),
     ...(widgetData.youtube?['w_youtube']:[]),
     ...(widgetData.etsy?['w_etsy']:[]),
+    ...(widgetData.powerwall?['w_powerwall']:[]),
+    ...(widgetData.flight?['w_flight']:[]),
   ];
   const activePanelId=centerPanels[centerIdx%Math.max(1,centerPanels.length)];
 
@@ -898,6 +900,70 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         </div>
                       </>
                     )}
+                    {activePanelId==='w_powerwall'&&(()=>{
+                      const pw=widgetData.powerwall;
+                      const gridExport=pw.grid_kw<0;
+                      const batCharging=pw.battery_kw<0;
+                      return(
+                        <>
+                          <WLabel>Powerwall</WLabel>
+                          <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',gap:10}}>
+                            <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:4}}>
+                              <div style={{fontSize:38,fontWeight:800,color:D.t1,letterSpacing:'-.03em',lineHeight:1}}>{pw.battery_pct}%</div>
+                              <div style={{flex:1,height:10,borderRadius:5,background:'rgba(255,255,255,0.08)',overflow:'hidden'}}>
+                                <div style={{height:'100%',borderRadius:5,width:`${pw.battery_pct}%`,background:pw.battery_pct>20?A.green:A.red,transition:'width .6s'}}/>
+                              </div>
+                            </div>
+                            {[
+                              {label:'Solar',kw:pw.solar_kw,note:pw.solar_kw>0?`${pw.solar_kw} kW`:null,color:A.amber},
+                              {label:'Home', kw:pw.load_kw, note:`${pw.load_kw} kW`,color:D.t2},
+                              {label:'Grid', kw:Math.abs(pw.grid_kw),note:`${Math.abs(pw.grid_kw)} kW ${gridExport?'export':'import'}`,color:gridExport?A.green:D.t3},
+                              {label:'Battery',kw:Math.abs(pw.battery_kw),note:pw.battery_kw===0?'Idle':`${Math.abs(pw.battery_kw)} kW ${batCharging?'charging':'discharging'}`,color:A.green},
+                            ].map(row=>(
+                              <div key={row.label} style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                                <span style={{fontSize:13,color:D.t3,width:56}}>{row.label}</span>
+                                <span style={{fontSize:14,fontWeight:600,color:row.color||D.t1}}>{row.note||'—'}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      );
+                    })()}
+                    {activePanelId==='w_flight'&&(()=>{
+                      const f=widgetData.flight;
+                      const statusColor={active:A.green,landed:A.green,scheduled:D.t3,cancelled:A.red,incident:A.red,diverted:A.amber}[f.status]||D.t3;
+                      return(
+                        <>
+                          <WLabel>{f.flight} — {f.airline}</WLabel>
+                          <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',gap:14}}>
+                            <div style={{display:'flex',alignItems:'center',gap:8}}>
+                              <div style={{textAlign:'center',flex:1}}>
+                                <div style={{fontSize:22,fontWeight:800,color:D.t1}}>{f.dep_iata}</div>
+                                <div style={{fontSize:11,color:D.t4,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.dep_city}</div>
+                              </div>
+                              <div style={{fontSize:13,color:D.t4,flexShrink:0}}>→</div>
+                              <div style={{textAlign:'center',flex:1}}>
+                                <div style={{fontSize:22,fontWeight:800,color:D.t1}}>{f.arr_iata}</div>
+                                <div style={{fontSize:11,color:D.t4,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.arr_city}</div>
+                              </div>
+                            </div>
+                            <div style={{display:'flex',gap:8}}>
+                              <div style={{flex:1,background:'rgba(255,255,255,0.06)',borderRadius:8,padding:'10px',textAlign:'center'}}>
+                                <div style={{fontSize:16,fontWeight:700,color:D.t1}}>{f.dep_actual||f.dep_sched}</div>
+                                {f.dep_actual&&f.dep_actual!==f.dep_sched&&<div style={{fontSize:10,color:D.t4,textDecoration:'line-through'}}>{f.dep_sched}</div>}
+                                <div style={{fontSize:10,color:D.t4,marginTop:2}}>departs</div>
+                              </div>
+                              <div style={{flex:1,background:'rgba(255,255,255,0.06)',borderRadius:8,padding:'10px',textAlign:'center'}}>
+                                <div style={{fontSize:16,fontWeight:700,color:D.t1}}>{f.arr_actual||f.arr_sched}</div>
+                                {f.arr_actual&&f.arr_actual!==f.arr_sched&&<div style={{fontSize:10,color:D.t4,textDecoration:'line-through'}}>{f.arr_sched}</div>}
+                                <div style={{fontSize:10,color:D.t4,marginTop:2}}>arrives</div>
+                              </div>
+                            </div>
+                            <div style={{textAlign:'center',fontSize:12,fontWeight:700,color:statusColor,textTransform:'capitalize'}}>{f.status}</div>
+                          </div>
+                        </>
+                      );
+                    })()}
                   </Widget>
                 </div>
               )}
@@ -2433,6 +2499,10 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [hasYoutubeKey,setHasYoutubeKey]=useState(false);
   const [etsyKey,setEtsyKey]=useState('');
   const [hasEtsyKey,setHasEtsyKey]=useState(false);
+  const [teslemetryKey,setTeslemetryKey]=useState('');
+  const [hasTeslemetryKey,setHasTeslemetryKey]=useState(false);
+  const [aviationstackKey,setAviationstackKey]=useState('');
+  const [hasAviationstackKey,setHasAviationstackKey]=useState(false);
   const [intSaving,setIntSaving]=useState(false);
   const [wQuote,setWQuote]=useState(false);
   const [wStocks,setWStocks]=useState(false);
@@ -2447,6 +2517,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [wYoutubeHandle,setWYoutubeHandle]=useState('');
   const [wEtsy,setWEtsy]=useState(false);
   const [wEtsyShop,setWEtsyShop]=useState('');
+  const [wFlightNum,setWFlightNum]=useState('');
   const [qaList,setQaList]=useState([]);
   const [qaDrawer,setQaDrawer]=useState(false);
   const [qaEdit,setQaEdit]=useState(null);
@@ -2480,6 +2551,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
       if(st.widget_youtube_handle) setWYoutubeHandle(st.widget_youtube_handle);
       setWEtsy(st.widget_etsy_enabled==='1');
       if(st.widget_etsy_shop) setWEtsyShop(st.widget_etsy_shop);
+      if(st.widget_flight_number) setWFlightNum(st.widget_flight_number);
       if(st.custom_sport_paths) setCustomSportPath(st.custom_sport_paths);
       if(st.sports_leagues){
         const active=st.sports_leagues.split(',').map(s=>s.trim().toLowerCase());
@@ -2488,7 +2560,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
     }).catch(()=>{});
     api.get('/api/ha/secret').then(d=>{if(d.secret) setHaSecret(d.secret);}).catch(()=>{});
     fetch('/api/ha/smart-home-status',{headers:{..._authHdr()}}).then(r=>r.json()).then(d=>{if(d.ha){if(d.ha.url)setHaUrl(d.ha.url);if(d.ha.hasToken)setHaHasToken(true);}if(d.homey){if(d.homey.url)setHomeyUrl(d.homey.url);if(d.homey.hasToken)setHomeyHasToken(true);}}).catch(()=>{});
-    api.get('/api/settings/integrations').then(d=>{setHasAnthropicKey(!!d.has_anthropic);setHasBeehiivKey(!!d.has_beehiiv);setHasYoutubeKey(!!d.has_youtube);setHasEtsyKey(!!d.has_etsy);}).catch(()=>{});
+    api.get('/api/settings/integrations').then(d=>{setHasAnthropicKey(!!d.has_anthropic);setHasBeehiivKey(!!d.has_beehiiv);setHasYoutubeKey(!!d.has_youtube);setHasEtsyKey(!!d.has_etsy);setHasTeslemetryKey(!!d.has_teslemetry);setHasAviationstackKey(!!d.has_aviationstack);}).catch(()=>{});
     api.get('/api/quick-actions').then(d=>{if(Array.isArray(d)) setQaList(d);}).catch(()=>{});
   },[]);
   const geocodeCity=async()=>{
@@ -3032,6 +3104,32 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
           }} disabled={intSaving}>{intSaving?'Saving…':'Save'}</Btn>
           <div style={{fontSize:12,color:A.label5,marginTop:8}}>Get a key at etsy.com/developers → Create app.</div>
         </div>
+        <div style={{padding:'14px 16px',borderBottom:`1px solid ${A.sep}`}}>
+          <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:8}}>Teslemetry (Powerwall)</div>
+          <div style={{marginBottom:10}}><Inp value={teslemetryKey} onChange={e=>setTeslemetryKey(e.target.value)} placeholder={hasTeslemetryKey?'Saved — paste to replace':'Teslemetry API key'} type="password"/></div>
+          <Btn sm onClick={async()=>{
+            if(!teslemetryKey.trim()){toastAdd('Paste a key first','red');return;}
+            setIntSaving(true);
+            const r=await fetch('/api/settings/integrations',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify({teslemetry_api_key:teslemetryKey.trim()})}).then(x=>x.json()).catch(()=>({error:'Failed'}));
+            setIntSaving(false);
+            if(r.ok){setHasTeslemetryKey(true);setTeslemetryKey('');toastAdd('Saved');}
+            else toastAdd(r.error||'Save failed','red');
+          }} disabled={intSaving}>{intSaving?'Saving…':'Save'}</Btn>
+          <div style={{fontSize:12,color:A.label5,marginTop:8}}>Get a key at teslemetry.com → Account. Auto-discovers your energy site.</div>
+        </div>
+        <div style={{padding:'14px 16px'}}>
+          <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:8}}>AviationStack (flight tracker)</div>
+          <div style={{marginBottom:10}}><Inp value={aviationstackKey} onChange={e=>setAviationstackKey(e.target.value)} placeholder={hasAviationstackKey?'Saved — paste to replace':'AviationStack API key'} type="password"/></div>
+          <Btn sm onClick={async()=>{
+            if(!aviationstackKey.trim()){toastAdd('Paste a key first','red');return;}
+            setIntSaving(true);
+            const r=await fetch('/api/settings/integrations',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify({aviationstack_api_key:aviationstackKey.trim()})}).then(x=>x.json()).catch(()=>({error:'Failed'}));
+            setIntSaving(false);
+            if(r.ok){setHasAviationstackKey(true);setAviationstackKey('');toastAdd('Saved');}
+            else toastAdd(r.error||'Save failed','red');
+          }} disabled={intSaving}>{intSaving?'Saving…':'Save'}</Btn>
+          <div style={{fontSize:12,color:A.label5,marginTop:8}}>Free tier at aviationstack.com (100 calls/month). Enter a flight in Widgets to track it.</div>
+        </div>
       </FormGroup>
 
       <FormGroup label="Widgets">
@@ -3064,10 +3162,15 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
           {!hasYoutubeKey&&<div style={{fontSize:11,color:A.amber,marginBottom:6}}>Add YouTube key in Integrations to enable</div>}
           <Inp value={wYoutubeHandle} onChange={e=>setWYoutubeHandle(e.target.value)} onBlur={()=>saveSetting('widget_youtube_handle',wYoutubeHandle)} placeholder="@YourChannel — leave blank to disable" disabled={!hasYoutubeKey}/>
         </div>
-        <div style={{padding:'12px 16px'}}>
+        <div style={{padding:'12px 16px',borderBottom:`1px solid ${A.sep}`}}>
           <div style={{fontSize:13,fontWeight:500,color:A.label2,marginBottom:8}}>Etsy shop name</div>
           {!hasEtsyKey&&<div style={{fontSize:11,color:A.amber,marginBottom:6}}>Add Etsy key in Integrations to enable</div>}
           <Inp value={wEtsyShop} onChange={e=>setWEtsyShop(e.target.value)} onBlur={()=>saveSetting('widget_etsy_shop',wEtsyShop)} placeholder="YourShopName — leave blank to disable" disabled={!hasEtsyKey}/>
+        </div>
+        <div style={{padding:'12px 16px'}}>
+          <div style={{fontSize:13,fontWeight:500,color:A.label2,marginBottom:8}}>Flight tracker</div>
+          {!hasAviationstackKey&&<div style={{fontSize:11,color:A.amber,marginBottom:6}}>Add AviationStack key in Integrations to enable</div>}
+          <Inp value={wFlightNum} onChange={e=>setWFlightNum(e.target.value)} onBlur={()=>saveSetting('widget_flight_number',wFlightNum)} placeholder="e.g. AA123 — leave blank to disable" disabled={!hasAviationstackKey}/>
         </div>
       </FormGroup>
 

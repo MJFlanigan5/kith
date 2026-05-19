@@ -1175,8 +1175,10 @@ app.get('/api/claude-usage', async (req, res) => {
   if (_claudeUsageCache && Date.now() - _claudeUsageCacheAt < 60000) {
     return res.json(_claudeUsageCache);
   }
-  const apiKey = db.prepare("SELECT value FROM settings WHERE key IN ('ai_api_key','anthropic_api_key') AND value != '' ORDER BY key LIMIT 1").get()?.value
-    || process.env.ANTHROPIC_API_KEY || '';
+  const apiKey = db.prepare("SELECT value FROM settings WHERE key='anthropic_api_key' AND value != ''").get()?.value
+    || process.env.ANTHROPIC_API_KEY
+    || db.prepare("SELECT value FROM settings WHERE key='ai_api_key' AND value LIKE 'sk-ant-%'").get()?.value
+    || '';
   if (!apiKey) return res.json({ available: false });
   try {
     const r = await fetch('https://api.anthropic.com/v1/messages', {

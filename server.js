@@ -1194,7 +1194,7 @@ app.get('/api/widgets/data', async (req, res) => {
     }).then(d => { if (d) result.quote = d; }));
 
   const tickers = gs('widget_stocks_tickers');
-  if (gs('widget_stocks_enabled') === '1' && tickers)
+  if (tickers)
     p.push(_wFetch(`stocks:${tickers}`, 300000, async () => {
       const syms = tickers.split(',').map(s => s.trim().toUpperCase()).filter(Boolean).slice(0, 5).join(',');
       const r = await fetch(`https://query1.finance.yahoo.com/v7/finance/quote?symbols=${syms}&fields=symbol,regularMarketPrice,regularMarketChangePercent,shortName`, {
@@ -1218,7 +1218,7 @@ app.get('/api/widgets/data', async (req, res) => {
     }).then(d => { if (d?.length) result.producthunt = d; }));
 
   const ghUser = gs('widget_github_username');
-  if (gs('widget_github_enabled') === '1' && ghUser)
+  if (ghUser)
     p.push(_wFetch(`github:${ghUser}`, 3600000, async () => {
       const r = await fetch(`https://github-contributions-api.jogruber.de/v4/${ghUser}?y=last`, { signal: AbortSignal.timeout(8000) });
       const d = await r.json();
@@ -1226,28 +1226,32 @@ app.get('/api/widgets/data', async (req, res) => {
       return { username: ghUser, days: days.map(c => c.count), total: days.reduce((s, c) => s + c.count, 0) };
     }).then(d => { if (d) result.github = d; }));
 
-  const sub = gs('widget_reddit_subreddit').replace(/^r\//i, '');
-  if (gs('widget_reddit_enabled') === '1' && sub)
+  const subRaw = gs('widget_reddit_subreddit');
+  const sub = subRaw.split(',').map(s => s.trim().replace(/^r\//i, '')).filter(Boolean).join('+');
+  const subLabel = subRaw.split(',').map(s => s.trim().replace(/^r\//i, '')).filter(Boolean).join(', ');
+  if (sub)
     p.push(_wFetch(`reddit:${sub}`, 600000, async () => {
-      const r = await fetch(`https://www.reddit.com/r/${sub}/hot.json?limit=6`, { headers: { 'User-Agent': 'kith-dashboard/1.0' }, signal: AbortSignal.timeout(8000) });
+      const r = await fetch(`https://www.reddit.com/r/${sub}/hot.json?limit=8`, { headers: { 'User-Agent': 'kith-dashboard/1.0' }, signal: AbortSignal.timeout(8000) });
       const d = await r.json();
-      return { sub, posts: (d.data?.children || []).slice(0, 5).map(c => ({ title: c.data.title, score: c.data.score })) };
+      return { sub: subLabel, posts: (d.data?.children || []).slice(0, 6).map(c => ({ title: c.data.title, score: c.data.score, sub: c.data.subreddit })) };
     }).then(d => { if (d?.posts?.length) result.reddit = d; }));
 
   const beehiivKey = gs('beehiiv_api_key');
-  if (gs('widget_beehiiv_enabled') === '1' && beehiivKey)
+  if (beehiivKey)
     p.push(_wFetch('beehiiv', 3600000, async () => {
       const pr = await fetch('https://api.beehiiv.com/v2/publications', { headers: { 'Authorization': `Bearer ${beehiivKey}` }, signal: AbortSignal.timeout(8000) });
       const pd = await pr.json();
       const pub = pd.data?.[0]; if (!pub) return null;
       const r = await fetch(`https://api.beehiiv.com/v2/publications/${pub.id}`, { headers: { 'Authorization': `Bearer ${beehiivKey}` }, signal: AbortSignal.timeout(8000) });
       const d = await r.json();
-      return { name: d.data?.name, subscribers: d.data?.stats?.total_active_subscriptions };
+      const subscribers = d.data?.stats?.total_active_subscriptions;
+      if (typeof subscribers !== 'number') return null;
+      return { name: d.data?.name, subscribers };
     }).then(d => { if (d) result.beehiiv = d; }));
 
   const ytKey = gs('youtube_api_key');
   const ytHandle = gs('widget_youtube_handle');
-  if (gs('widget_youtube_enabled') === '1' && ytKey && ytHandle) {
+  if (ytKey && ytHandle) {
     const handle = ytHandle.startsWith('@') ? ytHandle : `@${ytHandle}`;
     p.push(_wFetch(`youtube:${handle}`, 3600000, async () => {
       const r = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&forHandle=${encodeURIComponent(handle)}&key=${ytKey}`, { signal: AbortSignal.timeout(8000) });
@@ -1259,11 +1263,12 @@ app.get('/api/widgets/data', async (req, res) => {
 
   const etsyKey = gs('etsy_api_key');
   const etsyShop = gs('widget_etsy_shop');
-  if (gs('widget_etsy_enabled') === '1' && etsyKey && etsyShop)
+  if (etsyKey && etsyShop)
     p.push(_wFetch(`etsy:${etsyShop}`, 3600000, async () => {
       const r = await fetch(`https://openapi.etsy.com/v3/application/shops/${etsyShop}`, { headers: { 'x-api-key': etsyKey }, signal: AbortSignal.timeout(8000) });
       const d = await r.json();
-      return { name: d.shop_name, sales: d.transaction_sold_count, listings: d.listing_active_count };
+      if (!d.shop_name) return null;
+      return { name: d.shop_name, sales: d.transaction_sold_count ?? 0, listings: d.listing_active_count ?? 0 };
     }).then(d => { if (d) result.etsy = d; }));
 
   await Promise.allSettled(p);

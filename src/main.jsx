@@ -836,19 +836,19 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         <div style={{fontSize:12,color:D.t3,marginBottom:8}}>{widgetData.github?.total} contributions · last 30 days</div>
                         <div style={{display:'flex',flexWrap:'wrap',gap:3}}>
                           {widgetData.github?.days?.map((count,i)=>(
-                            <div key={i} style={{width:11,height:11,borderRadius:2,background:count===0?'rgba(255,255,255,0.07)':count<3?'#1a7f37':count<6?'#2ea04326':count<9?'#40c463':'#9be9a8',opacity:count===0?1:undefined}}/>
+                            <div key={i} style={{width:11,height:11,borderRadius:2,background:count===0?'rgba(255,255,255,0.07)':count<3?'#1a7f37':count<6?'#2ea043':count<9?'#40c463':'#9be9a8'}}/>
                           ))}
                         </div>
                       </>
                     )}
                     {activePanelId==='w_reddit'&&(
                       <>
-                        <WLabel>r/{widgetData.reddit?.sub}</WLabel>
+                        <WLabel>Reddit — {widgetData.reddit?.sub}</WLabel>
                         <div style={{flex:1,overflowY:'auto',marginTop:2}}>
                           {widgetData.reddit?.posts?.map((post,i)=>(
                             <div key={i} style={{padding:'7px 0',borderBottom:`1px solid ${D.sep}`}}>
                               <div style={{fontSize:13,color:D.t2,fontWeight:500,lineHeight:1.35}}>{post.title}</div>
-                              <div style={{fontSize:11,color:D.t4,marginTop:2}}>{post.score?.toLocaleString()} pts</div>
+                              <div style={{fontSize:11,color:D.t4,marginTop:2}}>{post.sub&&<span style={{color:D.t3,marginRight:6}}>r/{post.sub}</span>}{post.score?.toLocaleString()} pts</div>
                             </div>
                           ))}
                         </div>
@@ -3035,40 +3035,40 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
       </FormGroup>
 
       <FormGroup label="Widgets">
-        {[
-          {id:'quote',label:'Quote of the day',enabled:wQuote,setEnabled:v=>{setWQuote(v);saveSetting('widget_quote_enabled',v?'1':'0');},config:null},
-          {id:'stocks',label:'Stock prices',enabled:wStocks,setEnabled:v=>{setWStocks(v);saveSetting('widget_stocks_enabled',v?'1':'0');},config:(
-            <Inp value={wStocksTickers} onChange={e=>setWStocksTickers(e.target.value)} onBlur={()=>saveSetting('widget_stocks_tickers',wStocksTickers)} placeholder="AAPL, TSLA, SPY" style={{marginTop:8}}/>
-          )},
-          {id:'ph',label:'Product Hunt today',enabled:wPH,setEnabled:v=>{setWPH(v);saveSetting('widget_producthunt_enabled',v?'1':'0');},config:null},
-          {id:'github',label:'GitHub commit graph',enabled:wGithub,setEnabled:v=>{setWGithub(v);saveSetting('widget_github_enabled',v?'1':'0');},config:(
-            <Inp value={wGithubUser} onChange={e=>setWGithubUser(e.target.value)} onBlur={()=>saveSetting('widget_github_username',wGithubUser)} placeholder="username" style={{marginTop:8}}/>
-          )},
-          {id:'reddit',label:'Reddit hot posts',enabled:wReddit,setEnabled:v=>{setWReddit(v);saveSetting('widget_reddit_enabled',v?'1':'0');},config:(
-            <Inp value={wRedditSub} onChange={e=>setWRedditSub(e.target.value)} onBlur={()=>saveSetting('widget_reddit_subreddit',wRedditSub)} placeholder="woodworking" style={{marginTop:8}}/>
-          )},
-          {id:'beehiiv',label:'Beehiiv subscribers',enabled:wBeehiiv,setEnabled:v=>{setWBeehiiv(v);saveSetting('widget_beehiiv_enabled',v?'1':'0');},config:!hasBeehiivKey?<div style={{fontSize:11,color:A.amber,marginTop:6}}>Add Beehiiv key in Integrations above</div>:null},
-          {id:'youtube',label:'YouTube channel',enabled:wYoutube,setEnabled:v=>{setWYoutube(v);saveSetting('widget_youtube_enabled',v?'1':'0');},config:(
-            <div style={{marginTop:8}}>
-              {!hasYoutubeKey&&<div style={{fontSize:11,color:A.amber,marginBottom:6}}>Add YouTube key in Integrations above</div>}
-              <Inp value={wYoutubeHandle} onChange={e=>setWYoutubeHandle(e.target.value)} onBlur={()=>saveSetting('widget_youtube_handle',wYoutubeHandle)} placeholder="@YourChannel"/>
-            </div>
-          )},
-          {id:'etsy',label:'Etsy shop',enabled:wEtsy,setEnabled:v=>{setWEtsy(v);saveSetting('widget_etsy_enabled',v?'1':'0');},config:(
-            <div style={{marginTop:8}}>
-              {!hasEtsyKey&&<div style={{fontSize:11,color:A.amber,marginBottom:6}}>Add Etsy key in Integrations above</div>}
-              <Inp value={wEtsyShop} onChange={e=>setWEtsyShop(e.target.value)} onBlur={()=>saveSetting('widget_etsy_shop',wEtsyShop)} placeholder="YourShopName"/>
-            </div>
-          )},
-        ].map((w,i,arr)=>(
-          <div key={w.id} style={{padding:'12px 16px',borderBottom:i<arr.length-1?`1px solid ${A.sep}`:'none'}}>
-            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-              <span style={{fontSize:14,fontWeight:500,color:A.label1}}>{w.label}</span>
-              <Toggle checked={w.enabled} onChange={w.setEnabled}/>
-            </div>
-            {w.enabled&&w.config}
-          </div>
-        ))}
+        <div style={{padding:'12px 16px',display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:`1px solid ${A.sep}`}}>
+          <span style={{fontSize:14,fontWeight:500,color:A.label1}}>Quote of the day</span>
+          <Toggle checked={wQuote} onChange={v=>{setWQuote(v);saveSetting('widget_quote_enabled',v?'1':'0');}}/>
+        </div>
+        <div style={{padding:'12px 16px',display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:`1px solid ${A.sep}`}}>
+          <span style={{fontSize:14,fontWeight:500,color:A.label1}}>Product Hunt today</span>
+          <Toggle checked={wPH} onChange={v=>{setWPH(v);saveSetting('widget_producthunt_enabled',v?'1':'0');}}/>
+        </div>
+        <div style={{padding:'12px 16px',borderBottom:`1px solid ${A.sep}`}}>
+          <div style={{fontSize:13,fontWeight:500,color:A.label2,marginBottom:8}}>Stock tickers</div>
+          <Inp value={wStocksTickers} onChange={e=>setWStocksTickers(e.target.value)} onBlur={()=>saveSetting('widget_stocks_tickers',wStocksTickers)} placeholder="AAPL, TSLA, SPY — leave blank to disable"/>
+        </div>
+        <div style={{padding:'12px 16px',borderBottom:`1px solid ${A.sep}`}}>
+          <div style={{fontSize:13,fontWeight:500,color:A.label2,marginBottom:8}}>GitHub username</div>
+          <Inp value={wGithubUser} onChange={e=>setWGithubUser(e.target.value)} onBlur={()=>saveSetting('widget_github_username',wGithubUser)} placeholder="username — leave blank to disable"/>
+        </div>
+        <div style={{padding:'12px 16px',borderBottom:`1px solid ${A.sep}`}}>
+          <div style={{fontSize:13,fontWeight:500,color:A.label2,marginBottom:8}}>Reddit subreddits</div>
+          <Inp value={wRedditSub} onChange={e=>setWRedditSub(e.target.value)} onBlur={()=>saveSetting('widget_reddit_subreddit',wRedditSub)} placeholder="woodworking, DIY, esp32 — leave blank to disable"/>
+        </div>
+        <div style={{padding:'12px 16px',borderBottom:`1px solid ${A.sep}`}}>
+          <div style={{fontSize:13,fontWeight:500,color:A.label2,marginBottom:4}}>Beehiiv</div>
+          <div style={{fontSize:12,color:hasBeehiivKey?A.green:A.label5}}>{hasBeehiivKey?'Active — key saved in Integrations':'Add Beehiiv key in Integrations to enable'}</div>
+        </div>
+        <div style={{padding:'12px 16px',borderBottom:`1px solid ${A.sep}`}}>
+          <div style={{fontSize:13,fontWeight:500,color:A.label2,marginBottom:8}}>YouTube channel handle</div>
+          {!hasYoutubeKey&&<div style={{fontSize:11,color:A.amber,marginBottom:6}}>Add YouTube key in Integrations to enable</div>}
+          <Inp value={wYoutubeHandle} onChange={e=>setWYoutubeHandle(e.target.value)} onBlur={()=>saveSetting('widget_youtube_handle',wYoutubeHandle)} placeholder="@YourChannel — leave blank to disable" disabled={!hasYoutubeKey}/>
+        </div>
+        <div style={{padding:'12px 16px'}}>
+          <div style={{fontSize:13,fontWeight:500,color:A.label2,marginBottom:8}}>Etsy shop name</div>
+          {!hasEtsyKey&&<div style={{fontSize:11,color:A.amber,marginBottom:6}}>Add Etsy key in Integrations to enable</div>}
+          <Inp value={wEtsyShop} onChange={e=>setWEtsyShop(e.target.value)} onBlur={()=>saveSetting('widget_etsy_shop',wEtsyShop)} placeholder="YourShopName — leave blank to disable" disabled={!hasEtsyKey}/>
+        </div>
       </FormGroup>
 
     </div>

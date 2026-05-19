@@ -684,7 +684,7 @@ app.post('/api/push/test', requireAuth, async (req, res) => {
 });
 
 // ── Routes: Settings ──────────────────────────────────────────────────────────
-const SETTINGS_SENSITIVE = new Set(['email_webhook_secret','anthropic_api_key','ai_api_key','jwt_secret','vapid_public','vapid_private','admin_pin_hash','resend_api_key','ha_webhook_secret','smart_home_token','ha_token','homey_token']);
+const SETTINGS_SENSITIVE = new Set(['email_webhook_secret','anthropic_api_key','ai_api_key','beehiiv_api_key','jwt_secret','vapid_public','vapid_private','admin_pin_hash','resend_api_key','ha_webhook_secret','smart_home_token','ha_token','homey_token']);
 app.get('/api/settings', (req, res) => {
   const rows = db.prepare('SELECT key,value FROM settings').all();
   res.json(Object.fromEntries(rows.filter(r=>!SETTINGS_SENSITIVE.has(r.key)).map(r=>[r.key,r.value])));
@@ -716,6 +716,20 @@ app.put('/api/settings/ai-key', requireAdmin, (req, res) => {
   const upd = db.prepare('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)');
   if (provider) upd.run('ai_provider', String(provider));
   if (key !== undefined) upd.run('ai_api_key', String(key));
+  res.json({ ok: true });
+});
+
+app.get('/api/settings/integrations', requireAdmin, (req, res) => {
+  const get = k => db.prepare('SELECT value FROM settings WHERE key=?').get(k)?.value || '';
+  res.json({
+    has_anthropic: !!(get('anthropic_api_key') || process.env.ANTHROPIC_API_KEY),
+    has_beehiiv:   !!get('beehiiv_api_key'),
+  });
+});
+app.put('/api/settings/integrations', requireAdmin, (req, res) => {
+  const upd = db.prepare('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)');
+  if (req.body.anthropic_api_key !== undefined) upd.run('anthropic_api_key', String(req.body.anthropic_api_key));
+  if (req.body.beehiiv_api_key   !== undefined) upd.run('beehiiv_api_key',   String(req.body.beehiiv_api_key));
   res.json({ ok: true });
 });
 

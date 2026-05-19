@@ -2314,6 +2314,11 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [homeyHasToken,setHomeyHasToken]=useState(false);
   const [homeySaving,setHomeySaving]=useState(false);
   const [smTesting,setSmTesting]=useState(false);
+  const [anthropicKey,setAnthropicKey]=useState('');
+  const [hasAnthropicKey,setHasAnthropicKey]=useState(false);
+  const [beehiivKey,setBeehiivKey]=useState('');
+  const [hasBeehiivKey,setHasBeehiivKey]=useState(false);
+  const [intSaving,setIntSaving]=useState(false);
   const [qaList,setQaList]=useState([]);
   const [qaDrawer,setQaDrawer]=useState(false);
   const [qaEdit,setQaEdit]=useState(null);
@@ -2342,6 +2347,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
     }).catch(()=>{});
     api.get('/api/ha/secret').then(d=>{if(d.secret) setHaSecret(d.secret);}).catch(()=>{});
     fetch('/api/ha/smart-home-status',{headers:{..._authHdr()}}).then(r=>r.json()).then(d=>{if(d.ha){if(d.ha.url)setHaUrl(d.ha.url);if(d.ha.hasToken)setHaHasToken(true);}if(d.homey){if(d.homey.url)setHomeyUrl(d.homey.url);if(d.homey.hasToken)setHomeyHasToken(true);}}).catch(()=>{});
+    api.get('/api/settings/integrations').then(d=>{setHasAnthropicKey(!!d.has_anthropic);setHasBeehiivKey(!!d.has_beehiiv);}).catch(()=>{});
     api.get('/api/quick-actions').then(d=>{if(Array.isArray(d)) setQaList(d);}).catch(()=>{});
   },[]);
   const geocodeCity=async()=>{
@@ -2829,6 +2835,35 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
             }}>Refresh secret</Btn>
           </div>
           <div style={{fontSize:12,color:A.label5,marginTop:10}}>Events appear on your dashboard for 24 hours. The <code style={{fontSize:11}}>icon</code> field is optional — any emoji works.</div>
+        </div>
+      </FormGroup>
+
+      <FormGroup label="Integrations">
+        <div style={{padding:'14px 16px',borderBottom:`1px solid ${A.sep}`}}>
+          <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:8}}>Anthropic (Claude usage widget)</div>
+          <div style={{marginBottom:10}}><Inp value={anthropicKey} onChange={e=>setAnthropicKey(e.target.value)} placeholder={hasAnthropicKey?'Saved — paste to replace':'sk-ant-…'} type="password"/></div>
+          <Btn sm onClick={async()=>{
+            if(!anthropicKey.trim()){toastAdd('Paste a key first','red');return;}
+            setIntSaving(true);
+            const r=await fetch('/api/settings/integrations',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify({anthropic_api_key:anthropicKey.trim()})}).then(x=>x.json()).catch(()=>({error:'Failed'}));
+            setIntSaving(false);
+            if(r.ok){setHasAnthropicKey(true);setAnthropicKey('');toastAdd('Saved');}
+            else toastAdd(r.error||'Save failed','red');
+          }} disabled={intSaving}>{intSaving?'Saving…':'Save'}</Btn>
+          <div style={{fontSize:12,color:A.label5,marginTop:8}}>Powers the AI usage meter on your display. Get a key at console.anthropic.com.</div>
+        </div>
+        <div style={{padding:'14px 16px'}}>
+          <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:8}}>Beehiiv (newsletter stats)</div>
+          <div style={{marginBottom:10}}><Inp value={beehiivKey} onChange={e=>setBeehiivKey(e.target.value)} placeholder={hasBeehiivKey?'Saved — paste to replace':'Beehiiv API key'} type="password"/></div>
+          <Btn sm onClick={async()=>{
+            if(!beehiivKey.trim()){toastAdd('Paste a key first','red');return;}
+            setIntSaving(true);
+            const r=await fetch('/api/settings/integrations',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify({beehiiv_api_key:beehiivKey.trim()})}).then(x=>x.json()).catch(()=>({error:'Failed'}));
+            setIntSaving(false);
+            if(r.ok){setHasBeehiivKey(true);setBeehiivKey('');toastAdd('Saved');}
+            else toastAdd(r.error||'Save failed','red');
+          }} disabled={intSaving}>{intSaving?'Saving…':'Save'}</Btn>
+          <div style={{fontSize:12,color:A.label5,marginTop:8}}>Shows subscriber count on your display. Get a key at app.beehiiv.com → Settings → API.</div>
         </div>
       </FormGroup>
 

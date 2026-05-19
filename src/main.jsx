@@ -411,7 +411,7 @@ function FamilyScreen({members,setMembers,toastAdd}){
 }
 
 /* ── Display Mode ────────────────────────────────────────────────────── */
-function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,weather,clockFormat='12h',nightModeStart='23:00',nightModeEnd='06:00',goals=[],notes=[],polls=[]}){
+function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,weather,clockFormat='12h',nightModeStart='23:00',nightModeEnd='06:00',goals=[],notes=[],polls=[],rotationMs=10000}){
   const isMobile=useIsMobile();
   const now=useClock();
   const [liveGames,setLiveGames]=useState([]);
@@ -489,7 +489,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
     return()=>{clearInterval(id);clearTimeout(newsFadeTimer.current);};
   },[news.length]);
   const [centerIdx,setCenterIdx]=useState(0);
-  useEffect(()=>{const id=setInterval(()=>setCenterIdx(i=>i+1),10000);return()=>clearInterval(id);},[]);
+  useEffect(()=>{const id=setInterval(()=>setCenterIdx(i=>i+1),rotationMs);return()=>clearInterval(id);},[rotationMs]);
   const h12=now.getHours()%12||12;
   const min=String(now.getMinutes()).padStart(2,'0');
   const ampm=now.getHours()>=12?'PM':'AM';
@@ -2478,7 +2478,7 @@ function WebhookSecretPanel({toastAdd}){
 }
 
 /* ── Settings ────────────────────────────────────────────────────────── */
-function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setPhotos,clockFormat,setClockFormat,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd,setRefreshMs,parseRefreshMs,setQuickActions}){
+function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setPhotos,clockFormat,setClockFormat,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd,setRefreshMs,parseRefreshMs,setQuickActions,setRotationMs}){
   const isMobile=useIsMobile();
   const [weatherCity,setWeatherCity]=useState('');
   const [weatherLat,setWeatherLat]=useState('33.749');
@@ -2550,6 +2550,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
       if(st.forwarding_address) setFwdAddress(st.forwarding_address);
       if(st.temperature_unit) setTemp(st.temperature_unit==='C'?'°C':'°F');
       if(st.refresh_interval) setRefresh(st.refresh_interval);
+      if(st.widget_rotation_sec) setRotationSec(st.widget_rotation_sec);
       if(st.resend_from) setResendFrom(st.resend_from);
       if(st.email_to) setEmailTo(st.email_to);
       if(st.daily_summary_time) setSummaryTime(st.daily_summary_time);
@@ -2600,6 +2601,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   };
   const [temp,setTemp]=useState('°F');
   const [refresh,setRefresh]=useState('1min');
+  const [rotationSec,setRotationSec]=useState('10');
 
   const saveSetting=(key,value)=>api.put('/api/settings',{[key]:value}).then(r=>{if(r.error)toastAdd(r.error,'red');else toastAdd('Saved');}).catch(()=>toastAdd('Save failed','red'));
   const [pushStatus,setPushStatus]=useState('idle');
@@ -2826,6 +2828,12 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
           <span style={{fontSize:15,color:A.label1}}>Refresh interval</span>
           <select value={refresh} onChange={e=>{const v=e.target.value;setRefresh(v);saveSetting('refresh_interval',v);if(setRefreshMs)setRefreshMs(parseRefreshMs(v));}} style={{background:A.inputBg,border:'none',borderRadius:A.rXs,padding:'6px 10px',fontSize:14,color:A.label1,cursor:'pointer'}}>
             <option value="30s">30 seconds</option><option value="1min">1 minute</option><option value="5min">5 minutes</option>
+          </select>
+        </div>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px',borderTop:`1px solid ${A.sep}`}}>
+          <span style={{fontSize:15,color:A.label1}}>Panel rotation speed</span>
+          <select value={rotationSec} onChange={e=>{const v=e.target.value;setRotationSec(v);saveSetting('widget_rotation_sec',v);if(setRotationMs)setRotationMs((parseInt(v)||10)*1000);}} style={{background:A.inputBg,border:'none',borderRadius:A.rXs,padding:'6px 10px',fontSize:14,color:A.label1,cursor:'pointer'}}>
+            <option value="5">5 seconds</option><option value="8">8 seconds</option><option value="10">10 seconds</option><option value="15">15 seconds</option><option value="20">20 seconds</option><option value="30">30 seconds</option>
           </select>
         </div>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px',borderTop:`1px solid ${A.sep}`}}>
@@ -3613,7 +3621,7 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
     notes:      <NotesScreen notes={notes} setNotes={setNotes} toastAdd={toastAdd}/>,
     polls:      <PollsScreen polls={polls} setPolls={setPolls} toastAdd={toastAdd}/>,
     inbox:      <InboxScreen toastAdd={toastAdd} events={events} setEvents={setEvents} setInboxCount={setInboxCount}/>,
-    settings:   <SettingsScreen toastAdd={toastAdd} icsSources={icsSources} setIcsSources={setIcsSources} onDisplay={onDisplay} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} setQuickActions={setQuickActions}/>,
+    settings:   <SettingsScreen toastAdd={toastAdd} icsSources={icsSources} setIcsSources={setIcsSources} onDisplay={onDisplay} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} setQuickActions={setQuickActions} setRotationMs={setRotationMs}/>,
   };
 
   if(isMobile){
@@ -4002,6 +4010,7 @@ function App(){
   const [nightModeStart,setNightModeStart]=useState('23:00');
   const [nightModeEnd,setNightModeEnd]=useState('06:00');
   const [refreshMs,setRefreshMs]=useState(60000);
+  const [rotationMs,setRotationMs]=useState(10000);
   const [weather,setWeather]=useState(null);
   const [loading,setLoading]=useState(true);
   const [wizardDone,setWizardDone]=useState(null); // null=checking, false=show wizard, true=done
@@ -4084,6 +4093,7 @@ function App(){
         if(s.night_mode_start) setNightModeStart(s.night_mode_start);
         if(s.night_mode_end) setNightModeEnd(s.night_mode_end);
         if(s.refresh_interval) setRefreshMs(parseRefreshMs(s.refresh_interval));
+        if(s.widget_rotation_sec) setRotationMs((parseInt(s.widget_rotation_sec)||10)*1000);
       }
       setLoading(false);
     });
@@ -4139,7 +4149,7 @@ function App(){
   );
 
   return mode==='display'
-    ?<DisplayMode onManage={()=>setMode('manage')} events={events} chores={chores} setChores={setChores} meals={meals} grocery={grocery} countdowns={countdowns} clockFormat={clockFormat} weather={weather} nightModeStart={nightModeStart} nightModeEnd={nightModeEnd} goals={goals} notes={notes} polls={polls}/>
+    ?<DisplayMode onManage={()=>setMode('manage')} events={events} chores={chores} setChores={setChores} meals={meals} grocery={grocery} countdowns={countdowns} clockFormat={clockFormat} weather={weather} nightModeStart={nightModeStart} nightModeEnd={nightModeEnd} goals={goals} notes={notes} polls={polls} rotationMs={rotationMs}/>
     :<ManageMode onDisplay={()=>setMode('display')} onLogout={handleLogout} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources} inboxCount={inboxCount} setInboxCount={setInboxCount} countdowns={countdowns} setCountdowns={setCountdowns} members={members} setMembers={setMembers} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} weather={weather} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} goals={goals} setGoals={setGoals} notes={notes} setNotes={setNotes} polls={polls} setPolls={setPolls} quickActions={quickActions} setQuickActions={setQuickActions}/>;
 }
 

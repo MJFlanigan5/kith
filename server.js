@@ -1181,7 +1181,9 @@ async function _wFetch(key, ttlMs, fn) {
   if (_wCache[key] && Date.now() - _wCache[key].at < ttlMs) return _wCache[key].data;
   try {
     const data = await fn();
-    _wCache[key] = { data, at: Date.now() };
+    // Don't cache null or empty arrays — let them retry on next request
+    const cacheable = data !== null && data !== undefined && !(Array.isArray(data) && data.length === 0);
+    if (cacheable) _wCache[key] = { data, at: Date.now() };
     return data;
   } catch { return _wCache[key]?.data ?? null; }
 }
@@ -1201,14 +1203,21 @@ app.get('/api/widgets/data', async (req, res) => {
   if (tickers)
     p.push(_wFetch(`stocks:${tickers}`, 300000, async () => {
       const syms = tickers.split(',').map(s => s.trim().toUpperCase()).filter(Boolean).slice(0, 5).join(',');
-      const r = await fetch(`https://query1.finance.yahoo.com/v7/finance/quote?symbols=${syms}&fields=symbol,regularMarketPrice,regularMarketChangePercent,shortName`, {
-        headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(8000),
+      const r = await fetch(`https://query2.finance.yahoo.com/v8/finance/quote?symbols=${syms}`, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'application/json',
+          'Referer': 'https://finance.yahoo.com/',
+        },
+        signal: AbortSignal.timeout(8000),
       });
+      if (!r.ok) return null;
       const d = await r.json();
-      return (d.quoteResponse?.result || []).map(q => ({
+      const results = (d.quoteResponse?.result || []).map(q => ({
         ticker: q.symbol, price: q.regularMarketPrice?.toFixed(2),
         change: q.regularMarketChangePercent?.toFixed(2),
       }));
+      return results.length ? results : null;
     }).then(d => { if (d?.length) result.stocks = d; }));
 
   if (gs('widget_producthunt_enabled') === '1')
@@ -1224,9 +1233,11 @@ app.get('/api/widgets/data', async (req, res) => {
   const ghUser = gs('widget_github_username');
   if (ghUser)
     p.push(_wFetch(`github:${ghUser}`, 3600000, async () => {
-      const r = await fetch(`https://github-contributions-api.jogruber.de/v4/${ghUser}?y=last`, { signal: AbortSignal.timeout(8000) });
+      const r = await fetch(`https://github-contributions-api.jogruber.de/v4/${ghUser}?y=last`, { signal: AbortSignal.timeout(10000) });
+      if (!r.ok) return null;
       const d = await r.json();
       const days = (d.contributions || []).slice(-30);
+      if (!days.length) return null;
       return { username: ghUser, days: days.map(c => c.count), total: days.reduce((s, c) => s + c.count, 0) };
     }).then(d => { if (d) result.github = d; }));
 

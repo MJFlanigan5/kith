@@ -9,6 +9,7 @@ services:
     environment:
       - PORT=7400
       - DATA_DIR=/data
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
 
 volumes:
   kith-data:

@@ -1213,10 +1213,12 @@ app.get('/api/widgets/data', async (req, res) => {
       });
       if (!r.ok) return null;
       const d = await r.json();
-      const results = (d.quoteResponse?.result || []).map(q => ({
-        ticker: q.symbol, price: q.regularMarketPrice?.toFixed(2),
-        change: q.regularMarketChangePercent?.toFixed(2),
-      }));
+      const results = (d.quoteResponse?.result || [])
+        .filter(q => q.regularMarketPrice !== undefined && q.regularMarketPrice !== null)
+        .map(q => ({
+          ticker: q.symbol, price: q.regularMarketPrice.toFixed(2),
+          change: q.regularMarketChangePercent?.toFixed(2) ?? '0.00',
+        }));
       return results.length ? results : null;
     }).then(d => { if (d?.length) result.stocks = d; }));
 
@@ -1290,7 +1292,8 @@ app.get('/api/widgets/data', async (req, res) => {
   if (teslaKey)
     p.push(_wFetch(`teslemetry`, 60000, async () => {
       // Auto-discover energy site ID
-      let siteId = _wCache['teslemetry:site_id']?.data;
+      const _sid = _wCache['teslemetry:site_id'];
+      let siteId = (_sid && Date.now() - _sid.at < 86400000) ? _sid.data : null;
       if (!siteId) {
         const pr = await fetch('https://api.teslemetry.com/api/1/products', {
           headers: { 'Authorization': `Bearer ${teslaKey}` }, signal: AbortSignal.timeout(8000),
@@ -1343,28 +1346,29 @@ app.get('/api/widgets/data', async (req, res) => {
 });
 
 // ── Routes: Spotify now-playing (via Home Assistant) ─────────────────────────
+// Separate cache: only cache when playing so pause/stop is detected immediately
+let _spotifyCache = null; let _spotifyCacheAt = 0;
 app.get('/api/spotify/now-playing', requireAdmin, async (req, res) => {
   try {
     const haUrl = gs('ha_url').replace(/\/$/, '');
     const haToken = gs('ha_token');
     const entity = gs('ha_spotify_entity');
     if (!haUrl || !haToken || !entity) return res.json({ playing: false });
-    const data = await _wFetch('spotify:now_playing', 10000, async () => {
-      const r = await fetch(`${haUrl}/api/states/${entity}`, {
-        headers: { Authorization: `Bearer ${haToken}` },
-        signal: AbortSignal.timeout(5000),
-      });
-      if (!r.ok) return { playing: false };
-      const d = await r.json();
-      if (d.state !== 'playing') return { playing: false };
-      return {
-        playing: true,
-        title: d.attributes?.media_title || '',
-        artist: d.attributes?.media_artist || '',
-        albumArt: d.attributes?.entity_picture ? `${haUrl}${d.attributes.entity_picture}` : null,
-      };
+    if (_spotifyCache?.playing && Date.now() - _spotifyCacheAt < 10000) return res.json(_spotifyCache);
+    const r = await fetch(`${haUrl}/api/states/${entity}`, {
+      headers: { Authorization: `Bearer ${haToken}` }, signal: AbortSignal.timeout(5000),
     });
-    res.json(data || { playing: false });
+    if (!r.ok) return res.json({ playing: false });
+    const d = await r.json();
+    if (d.state !== 'playing') { _spotifyCache = null; return res.json({ playing: false }); }
+    _spotifyCache = {
+      playing: true,
+      title: d.attributes?.media_title || '',
+      artist: d.attributes?.media_artist || '',
+      albumArt: d.attributes?.entity_picture ? `${haUrl}${d.attributes.entity_picture}` : null,
+    };
+    _spotifyCacheAt = Date.now();
+    res.json(_spotifyCache);
   } catch { res.json({ playing: false }); }
 });
 

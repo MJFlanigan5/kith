@@ -1090,36 +1090,22 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
               </div>
             </>
           )}
+          {nowPlaying.playing&&(
+            <>
+              {(news.length>0||allSmartEvents.length>0||liveGames.length>0)&&<span style={{color:D.sep,flexShrink:0}}>·</span>}
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="#1DB954" style={{flexShrink:0}}>
+                <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm4.586 14.424a.624.624 0 01-.857.207c-2.348-1.435-5.304-1.76-8.785-.964a.624.624 0 01-.277-1.219c3.809-.87 7.076-.496 9.712 1.119a.625.625 0 01.207.857zm1.223-2.722a.78.78 0 01-1.072.258c-2.687-1.652-6.785-2.131-9.965-1.166a.78.78 0 01-.973-.519.781.781 0 01.518-.973c3.632-1.102 8.147-.568 11.234 1.328a.78.78 0 01.258 1.072zm.105-2.835C14.692 8.95 9.375 8.775 6.297 9.71a.937.937 0 11-.543-1.794c3.527-1.07 9.393-.862 13.097 1.329a.937.937 0 01-.937 1.622z"/>
+              </svg>
+              <span style={{fontSize:12,color:'#1DB954',fontWeight:600,flexShrink:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:'28%'}}>
+                {nowPlaying.title}{nowPlaying.artist?` · ${nowPlaying.artist}`:''}
+              </span>
+            </>
+          )}
         </div>
         <button onClick={onManage} style={{flexShrink:0,background:'rgba(255,255,255,0.08)',color:D.t2,border:'1px solid rgba(255,255,255,0.12)',borderRadius:A.rPill,padding:'9px 20px',fontSize:13,fontWeight:500,cursor:'pointer',transition:'background .15s'}}
           onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.13)'}
           onMouseLeave={e=>e.currentTarget.style.background='rgba(255,255,255,0.08)'}
         >Manage</button>
-      </div>
-
-      {/* Now playing bar — slides up when Spotify is active */}
-      <div style={{position:'fixed',bottom:0,left:0,right:0,zIndex:50,transform:nowPlaying.playing?'translateY(0)':'translateY(100%)',opacity:nowPlaying.playing?1:0,transition:'transform .5s cubic-bezier(.4,0,.2,1),opacity .5s cubic-bezier(.4,0,.2,1)',background:'rgba(18,18,18,0.88)',backdropFilter:'blur(24px) saturate(180%)',borderTop:'1px solid rgba(255,255,255,0.07)',padding:'0 24px',height:72,display:'flex',alignItems:'center',gap:14,pointerEvents:'none'}}>
-        {nowPlaying.albumArt&&(
-          <img src={nowPlaying.albumArt} alt="" style={{width:48,height:48,borderRadius:6,objectFit:'cover',flexShrink:0,boxShadow:'0 2px 12px rgba(0,0,0,0.4)'}}/>
-        )}
-        <div style={{flex:1,minWidth:0,overflow:'hidden'}}>
-          {nowPlaying.title&&(
-            <div style={{overflow:'hidden',whiteSpace:'nowrap'}}>
-              {nowPlaying.title.length>28?(
-                <div style={{display:'inline-block',whiteSpace:'nowrap',animation:'marqueeScroll 18s linear infinite'}}>
-                  <span style={{fontSize:15,fontWeight:600,color:'rgba(255,255,255,0.92)',letterSpacing:'-.01em'}}>{nowPlaying.title}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
-                  <span style={{fontSize:15,fontWeight:600,color:'rgba(255,255,255,0.92)',letterSpacing:'-.01em'}}>{nowPlaying.title}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
-                </div>
-              ):(
-                <span style={{fontSize:15,fontWeight:600,color:'rgba(255,255,255,0.92)',letterSpacing:'-.01em'}}>{nowPlaying.title}</span>
-              )}
-            </div>
-          )}
-          {nowPlaying.artist&&<div style={{fontSize:12,color:'rgba(255,255,255,0.45)',marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nowPlaying.artist}</div>}
-        </div>
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="#1DB954" style={{flexShrink:0,opacity:.9}}>
-          <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm4.586 14.424a.624.624 0 01-.857.207c-2.348-1.435-5.304-1.76-8.785-.964a.624.624 0 01-.277-1.219c3.809-.87 7.076-.496 9.712 1.119a.625.625 0 01.207.857zm1.223-2.722a.78.78 0 01-1.072.258c-2.687-1.652-6.785-2.131-9.965-1.166a.78.78 0 01-.973-.519.781.781 0 01.518-.973c3.632-1.102 8.147-.568 11.234 1.328a.78.78 0 01.258 1.072zm.105-2.835C14.692 8.95 9.375 8.775 6.297 9.71a.937.937 0 11-.543-1.794c3.527-1.07 9.393-.862 13.097 1.329a.937.937 0 01-.937 1.622z"/>
-        </svg>
       </div>
     </div>
   );

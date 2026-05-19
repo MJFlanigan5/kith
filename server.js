@@ -1185,9 +1185,9 @@ async function _wFetch(key, ttlMs, fn) {
     return data;
   } catch { return _wCache[key]?.data ?? null; }
 }
+const gs = k => db.prepare('SELECT value FROM settings WHERE key=?').get(k)?.value || '';
 
 app.get('/api/widgets/data', async (req, res) => {
-  const gs = k => db.prepare('SELECT value FROM settings WHERE key=?').get(k)?.value || '';
   const result = {};
   const p = [];
 

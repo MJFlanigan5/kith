@@ -1153,6 +1153,36 @@ app.post('/api/quick-actions/trigger', requireAuth, async (req, res) => {
   }
 });
 
+// ── Routes: Claude / AI usage ─────────────────────────────────────────────────
+let _claudeUsageCache = null;
+let _claudeUsageCacheAt = 0;
+
+app.get('/api/claude-usage', async (req, res) => {
+  if (_claudeUsageCache && Date.now() - _claudeUsageCacheAt < 60000) {
+    return res.json(_claudeUsageCache);
+  }
+  const apiKey = db.prepare("SELECT value FROM settings WHERE key IN ('ai_api_key','anthropic_api_key') AND value != '' ORDER BY key LIMIT 1").get()?.value
+    || process.env.ANTHROPIC_API_KEY || '';
+  if (!apiKey) return res.json({ available: false });
+  try {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 1, messages: [{ role: 'user', content: '.' }] }),
+      signal: AbortSignal.timeout(10000),
+    });
+    const sessionPct = Math.round(parseFloat(r.headers.get('anthropic-ratelimit-unified-5h-utilization') || '0') * 100);
+    const resetAt = r.headers.get('anthropic-ratelimit-unified-5h-reset');
+    const tokensRemaining = parseInt(r.headers.get('anthropic-ratelimit-unified-5h-remaining') || r.headers.get('anthropic-ratelimit-tokens-remaining') || '0');
+    const resetMins = resetAt ? Math.max(0, Math.round((new Date(resetAt) - Date.now()) / 60000)) : null;
+    _claudeUsageCache = { available: true, session_pct: sessionPct, tokens_remaining: tokensRemaining, reset_mins: resetMins };
+    _claudeUsageCacheAt = Date.now();
+    res.json(_claudeUsageCache);
+  } catch {
+    res.json({ available: false });
+  }
+});
+
 // ── Routes: Photos (screensaver) ──────────────────────────────────────────────
 app.get('/api/photos', (req, res) => {
   res.json(db.prepare('SELECT * FROM photos ORDER BY created_at DESC').all());

@@ -462,6 +462,14 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
     return()=>clearInterval(id);
   },[]);
   const allSmartEvents=useMemo(()=>[...smEvents,...haEvents].slice(0,10),[smEvents,haEvents]);
+  const [claudeUsage,setClaudeUsage]=useState(null);
+  useEffect(()=>{
+    const load=()=>api.get('/api/claude-usage').then(d=>setClaudeUsage(d)).catch(()=>{});
+    load();
+    const id=setInterval(load,60000);
+    return()=>clearInterval(id);
+  },[]);
+
   const [newsIdx,setNewsIdx]=useState(0);
   const [newsVisible,setNewsVisible]=useState(true);
   const newsFadeTimer=useRef(null);
@@ -887,6 +895,15 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                   </span>
                 ))}
               </div>
+            </>
+          )}
+          {claudeUsage?.available&&(
+            <>
+              {(news.length>0||allSmartEvents.length>0||liveGames.length>0)&&<span style={{color:D.sep,flexShrink:0}}>·</span>}
+              <div style={{width:6,height:6,borderRadius:'50%',background:'#8b5cf6',flexShrink:0}}/>
+              <span style={{fontSize:12,color:D.t3,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>
+                AI {claudeUsage.session_pct}%{claudeUsage.reset_mins!=null?` · ${claudeUsage.reset_mins}m`:''}
+              </span>
             </>
           )}
         </div>

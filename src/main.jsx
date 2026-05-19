@@ -462,6 +462,13 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
     return()=>clearInterval(id);
   },[]);
   const allSmartEvents=useMemo(()=>[...smEvents,...haEvents].slice(0,10),[smEvents,haEvents]);
+  const [nowPlaying,setNowPlaying]=useState({playing:false});
+  useEffect(()=>{
+    const load=()=>api.get('/api/spotify/now-playing').then(d=>setNowPlaying(d||{playing:false})).catch(()=>{});
+    load();
+    const id=setInterval(load,12000);
+    return()=>clearInterval(id);
+  },[]);
   const [widgetData,setWidgetData]=useState({});
   useEffect(()=>{
     const load=()=>api.get('/api/widgets/data').then(d=>setWidgetData(d||{})).catch(()=>{});
@@ -1088,6 +1095,31 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
           onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.13)'}
           onMouseLeave={e=>e.currentTarget.style.background='rgba(255,255,255,0.08)'}
         >Manage</button>
+      </div>
+
+      {/* Now playing bar — slides up when Spotify is active */}
+      <div style={{position:'fixed',bottom:0,left:0,right:0,zIndex:50,transform:nowPlaying.playing?'translateY(0)':'translateY(100%)',opacity:nowPlaying.playing?1:0,transition:'transform .5s cubic-bezier(.4,0,.2,1),opacity .5s cubic-bezier(.4,0,.2,1)',background:'rgba(18,18,18,0.88)',backdropFilter:'blur(24px) saturate(180%)',borderTop:'1px solid rgba(255,255,255,0.07)',padding:'0 24px',height:72,display:'flex',alignItems:'center',gap:14,pointerEvents:'none'}}>
+        {nowPlaying.albumArt&&(
+          <img src={nowPlaying.albumArt} alt="" style={{width:48,height:48,borderRadius:6,objectFit:'cover',flexShrink:0,boxShadow:'0 2px 12px rgba(0,0,0,0.4)'}}/>
+        )}
+        <div style={{flex:1,minWidth:0,overflow:'hidden'}}>
+          {nowPlaying.title&&(
+            <div style={{overflow:'hidden',whiteSpace:'nowrap'}}>
+              {nowPlaying.title.length>28?(
+                <div style={{display:'inline-block',whiteSpace:'nowrap',animation:'marqueeScroll 18s linear infinite'}}>
+                  <span style={{fontSize:15,fontWeight:600,color:'rgba(255,255,255,0.92)',letterSpacing:'-.01em'}}>{nowPlaying.title}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
+                  <span style={{fontSize:15,fontWeight:600,color:'rgba(255,255,255,0.92)',letterSpacing:'-.01em'}}>{nowPlaying.title}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
+                </div>
+              ):(
+                <span style={{fontSize:15,fontWeight:600,color:'rgba(255,255,255,0.92)',letterSpacing:'-.01em'}}>{nowPlaying.title}</span>
+              )}
+            </div>
+          )}
+          {nowPlaying.artist&&<div style={{fontSize:12,color:'rgba(255,255,255,0.45)',marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nowPlaying.artist}</div>}
+        </div>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="#1DB954" style={{flexShrink:0,opacity:.9}}>
+          <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm4.586 14.424a.624.624 0 01-.857.207c-2.348-1.435-5.304-1.76-8.785-.964a.624.624 0 01-.277-1.219c3.809-.87 7.076-.496 9.712 1.119a.625.625 0 01.207.857zm1.223-2.722a.78.78 0 01-1.072.258c-2.687-1.652-6.785-2.131-9.965-1.166a.78.78 0 01-.973-.519.781.781 0 01.518-.973c3.632-1.102 8.147-.568 11.234 1.328a.78.78 0 01.258 1.072zm.105-2.835C14.692 8.95 9.375 8.775 6.297 9.71a.937.937 0 11-.543-1.794c3.527-1.07 9.393-.862 13.097 1.329a.937.937 0 01-.937 1.622z"/>
+        </svg>
       </div>
     </div>
   );
@@ -2486,6 +2518,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [haToken,setHaToken]=useState('');
   const [haHasToken,setHaHasToken]=useState(false);
   const [haSaving,setHaSaving]=useState(false);
+  const [haSpotifyEntity,setHaSpotifyEntity]=useState('');
   const [homeyUrl,setHomeyUrl]=useState('');
   const [homeyToken,setHomeyToken]=useState('');
   const [homeyHasToken,setHomeyHasToken]=useState(false);
@@ -2552,6 +2585,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
       setWEtsy(st.widget_etsy_enabled==='1');
       if(st.widget_etsy_shop) setWEtsyShop(st.widget_etsy_shop);
       if(st.widget_flight_number) setWFlightNum(st.widget_flight_number);
+      if(st.ha_spotify_entity) setHaSpotifyEntity(st.ha_spotify_entity);
       if(st.custom_sport_paths) setCustomSportPath(st.custom_sport_paths);
       if(st.sports_leagues){
         const active=st.sports_leagues.split(',').map(s=>s.trim().toLowerCase());
@@ -3000,6 +3034,11 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
             }} disabled={haSaving}>{haSaving?'Saving…':'Save'}</Btn>
           </div>
           <div style={{fontSize:12,color:A.label5}}>Create a long-lived token in your HA profile page.</div>
+        </div>
+        <div style={{padding:'14px 16px',borderBottom:`1px solid ${A.sep}`}}>
+          <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:8}}>Spotify entity (now playing bar)</div>
+          <div style={{marginBottom:8}}><Inp value={haSpotifyEntity} onChange={e=>setHaSpotifyEntity(e.target.value)} onBlur={()=>saveSetting('ha_spotify_entity',haSpotifyEntity)} placeholder="media_player.spotify_yourname"/></div>
+          <div style={{fontSize:12,color:A.label5}}>Find in HA → Developer Tools → States, search media_player.spotify. Requires HA URL + token above.</div>
         </div>
         <div style={{padding:'14px 16px',borderBottom:`1px solid ${A.sep}`}}>
           <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:10}}>Homey Pro — pull notifications</div>

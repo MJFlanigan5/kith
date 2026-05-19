@@ -1331,6 +1331,32 @@ app.get('/api/widgets/data', async (req, res) => {
   res.json(result);
 });
 
+// ── Routes: Spotify now-playing (via Home Assistant) ─────────────────────────
+app.get('/api/spotify/now-playing', requireAdmin, async (req, res) => {
+  try {
+    const haUrl = gs('ha_url').replace(/\/$/, '');
+    const haToken = gs('ha_token');
+    const entity = gs('ha_spotify_entity');
+    if (!haUrl || !haToken || !entity) return res.json({ playing: false });
+    const data = await _wFetch('spotify:now_playing', 10000, async () => {
+      const r = await fetch(`${haUrl}/api/states/${entity}`, {
+        headers: { Authorization: `Bearer ${haToken}` },
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!r.ok) return { playing: false };
+      const d = await r.json();
+      if (d.state !== 'playing') return { playing: false };
+      return {
+        playing: true,
+        title: d.attributes?.media_title || '',
+        artist: d.attributes?.media_artist || '',
+        albumArt: d.attributes?.entity_picture ? `${haUrl}${d.attributes.entity_picture}` : null,
+      };
+    });
+    res.json(data || { playing: false });
+  } catch { res.json({ playing: false }); }
+});
+
 // ── Routes: Photos (screensaver) ──────────────────────────────────────────────
 app.get('/api/photos', (req, res) => {
   res.json(db.prepare('SELECT * FROM photos ORDER BY created_at DESC').all());

@@ -473,7 +473,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
   useEffect(()=>{
     const load=()=>api.get('/api/widgets/data').then(d=>setWidgetData(d||{})).catch(()=>{});
     load();
-    const id=setInterval(load,10*60*1000);
+    const id=setInterval(load,3*60*1000);
     return()=>clearInterval(id);
   },[]);
 

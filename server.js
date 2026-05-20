@@ -1359,7 +1359,9 @@ app.get('/api/spotify/now-playing', requireAdmin, async (req, res) => {
       const r = await fetch(`https://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user=${encodeURIComponent(lfmUser)}&api_key=${lfmKey}&format=json&limit=1`, { signal: AbortSignal.timeout(5000) });
       if (!r.ok) return res.json({ playing: false });
       const d = await r.json();
-      const track = d.recenttracks?.track?.[0];
+      if (d.error) return res.json({ playing: false });
+      const raw = d.recenttracks?.track;
+      const track = Array.isArray(raw) ? raw[0] : raw;
       if (!track || track['@attr']?.nowplaying !== 'true') { _spotifyCache = null; return res.json({ playing: false }); }
       _spotifyCache = { playing: true, title: track.name || '', artist: track.artist?.['#text'] || '' };
       _spotifyCacheAt = Date.now();

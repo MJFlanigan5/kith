@@ -1202,33 +1202,33 @@ app.get('/api/widgets/data', async (req, res) => {
   const tickers = gs('widget_stocks_tickers');
   if (tickers)
     p.push(_wFetch(`stocks:${tickers}`, 300000, async () => {
-      const syms = tickers.split(',').map(s => s.trim().toUpperCase()).filter(Boolean).slice(0, 5).join(',');
-      const r = await fetch(`https://query2.finance.yahoo.com/v8/finance/quote?symbols=${syms}`, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'application/json',
-          'Referer': 'https://finance.yahoo.com/',
-        },
-        signal: AbortSignal.timeout(8000),
-      });
-      if (!r.ok) return null;
-      const d = await r.json();
-      const results = (d.quoteResponse?.result || [])
-        .filter(q => q.regularMarketPrice !== undefined && q.regularMarketPrice !== null)
-        .map(q => ({
-          ticker: q.symbol, price: q.regularMarketPrice.toFixed(2),
-          change: q.regularMarketChangePercent?.toFixed(2) ?? '0.00',
-        }));
+      // Stooq: free, no key, one request per symbol
+      const syms = tickers.split(',').map(s => s.trim().toUpperCase()).filter(Boolean).slice(0, 5);
+      const results = (await Promise.all(syms.map(async sym => {
+        try {
+          const r = await fetch(`https://stooq.com/q/l/?s=${sym.toLowerCase()}.us&f=sd2t2ohlcv&h&e=json`, { signal: AbortSignal.timeout(6000) });
+          if (!r.ok) return null;
+          const d = await r.json();
+          const s = d.symbols?.[0];
+          if (!s?.close) return null;
+          const change = s.open ? (((s.close - s.open) / s.open) * 100).toFixed(2) : '0.00';
+          return { ticker: sym, price: s.close.toFixed(2), change };
+        } catch { return null; }
+      }))).filter(Boolean);
       return results.length ? results : null;
     }).then(d => { if (d?.length) result.stocks = d; }));
 
   if (gs('widget_producthunt_enabled') === '1')
     p.push(_wFetch('producthunt', 3600000, async () => {
       const r = await fetch('https://www.producthunt.com/feed', { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(8000) });
+      if (!r.ok) return null;
       const text = await r.text();
-      return [...text.matchAll(/<item>([\s\S]*?)<\/item>/g)].slice(0, 5).map(m => ({
-        title: (m[1].match(/<title><!\[CDATA\[(.*?)\]\]>/)?.[1] || m[1].match(/<title>(.*?)<\/title>/)?.[1] || '').trim(),
-        tagline: (m[1].match(/<description><!\[CDATA\[(.*?)\]\]>/)?.[1] || '').replace(/<[^>]+>/g, '').trim().slice(0, 80),
+      // Product Hunt uses Atom format (<entry> not <item>)
+      return [...text.matchAll(/<entry>([\s\S]*?)<\/entry>/g)].slice(0, 5).map(m => ({
+        title: (m[1].match(/<title>(.*?)<\/title>/)?.[1] || '').trim(),
+        tagline: (m[1].match(/<content[^>]*>([\s\S]*?)<\/content>/)?.[1] || '')
+          .replace(/&lt;[^&]*?&gt;/g, '').replace(/&amp;/g, '&')
+          .split('\n').map(l => l.trim()).filter(l => l && l !== 'Discuss')[0]?.slice(0, 80) || '',
       })).filter(i => i.title);
     }).then(d => { if (d?.length) result.producthunt = d; }));
 

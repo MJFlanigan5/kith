@@ -1369,11 +1369,13 @@ app.get('/api/widgets/data', async (req, res) => {
   if (nextdnsKey && nextdnsProfile)
     p.push(_wFetch(`nextdns:${nextdnsProfile}`, 300000, async () => {
       const headers = { 'X-Api-Key': nextdnsKey };
-      const r = await fetch(`https://api.nextdns.io/profiles/${nextdnsProfile}/analytics?from=-24h`, { headers, signal: AbortSignal.timeout(8000) });
+      const r = await fetch(`https://api.nextdns.io/profiles/${nextdnsProfile}/analytics/status?from=-24h`, { headers, signal: AbortSignal.timeout(8000) });
       if (!r.ok) return null;
       const d = await r.json();
-      const total = d.data?.queries ?? 0;
-      const blocked = d.data?.blockedQueries ?? 0;
+      const rows = d.data;
+      if (!Array.isArray(rows)) return null;
+      const total = rows.reduce((s, x) => s + (x.queries || 0), 0);
+      const blocked = rows.find(x => x.status === 'blocked')?.queries ?? 0;
       if (!total) return null;
       return { total, blocked, pct: Math.round((blocked / total) * 100) };
     }).then(d => { if (d) result.nextdns = d; }));

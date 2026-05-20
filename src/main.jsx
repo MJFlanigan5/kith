@@ -177,11 +177,11 @@ function FormRow({label,children,footer}){
   );
 }
 
-function Inp({value,onChange,placeholder,type='text',onKeyDown,inputRef,style:s={}}){
+function Inp({value,onChange,placeholder,type='text',onKeyDown,onBlur,inputRef,style:s={}}){
   const [focus,setFocus]=useState(false);
   return(
     <input ref={inputRef} type={type} value={value} onChange={onChange} placeholder={placeholder} onKeyDown={onKeyDown}
-      onFocus={()=>setFocus(true)} onBlur={()=>setFocus(false)}
+      onFocus={()=>setFocus(true)} onBlur={e=>{setFocus(false);onBlur&&onBlur(e);}}
       style={{width:'100%',background:focus?'#fff':A.inputBg,border:`1.5px solid ${focus?A.blue:'rgba(0,0,0,0.09)'}`,borderRadius:A.rXs,color:A.label1,padding:'9px 12px',fontSize:15,outline:'none',transition:'background .15s,border-color .15s',...s}}/>
   );
 }

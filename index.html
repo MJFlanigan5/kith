@@ -26,8 +26,8 @@ a{cursor:pointer;user-select:none}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
 @keyframes confettiFall{0%{transform:translateY(-10px) rotate(0deg);opacity:1}100%{transform:translateY(105vh) rotate(540deg);opacity:0}}
-@keyframes springIn{0%{opacity:0;transform:scale(.94) translateY(6px)}60%{transform:scale(1.02) translateY(-1px)}100%{opacity:1;transform:scale(1) translateY(0)}}
-.screen{animation:springIn .32s cubic-bezier(.34,1.56,.64,1) both}
+@keyframes springIn{0%{opacity:0;transform:translateY(10px)}100%{opacity:1;transform:translateY(0)}}
+.screen{animation:springIn .4s cubic-bezier(.25,.46,.45,.94) both}
 .irow{transition:background .12s ease}
 .irow:hover{background:rgba(0,0,0,0.025)!important}
 .irow:active{background:rgba(0,0,0,0.045)!important}

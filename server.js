@@ -684,7 +684,7 @@ app.post('/api/push/test', requireAuth, async (req, res) => {
 });
 
 // ── Routes: Settings ──────────────────────────────────────────────────────────
-const SETTINGS_SENSITIVE = new Set(['email_webhook_secret','anthropic_api_key','ai_api_key','beehiiv_api_key','youtube_api_key','etsy_api_key','teslemetry_api_key','aviationstack_api_key','jwt_secret','vapid_public','vapid_private','admin_pin_hash','resend_api_key','ha_webhook_secret','smart_home_token','ha_token','homey_token']);
+const SETTINGS_SENSITIVE = new Set(['email_webhook_secret','anthropic_api_key','ai_api_key','beehiiv_api_key','youtube_api_key','etsy_api_key','teslemetry_api_key','aviationstack_api_key','lastfm_api_key','jwt_secret','vapid_public','vapid_private','admin_pin_hash','resend_api_key','ha_webhook_secret','smart_home_token','ha_token','homey_token']);
 app.get('/api/settings', (req, res) => {
   const rows = db.prepare('SELECT key,value FROM settings').all();
   res.json(Object.fromEntries(rows.filter(r=>!SETTINGS_SENSITIVE.has(r.key)).map(r=>[r.key,r.value])));
@@ -728,6 +728,7 @@ app.get('/api/settings/integrations', requireAdmin, (req, res) => {
     has_etsy:          !!get('etsy_api_key'),
     has_teslemetry:    !!get('teslemetry_api_key'),
     has_aviationstack: !!get('aviationstack_api_key'),
+    has_lastfm:        !!get('lastfm_api_key'),
   });
 });
 app.put('/api/settings/integrations', requireAdmin, (req, res) => {
@@ -738,6 +739,7 @@ app.put('/api/settings/integrations', requireAdmin, (req, res) => {
   if (req.body.etsy_api_key          !== undefined) upd.run('etsy_api_key',          String(req.body.etsy_api_key));
   if (req.body.teslemetry_api_key    !== undefined) upd.run('teslemetry_api_key',    String(req.body.teslemetry_api_key));
   if (req.body.aviationstack_api_key !== undefined) upd.run('aviationstack_api_key', String(req.body.aviationstack_api_key));
+  if (req.body.lastfm_api_key        !== undefined) upd.run('lastfm_api_key',        String(req.body.lastfm_api_key));
   res.json({ ok: true });
 });
 
@@ -1350,23 +1352,28 @@ app.get('/api/widgets/data', async (req, res) => {
 let _spotifyCache = null; let _spotifyCacheAt = 0;
 app.get('/api/spotify/now-playing', requireAdmin, async (req, res) => {
   try {
+    if (_spotifyCache?.playing && Date.now() - _spotifyCacheAt < 10000) return res.json(_spotifyCache);
+    const lfmKey = gs('lastfm_api_key');
+    const lfmUser = gs('lastfm_username');
+    if (lfmKey && lfmUser) {
+      const r = await fetch(`https://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user=${encodeURIComponent(lfmUser)}&api_key=${lfmKey}&format=json&limit=1`, { signal: AbortSignal.timeout(5000) });
+      if (!r.ok) return res.json({ playing: false });
+      const d = await r.json();
+      const track = d.recenttracks?.track?.[0];
+      if (!track || track['@attr']?.nowplaying !== 'true') { _spotifyCache = null; return res.json({ playing: false }); }
+      _spotifyCache = { playing: true, title: track.name || '', artist: track.artist?.['#text'] || '' };
+      _spotifyCacheAt = Date.now();
+      return res.json(_spotifyCache);
+    }
     const haUrl = gs('ha_url').replace(/\/$/, '');
     const haToken = gs('ha_token');
     const entity = gs('ha_spotify_entity');
     if (!haUrl || !haToken || !entity) return res.json({ playing: false });
-    if (_spotifyCache?.playing && Date.now() - _spotifyCacheAt < 10000) return res.json(_spotifyCache);
-    const r = await fetch(`${haUrl}/api/states/${entity}`, {
-      headers: { Authorization: `Bearer ${haToken}` }, signal: AbortSignal.timeout(5000),
-    });
+    const r = await fetch(`${haUrl}/api/states/${entity}`, { headers: { Authorization: `Bearer ${haToken}` }, signal: AbortSignal.timeout(5000) });
     if (!r.ok) return res.json({ playing: false });
     const d = await r.json();
     if (d.state !== 'playing') { _spotifyCache = null; return res.json({ playing: false }); }
-    _spotifyCache = {
-      playing: true,
-      title: d.attributes?.media_title || '',
-      artist: d.attributes?.media_artist || '',
-      albumArt: d.attributes?.entity_picture ? `${haUrl}${d.attributes.entity_picture}` : null,
-    };
+    _spotifyCache = { playing: true, title: d.attributes?.media_title || '', artist: d.attributes?.media_artist || '' };
     _spotifyCacheAt = Date.now();
     res.json(_spotifyCache);
   } catch { res.json({ playing: false }); }

@@ -177,12 +177,12 @@ function FormRow({label,children,footer}){
   );
 }
 
-function Inp({value,onChange,placeholder,type='text',onKeyDown,onBlur,inputRef,style:s={}}){
+function Inp({value,onChange,placeholder,type='text',onKeyDown,onBlur,disabled,inputRef,style:s={}}){
   const [focus,setFocus]=useState(false);
   return(
-    <input ref={inputRef} type={type} value={value} onChange={onChange} placeholder={placeholder} onKeyDown={onKeyDown}
+    <input ref={inputRef} type={type} value={value} onChange={onChange} placeholder={placeholder} onKeyDown={onKeyDown} disabled={disabled}
       onFocus={()=>setFocus(true)} onBlur={e=>{setFocus(false);onBlur&&onBlur(e);}}
-      style={{width:'100%',background:focus?'#fff':A.inputBg,border:`1.5px solid ${focus?A.blue:'rgba(0,0,0,0.09)'}`,borderRadius:A.rXs,color:A.label1,padding:'9px 12px',fontSize:15,outline:'none',transition:'background .15s,border-color .15s',...s}}/>
+      style={{width:'100%',background:focus?'#fff':A.inputBg,border:`1.5px solid ${focus?A.blue:'rgba(0,0,0,0.09)'}`,borderRadius:A.rXs,color:A.label1,padding:'9px 12px',fontSize:15,outline:'none',transition:'background .15s,border-color .15s',opacity:disabled?.5:1,...s}}/>
   );
 }
 
@@ -2530,6 +2530,9 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [hasTeslemetryKey,setHasTeslemetryKey]=useState(false);
   const [aviationstackKey,setAviationstackKey]=useState('');
   const [hasAviationstackKey,setHasAviationstackKey]=useState(false);
+  const [lastfmKey,setLastfmKey]=useState('');
+  const [hasLastfmKey,setHasLastfmKey]=useState(false);
+  const [lastfmUser,setLastfmUser]=useState('');
   const [intSaving,setIntSaving]=useState(false);
   const [wQuote,setWQuote]=useState(false);
   const [wStocks,setWStocks]=useState(false);
@@ -2581,6 +2584,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
       if(st.widget_etsy_shop) setWEtsyShop(st.widget_etsy_shop);
       if(st.widget_flight_number) setWFlightNum(st.widget_flight_number);
       if(st.ha_spotify_entity) setHaSpotifyEntity(st.ha_spotify_entity);
+      if(st.lastfm_username) setLastfmUser(st.lastfm_username);
       if(st.custom_sport_paths) setCustomSportPath(st.custom_sport_paths);
       if(st.sports_leagues){
         const active=st.sports_leagues.split(',').map(s=>s.trim().toLowerCase());
@@ -2589,7 +2593,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
     }).catch(()=>{});
     api.get('/api/ha/secret').then(d=>{if(d.secret) setHaSecret(d.secret);}).catch(()=>{});
     fetch('/api/ha/smart-home-status',{headers:{..._authHdr()}}).then(r=>r.json()).then(d=>{if(d.ha){if(d.ha.url)setHaUrl(d.ha.url);if(d.ha.hasToken)setHaHasToken(true);}if(d.homey){if(d.homey.url)setHomeyUrl(d.homey.url);if(d.homey.hasToken)setHomeyHasToken(true);}}).catch(()=>{});
-    api.get('/api/settings/integrations').then(d=>{setHasAnthropicKey(!!d.has_anthropic);setHasBeehiivKey(!!d.has_beehiiv);setHasYoutubeKey(!!d.has_youtube);setHasEtsyKey(!!d.has_etsy);setHasTeslemetryKey(!!d.has_teslemetry);setHasAviationstackKey(!!d.has_aviationstack);}).catch(()=>{});
+    api.get('/api/settings/integrations').then(d=>{setHasAnthropicKey(!!d.has_anthropic);setHasBeehiivKey(!!d.has_beehiiv);setHasYoutubeKey(!!d.has_youtube);setHasEtsyKey(!!d.has_etsy);setHasTeslemetryKey(!!d.has_teslemetry);setHasAviationstackKey(!!d.has_aviationstack);setHasLastfmKey(!!d.has_lastfm);}).catch(()=>{});
     api.get('/api/quick-actions').then(d=>{if(Array.isArray(d)) setQaList(d);}).catch(()=>{});
   },[]);
   const geocodeCity=async()=>{
@@ -3044,6 +3048,12 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
           <div style={{fontSize:12,color:A.label5}}>Find in HA → Developer Tools → States, search media_player.spotify. Requires HA URL + token above.</div>
         </div>
         <div style={{padding:'14px 16px',borderBottom:`1px solid ${A.sep}`}}>
+          <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:8}}>Last.fm username (now playing bar)</div>
+          {!hasLastfmKey&&<div style={{fontSize:11,color:A.amber,marginBottom:6}}>Add Last.fm API key in Integrations to enable</div>}
+          <div style={{marginBottom:6}}><Inp value={lastfmUser} onChange={e=>setLastfmUser(e.target.value)} onBlur={e=>saveSetting('lastfm_username',e.target.value)} placeholder="your Last.fm username" disabled={!hasLastfmKey}/></div>
+          <div style={{fontSize:12,color:A.label5}}>Last.fm is checked first; HA entity is used as fallback if no Last.fm key is set.</div>
+        </div>
+        <div style={{padding:'14px 16px',borderBottom:`1px solid ${A.sep}`}}>
           <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:10}}>Homey Pro — pull notifications</div>
           <div style={{marginBottom:8}}><Inp value={homeyUrl} onChange={e=>setHomeyUrl(e.target.value)} placeholder="https://xxx.connect.athom.com"/></div>
           <div style={{marginBottom:10}}><Inp value={homeyToken} onChange={e=>setHomeyToken(e.target.value)} placeholder={homeyHasToken?'Token saved — paste to replace':'Personal access token'} type="password"/></div>
@@ -3171,6 +3181,19 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
             else toastAdd(r.error||'Save failed','red');
           }} disabled={intSaving}>{intSaving?'Saving…':'Save'}</Btn>
           <div style={{fontSize:12,color:A.label5,marginTop:8}}>Free tier at aviationstack.com (100 calls/month). Enter a flight in Widgets to track it.</div>
+        </div>
+        <div style={{padding:'14px 16px'}}>
+          <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:8}}>Last.fm (now playing bar)</div>
+          <div style={{marginBottom:10}}><Inp value={lastfmKey} onChange={e=>setLastfmKey(e.target.value)} placeholder={hasLastfmKey?'Saved — paste to replace':'Last.fm API key'} type="password"/></div>
+          <Btn sm onClick={async()=>{
+            if(!lastfmKey.trim()){toastAdd('Paste a key first','red');return;}
+            setIntSaving(true);
+            const r=await fetch('/api/settings/integrations',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify({lastfm_api_key:lastfmKey.trim()})}).then(x=>x.json()).catch(()=>({error:'Failed'}));
+            setIntSaving(false);
+            if(r.ok){setHasLastfmKey(true);setLastfmKey('');toastAdd('Saved');}
+            else toastAdd(r.error||'Save failed','red');
+          }} disabled={intSaving}>{intSaving?'Saving…':'Save'}</Btn>
+          <div style={{fontSize:12,color:A.label5,marginTop:8}}>Free at last.fm/api. Connect Spotify to Last.fm at last.fm/settings/applications.</div>
         </div>
       </FormGroup>
 

@@ -3039,7 +3039,8 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
         </div>
         <div style={{padding:'14px 16px',borderBottom:`1px solid ${A.sep}`}}>
           <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:8}}>Spotify entity (now playing bar)</div>
-          <div style={{marginBottom:8}}><Inp value={haSpotifyEntity} onChange={e=>setHaSpotifyEntity(e.target.value)} onBlur={()=>saveSetting('ha_spotify_entity',haSpotifyEntity)} placeholder="media_player.spotify_yourname"/></div>
+          <div style={{marginBottom:8}}><Inp value={haSpotifyEntity} onChange={e=>setHaSpotifyEntity(e.target.value)} placeholder="media_player.spotify_yourname"/></div>
+          <div style={{marginBottom:6}}><Btn sm onClick={()=>saveSetting('ha_spotify_entity',haSpotifyEntity)}>Save</Btn></div>
           <div style={{fontSize:12,color:A.label5}}>Find in HA → Developer Tools → States, search media_player.spotify. Requires HA URL + token above.</div>
         </div>
         <div style={{padding:'14px 16px',borderBottom:`1px solid ${A.sep}`}}>
@@ -3184,15 +3185,15 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
         </div>
         <div style={{padding:'12px 16px',borderBottom:`1px solid ${A.sep}`}}>
           <div style={{fontSize:13,fontWeight:500,color:A.label2,marginBottom:8}}>Stock tickers</div>
-          <Inp value={wStocksTickers} onChange={e=>setWStocksTickers(e.target.value)} onBlur={()=>saveSetting('widget_stocks_tickers',wStocksTickers)} placeholder="AAPL, TSLA, SPY — leave blank to disable"/>
+          <Inp value={wStocksTickers} onChange={e=>setWStocksTickers(e.target.value)} onBlur={e=>saveSetting('widget_stocks_tickers',e.target.value)} placeholder="AAPL, TSLA, SPY — leave blank to disable"/>
         </div>
         <div style={{padding:'12px 16px',borderBottom:`1px solid ${A.sep}`}}>
           <div style={{fontSize:13,fontWeight:500,color:A.label2,marginBottom:8}}>GitHub username</div>
-          <Inp value={wGithubUser} onChange={e=>setWGithubUser(e.target.value)} onBlur={()=>saveSetting('widget_github_username',wGithubUser)} placeholder="username — leave blank to disable"/>
+          <Inp value={wGithubUser} onChange={e=>setWGithubUser(e.target.value)} onBlur={e=>saveSetting('widget_github_username',e.target.value)} placeholder="username — leave blank to disable"/>
         </div>
         <div style={{padding:'12px 16px',borderBottom:`1px solid ${A.sep}`}}>
           <div style={{fontSize:13,fontWeight:500,color:A.label2,marginBottom:8}}>Reddit subreddits</div>
-          <Inp value={wRedditSub} onChange={e=>setWRedditSub(e.target.value)} onBlur={()=>saveSetting('widget_reddit_subreddit',wRedditSub)} placeholder="woodworking, DIY, esp32 — leave blank to disable"/>
+          <Inp value={wRedditSub} onChange={e=>setWRedditSub(e.target.value)} onBlur={e=>saveSetting('widget_reddit_subreddit',e.target.value)} placeholder="woodworking, DIY, esp32 — leave blank to disable"/>
         </div>
         <div style={{padding:'12px 16px',borderBottom:`1px solid ${A.sep}`}}>
           <div style={{fontSize:13,fontWeight:500,color:A.label2,marginBottom:4}}>Beehiiv</div>
@@ -3201,17 +3202,17 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
         <div style={{padding:'12px 16px',borderBottom:`1px solid ${A.sep}`}}>
           <div style={{fontSize:13,fontWeight:500,color:A.label2,marginBottom:8}}>YouTube channel handle</div>
           {!hasYoutubeKey&&<div style={{fontSize:11,color:A.amber,marginBottom:6}}>Add YouTube key in Integrations to enable</div>}
-          <Inp value={wYoutubeHandle} onChange={e=>setWYoutubeHandle(e.target.value)} onBlur={()=>saveSetting('widget_youtube_handle',wYoutubeHandle)} placeholder="@YourChannel — leave blank to disable" disabled={!hasYoutubeKey}/>
+          <Inp value={wYoutubeHandle} onChange={e=>setWYoutubeHandle(e.target.value)} onBlur={e=>saveSetting('widget_youtube_handle',e.target.value)} placeholder="@YourChannel — leave blank to disable" disabled={!hasYoutubeKey}/>
         </div>
         <div style={{padding:'12px 16px',borderBottom:`1px solid ${A.sep}`}}>
           <div style={{fontSize:13,fontWeight:500,color:A.label2,marginBottom:8}}>Etsy shop name</div>
           {!hasEtsyKey&&<div style={{fontSize:11,color:A.amber,marginBottom:6}}>Add Etsy key in Integrations to enable</div>}
-          <Inp value={wEtsyShop} onChange={e=>setWEtsyShop(e.target.value)} onBlur={()=>saveSetting('widget_etsy_shop',wEtsyShop)} placeholder="YourShopName — leave blank to disable" disabled={!hasEtsyKey}/>
+          <Inp value={wEtsyShop} onChange={e=>setWEtsyShop(e.target.value)} onBlur={e=>saveSetting('widget_etsy_shop',e.target.value)} placeholder="YourShopName — leave blank to disable" disabled={!hasEtsyKey}/>
         </div>
         <div style={{padding:'12px 16px'}}>
           <div style={{fontSize:13,fontWeight:500,color:A.label2,marginBottom:8}}>Flight tracker</div>
           {!hasAviationstackKey&&<div style={{fontSize:11,color:A.amber,marginBottom:6}}>Add AviationStack key in Integrations to enable</div>}
-          <Inp value={wFlightNum} onChange={e=>setWFlightNum(e.target.value)} onBlur={()=>saveSetting('widget_flight_number',wFlightNum)} placeholder="e.g. AA123 — leave blank to disable" disabled={!hasAviationstackKey}/>
+          <Inp value={wFlightNum} onChange={e=>setWFlightNum(e.target.value)} onBlur={e=>saveSetting('widget_flight_number',e.target.value)} placeholder="e.g. AA123 — leave blank to disable" disabled={!hasAviationstackKey}/>
         </div>
       </FormGroup>
 

@@ -684,7 +684,7 @@ app.post('/api/push/test', requireAuth, async (req, res) => {
 });
 
 // ── Routes: Settings ──────────────────────────────────────────────────────────
-const SETTINGS_SENSITIVE = new Set(['email_webhook_secret','anthropic_api_key','ai_api_key','beehiiv_api_key','youtube_api_key','etsy_api_key','teslemetry_api_key','aviationstack_api_key','lastfm_api_key','nextdns_api_key','jwt_secret','vapid_public','vapid_private','admin_pin_hash','resend_api_key','ha_webhook_secret','smart_home_token','ha_token','homey_token']);
+const SETTINGS_SENSITIVE = new Set(['email_webhook_secret','anthropic_api_key','ai_api_key','beehiiv_api_key','youtube_api_key','etsy_api_key','teslemetry_api_key','aviationstack_api_key','lastfm_api_key','nextdns_api_key','beszel_user','beszel_pass','jwt_secret','vapid_public','vapid_private','admin_pin_hash','resend_api_key','ha_webhook_secret','smart_home_token','ha_token','homey_token']);
 app.get('/api/settings', (req, res) => {
   const rows = db.prepare('SELECT key,value FROM settings').all();
   res.json(Object.fromEntries(rows.filter(r=>!SETTINGS_SENSITIVE.has(r.key)).map(r=>[r.key,r.value])));
@@ -730,6 +730,8 @@ app.get('/api/settings/integrations', requireAdmin, (req, res) => {
     has_aviationstack: !!get('aviationstack_api_key'),
     has_lastfm:        !!get('lastfm_api_key'),
     has_nextdns:       !!get('nextdns_api_key'),
+    has_beszel:        !!(get('beszel_url') && get('beszel_user')),
+    beszel_url:        get('beszel_url'),
   });
 });
 app.put('/api/settings/integrations', requireAdmin, (req, res) => {
@@ -742,6 +744,9 @@ app.put('/api/settings/integrations', requireAdmin, (req, res) => {
   if (req.body.aviationstack_api_key !== undefined) upd.run('aviationstack_api_key', String(req.body.aviationstack_api_key));
   if (req.body.lastfm_api_key        !== undefined) upd.run('lastfm_api_key',        String(req.body.lastfm_api_key));
   if (req.body.nextdns_api_key       !== undefined) upd.run('nextdns_api_key',       String(req.body.nextdns_api_key));
+  if (req.body.beszel_url            !== undefined) upd.run('beszel_url',            String(req.body.beszel_url));
+  if (req.body.beszel_user           !== undefined) upd.run('beszel_user',           String(req.body.beszel_user));
+  if (req.body.beszel_pass           !== undefined) upd.run('beszel_pass',           String(req.body.beszel_pass));
   res.json({ ok: true });
 });
 
@@ -1380,6 +1385,51 @@ app.get('/api/widgets/data', async (req, res) => {
       return { total, blocked, pct: Math.round((blocked / total) * 100) };
     }).then(d => { if (d) result.nextdns = d; }));
 
+  const beszelUrl = gs('beszel_url');
+  const beszelUser = gs('beszel_user');
+  const beszelPass = gs('beszel_pass');
+  if (beszelUrl && beszelUser && beszelPass)
+    p.push(_wFetch(`beszel:${beszelUrl}`, 60000, async () => {
+      const base = beszelUrl.replace(/\/$/, '');
+      const authR = await fetch(`${base}/api/collections/users/auth-with-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identity: beszelUser, password: beszelPass }),
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!authR.ok) return null;
+      const { token } = await authR.json();
+      const sysR = await fetch(`${base}/api/collections/systems/records?perPage=50&sort=name`, {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!sysR.ok) return null;
+      const { items: systems } = await sysR.json();
+      if (!systems?.length) return null;
+      const servers = await Promise.all(systems.map(async sys => {
+        try {
+          const statsR = await fetch(
+            `${base}/api/collections/system_stats/records?filter=(system="${sys.id}")&sort=-created&perPage=1`,
+            { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(5000) }
+          );
+          const statsBody = statsR.ok ? await statsR.json() : {};
+          const s = statsBody.items?.[0]?.stats || {};
+          const memPct = s.mp ?? s.memPct ?? s.mem_pct ??
+            (s.memUsed != null && s.mem ? Math.round(s.memUsed / s.mem * 100) : null);
+          return {
+            name: sys.name,
+            status: sys.status || 'unknown',
+            cpu: s.cpu ?? null,
+            memPct: memPct != null ? Math.round(memPct) : null,
+            temp: s.tp ?? s.temp ?? null,
+          };
+        } catch {
+          return { name: sys.name, status: 'unknown' };
+        }
+      }));
+      return servers;
+    }).then(d => { if (d?.length) result.beszel = d; }));
+
   await Promise.allSettled(p);
   res.json(result);
 });
@@ -1461,6 +1511,49 @@ app.post('/api/bookmarks', requireAuth, (req, res) => {
 app.delete('/api/bookmarks/:id', requireAuth, (req, res) => {
   db.prepare('DELETE FROM bookmarks WHERE id=?').run(Number(req.params.id));
   res.json({ ok: true });
+});
+
+app.get('/api/beszel/test', requireAdmin, async (req, res) => {
+  const url = gs('beszel_url'); const user = gs('beszel_user'); const pass = gs('beszel_pass');
+  if (!url) return res.json({ error: 'beszel_url not configured' });
+  if (!user || !pass) return res.json({ error: 'beszel credentials not configured' });
+  try {
+    const base = url.replace(/\/$/, '');
+    const authR = await fetch(`${base}/api/collections/users/auth-with-password`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identity: user, password: pass }), signal: AbortSignal.timeout(8000),
+    });
+    const authBody = await authR.json();
+    if (!authR.ok) return res.json({ error: 'auth failed', detail: authBody });
+    const { token } = authBody;
+    const sysR = await fetch(`${base}/api/collections/systems/records?perPage=10`, {
+      headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(8000),
+    });
+    const sysBody = await sysR.json();
+    if (!sysR.ok) return res.json({ error: 'systems fetch failed', detail: sysBody });
+    const firstSys = sysBody.items?.[0];
+    let statsBody = null;
+    if (firstSys) {
+      const statsR = await fetch(
+        `${base}/api/collections/system_stats/records?filter=(system="${firstSys.id}")&sort=-created&perPage=1`,
+        { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(5000) }
+      );
+      statsBody = await statsR.json();
+    }
+    res.json({ systems: sysBody, firstStats: statsBody });
+  } catch (e) { res.json({ error: e.message }); }
+});
+
+app.get('/api/nextdns/test', requireAdmin, async (req, res) => {
+  const key = gs('nextdns_api_key'); const profile = gs('nextdns_profile_id');
+  if (!key) return res.json({ error: 'nextdns_api_key not configured' });
+  if (!profile) return res.json({ error: 'nextdns_profile_id not configured' });
+  try {
+    const r = await fetch(`https://api.nextdns.io/profiles/${profile}/analytics/status?from=-24h`, {
+      headers: { 'X-Api-Key': key }, signal: AbortSignal.timeout(10000),
+    });
+    res.json({ status: r.status, ok: r.ok, body: await r.json() });
+  } catch (e) { res.json({ error: e.message }); }
 });
 
 // ── Routes: Email inbound (Cloudflare Email Worker webhook) ───────────────────

@@ -548,6 +548,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
     ...(widgetData.flight?['w_flight']:[]),
     ...(widgetData.uptime?.length?['w_uptime']:[]),
     ...(widgetData.nextdns?['w_nextdns']:[]),
+    ...(widgetData.beszel?.length?['w_beszel']:[]),
   ];
   const activePanelId=centerPanels[centerIdx%Math.max(1,centerPanels.length)];
 
@@ -1019,6 +1020,38 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         </>
                       );
                     })()}
+                    {activePanelId==='w_beszel'&&(
+                      <>
+                        <WLabel>Servers</WLabel>
+                        <div style={{flex:1,display:'flex',gap:8,alignItems:'stretch'}}>
+                          {(widgetData.beszel||[]).map((srv,i)=>(
+                            <div key={i} style={{flex:1,background:'rgba(255,255,255,0.05)',borderRadius:10,padding:'10px 12px',display:'flex',flexDirection:'column',gap:7}}>
+                              <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:2}}>
+                                <div style={{width:7,height:7,borderRadius:'50%',background:srv.status==='up'?A.green:A.red,flexShrink:0}}/>
+                                <div style={{fontSize:12,fontWeight:700,color:D.t1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{srv.name}</div>
+                              </div>
+                              {srv.cpu!=null&&(
+                                <div>
+                                  <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:D.t3,marginBottom:3}}><span>CPU</span><span style={{fontWeight:600,color:D.t2}}>{Math.round(srv.cpu)}%</span></div>
+                                  <div style={{height:4,borderRadius:2,background:'rgba(255,255,255,0.08)'}}><div style={{width:`${Math.min(100,srv.cpu)}%`,height:'100%',borderRadius:2,background:A.blue}}/></div>
+                                </div>
+                              )}
+                              {srv.memPct!=null&&(
+                                <div>
+                                  <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:D.t3,marginBottom:3}}><span>RAM</span><span style={{fontWeight:600,color:D.t2}}>{srv.memPct}%</span></div>
+                                  <div style={{height:4,borderRadius:2,background:'rgba(255,255,255,0.08)'}}><div style={{width:`${Math.min(100,srv.memPct)}%`,height:'100%',borderRadius:2,background:'#BF5AF2'}}/></div>
+                                </div>
+                              )}
+                              {srv.temp!=null&&(
+                                <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:D.t3,marginTop:1}}>
+                                  <span>Temp</span><span style={{fontWeight:600,color:srv.temp>70?A.red:srv.temp>55?A.amber:D.t2}}>{Math.round(srv.temp)}°C</span>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
                   </Widget>
                 </div>
               )}
@@ -2576,6 +2609,10 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [nextdnsKey,setNextdnsKey]=useState('');
   const [hasNextdnsKey,setHasNextdnsKey]=useState(false);
   const [nextdnsProfile,setNextdnsProfile]=useState('');
+  const [beszelUrl,setBeszelUrl]=useState('');
+  const [beszelUser,setBeszelUser]=useState('');
+  const [beszelPass,setBeszelPass]=useState('');
+  const [hasBeszel,setHasBeszel]=useState(false);
   const [wUptimeUrls,setWUptimeUrls]=useState('');
   const [intSaving,setIntSaving]=useState(false);
   const [wQuote,setWQuote]=useState(false);
@@ -2639,7 +2676,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
     }).catch(()=>{});
     api.get('/api/ha/secret').then(d=>{if(d.secret) setHaSecret(d.secret);}).catch(()=>{});
     fetch('/api/ha/smart-home-status',{headers:{..._authHdr()}}).then(r=>r.json()).then(d=>{if(d.ha){if(d.ha.url)setHaUrl(d.ha.url);if(d.ha.hasToken)setHaHasToken(true);}if(d.homey){if(d.homey.url)setHomeyUrl(d.homey.url);if(d.homey.hasToken)setHomeyHasToken(true);}}).catch(()=>{});
-    api.get('/api/settings/integrations').then(d=>{setHasAnthropicKey(!!d.has_anthropic);setHasBeehiivKey(!!d.has_beehiiv);setHasYoutubeKey(!!d.has_youtube);setHasEtsyKey(!!d.has_etsy);setHasTeslemetryKey(!!d.has_teslemetry);setHasAviationstackKey(!!d.has_aviationstack);setHasLastfmKey(!!d.has_lastfm);setHasNextdnsKey(!!d.has_nextdns);}).catch(()=>{});
+    api.get('/api/settings/integrations').then(d=>{setHasAnthropicKey(!!d.has_anthropic);setHasBeehiivKey(!!d.has_beehiiv);setHasYoutubeKey(!!d.has_youtube);setHasEtsyKey(!!d.has_etsy);setHasTeslemetryKey(!!d.has_teslemetry);setHasAviationstackKey(!!d.has_aviationstack);setHasLastfmKey(!!d.has_lastfm);setHasNextdnsKey(!!d.has_nextdns);setHasBeszel(!!d.has_beszel);if(d.beszel_url)setBeszelUrl(d.beszel_url);}).catch(()=>{});
     api.get('/api/quick-actions').then(d=>{if(Array.isArray(d)) setQaList(d);}).catch(()=>{});
   },[]);
   const geocodeCity=async()=>{
@@ -3253,6 +3290,25 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
             else toastAdd(r.error||'Save failed','red');
           }} disabled={intSaving}>{intSaving?'Saving…':'Save'}</Btn>
           <div style={{fontSize:12,color:A.label5,marginTop:8}}>Get your API key at my.nextdns.io → Account.</div>
+        </div>
+        <div style={{padding:'14px 16px'}}>
+          <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:8}}>Beszel (server monitor)</div>
+          <div style={{marginBottom:8}}><Inp value={beszelUrl} onChange={e=>setBeszelUrl(e.target.value)} placeholder="https://beszel.example.com"/></div>
+          <div style={{marginBottom:8}}><Inp value={beszelUser} onChange={e=>setBeszelUser(e.target.value)} placeholder={hasBeszel?'Username (saved)':'Username'}/></div>
+          <div style={{marginBottom:10}}><Inp value={beszelPass} onChange={e=>setBeszelPass(e.target.value)} placeholder={hasBeszel?'Password (saved — paste to replace)':'Password'} type="password"/></div>
+          <Btn onClick={async()=>{
+            if(!beszelUrl.trim()){toastAdd('Enter Beszel URL','red');return;}
+            if(!beszelUser.trim()){toastAdd('Enter username','red');return;}
+            if(!beszelPass.trim()&&!hasBeszel){toastAdd('Enter password','red');return;}
+            setIntSaving(true);
+            const payload={beszel_url:beszelUrl.trim(),beszel_user:beszelUser.trim()};
+            if(beszelPass.trim()) payload.beszel_pass=beszelPass.trim();
+            const r=await fetch('/api/settings/integrations',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify(payload)}).then(x=>x.json()).catch(()=>({error:'Failed'}));
+            setIntSaving(false);
+            if(r.ok){setHasBeszel(true);setBeszelPass('');toastAdd('Saved');}
+            else toastAdd(r.error||'Save failed','red');
+          }} disabled={intSaving}>{intSaving?'Saving…':'Save'}</Btn>
+          <div style={{fontSize:12,color:A.label5,marginTop:8}}>Fetches CPU, RAM, and temperature for all your servers every 60s.</div>
         </div>
       </FormGroup>
 

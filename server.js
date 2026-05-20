@@ -1347,7 +1347,7 @@ app.get('/api/widgets/data', async (req, res) => {
 
   const uptimeUrls = gs('widget_uptime_urls');
   if (uptimeUrls)
-    p.push((async () => {
+    p.push(_wFetch(`uptime:${uptimeUrls}`, 60000, async () => {
       const urls = uptimeUrls.split(',').map(s => s.trim()).filter(Boolean);
       const checks = await Promise.all(urls.map(async raw => {
         const url = /^https?:\/\//.test(raw) ? raw : `https://${raw}`;
@@ -1361,8 +1361,8 @@ app.get('/api/widgets/data', async (req, res) => {
           return { name, ok: false, ms: null };
         }
       }));
-      if (checks.length) result.uptime = checks;
-    })());
+      return checks.length ? checks : null;
+    }).then(d => { if (d?.length) result.uptime = d; }));
 
   const nextdnsKey = gs('nextdns_api_key');
   const nextdnsProfile = gs('nextdns_profile_id');

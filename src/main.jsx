@@ -3298,8 +3298,8 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
         </div>
         <div style={{padding:'12px 16px',borderBottom:`1px solid ${A.sep}`}}>
           <div style={{fontSize:13,fontWeight:500,color:A.label2,marginBottom:8}}>Uptime monitor</div>
-          <Inp value={wUptimeUrls} onChange={e=>setWUptimeUrls(e.target.value)} onBlur={e=>saveSetting('widget_uptime_urls',e.target.value)} placeholder="https://kith.home, https://grafana.home — comma-separated"/>
-          <div style={{fontSize:11,color:A.label5,marginTop:4}}>Checks every 60s. Leave blank to disable.</div>
+          <Inp value={wUptimeUrls} onChange={e=>setWUptimeUrls(e.target.value)} onBlur={e=>saveSetting('widget_uptime_urls',e.target.value)} placeholder="http://kith.home, http://grafana.home — comma-separated"/>
+          <div style={{fontSize:11,color:A.label5,marginTop:4}}>Use http:// for local servers (self-signed certs will fail). Checks every 60s.</div>
         </div>
         <div style={{padding:'12px 16px'}}>
           <div style={{fontSize:13,fontWeight:500,color:A.label2,marginBottom:8}}>NextDNS profile ID</div>
@@ -3324,8 +3324,9 @@ function BookmarksScreen({bookmarks,setBookmarks,toastAdd}){
   const save=async()=>{
     if(!form.title.trim()){toastAdd('Title is required','red');return;}
     if(!form.url.trim()){toastAdd('URL is required','red');return;}
-    const url=form.url.startsWith('http')?form.url:`https://${form.url}`;
-    const created=await api.post('/api/bookmarks',{...form,url});
+    const url=/^https?:\/\//i.test(form.url)?form.url:`https://${form.url}`;
+    const created=await api.post('/api/bookmarks',{...form,url}).catch(()=>({error:'Failed'}));
+    if(created.error){toastAdd(created.error||'Save failed','red');return;}
     setBookmarks(p=>[...p,created]);
     toastAdd('Bookmark added');
     setDrawerOpen(false);setForm(blank);

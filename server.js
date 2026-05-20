@@ -1408,20 +1408,28 @@ app.get('/api/widgets/data', async (req, res) => {
       if (!systems?.length) return null;
       const servers = await Promise.all(systems.map(async sys => {
         try {
+          const filter = encodeURIComponent(`system='${sys.id}'`);
           const statsR = await fetch(
-            `${base}/api/collections/system_stats/records?filter=(system="${sys.id}")&sort=-created&perPage=1`,
+            `${base}/api/collections/system_stats/records?filter=${filter}&sort=-created&perPage=1`,
             { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(5000) }
           );
           const statsBody = statsR.ok ? await statsR.json() : {};
           const s = statsBody.items?.[0]?.stats || {};
-          const memPct = s.mp ?? s.memPct ?? s.mem_pct ??
-            (s.memUsed != null && s.mem ? Math.round(s.memUsed / s.mem * 100) : null);
+          // s.t is a map[string]float64 — prefer any key with "cpu" in it, else average all
+          let temp = null;
+          if (s.t && typeof s.t === 'object') {
+            const entries = Object.entries(s.t).filter(([, v]) => typeof v === 'number' && v > 0);
+            const cpu = entries.find(([k]) => k.toLowerCase().includes('cpu'));
+            const vals = cpu ? [cpu[1]] : entries.map(([, v]) => v);
+            if (vals.length) temp = Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
+          }
           return {
             name: sys.name,
             status: sys.status || 'unknown',
-            cpu: s.cpu ?? null,
-            memPct: memPct != null ? Math.round(memPct) : null,
-            temp: s.tp ?? s.temp ?? null,
+            cpu: s.cpu != null ? Math.round(s.cpu * 10) / 10 : null,
+            memPct: s.mp != null ? Math.round(s.mp) : null,
+            diskPct: s.dp != null ? Math.round(s.dp) : null,
+            temp,
           };
         } catch {
           return { name: sys.name, status: 'unknown' };
@@ -1535,7 +1543,7 @@ app.get('/api/beszel/test', requireAdmin, async (req, res) => {
     let statsBody = null;
     if (firstSys) {
       const statsR = await fetch(
-        `${base}/api/collections/system_stats/records?filter=(system="${firstSys.id}")&sort=-created&perPage=1`,
+        `${base}/api/collections/system_stats/records?filter=${encodeURIComponent(`system='${firstSys.id}'`)}&sort=-created&perPage=1`,
         { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(5000) }
       );
       statsBody = await statsR.json();

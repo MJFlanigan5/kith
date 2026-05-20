@@ -1032,7 +1032,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                               </div>
                               {srv.cpu!=null&&(
                                 <div>
-                                  <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:D.t3,marginBottom:3}}><span>CPU</span><span style={{fontWeight:600,color:D.t2}}>{Math.round(srv.cpu)}%</span></div>
+                                  <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:D.t3,marginBottom:3}}><span>CPU</span><span style={{fontWeight:600,color:D.t2}}>{srv.cpu}%</span></div>
                                   <div style={{height:4,borderRadius:2,background:'rgba(255,255,255,0.08)'}}><div style={{width:`${Math.min(100,srv.cpu)}%`,height:'100%',borderRadius:2,background:A.blue}}/></div>
                                 </div>
                               )}
@@ -1042,9 +1042,15 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                                   <div style={{height:4,borderRadius:2,background:'rgba(255,255,255,0.08)'}}><div style={{width:`${Math.min(100,srv.memPct)}%`,height:'100%',borderRadius:2,background:'#BF5AF2'}}/></div>
                                 </div>
                               )}
+                              {srv.diskPct!=null&&(
+                                <div>
+                                  <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:D.t3,marginBottom:3}}><span>Disk</span><span style={{fontWeight:600,color:D.t2}}>{srv.diskPct}%</span></div>
+                                  <div style={{height:4,borderRadius:2,background:'rgba(255,255,255,0.08)'}}><div style={{width:`${Math.min(100,srv.diskPct)}%`,height:'100%',borderRadius:2,background:A.amber}}/></div>
+                                </div>
+                              )}
                               {srv.temp!=null&&(
                                 <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:D.t3,marginTop:1}}>
-                                  <span>Temp</span><span style={{fontWeight:600,color:srv.temp>70?A.red:srv.temp>55?A.amber:D.t2}}>{Math.round(srv.temp)}°C</span>
+                                  <span>Temp</span><span style={{fontWeight:600,color:srv.temp>70?A.red:srv.temp>55?A.amber:D.t2}}>{srv.temp}°C</span>
                                 </div>
                               )}
                             </div>

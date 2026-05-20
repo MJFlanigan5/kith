@@ -163,6 +163,15 @@ CREATE TABLE IF NOT EXISTS ha_events (
   icon TEXT DEFAULT '🏠',
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS bookmarks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  url TEXT NOT NULL,
+  category TEXT DEFAULT '',
+  emoji TEXT DEFAULT '🔗',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
 `);
 
 // migrations — safe to run on every boot

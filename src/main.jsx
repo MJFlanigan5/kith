@@ -546,6 +546,8 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
     ...(widgetData.etsy?['w_etsy']:[]),
     ...(widgetData.powerwall?['w_powerwall']:[]),
     ...(widgetData.flight?['w_flight']:[]),
+    ...(widgetData.uptime?.length?['w_uptime']:[]),
+    ...(widgetData.nextdns?['w_nextdns']:[]),
   ];
   const activePanelId=centerPanels[centerIdx%Math.max(1,centerPanels.length)];
 
@@ -975,6 +977,44 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                               </div>
                             </div>
                             <div style={{textAlign:'center',fontSize:12,fontWeight:700,color:statusColor,textTransform:'capitalize'}}>{f.status}</div>
+                          </div>
+                        </>
+                      );
+                    })()}
+                    {activePanelId==='w_uptime'&&(
+                      <>
+                        <WLabel>Services</WLabel>
+                        <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',gap:6}}>
+                          {(widgetData.uptime||[]).map((s,i)=>(
+                            <div key={i} style={{display:'flex',alignItems:'center',gap:10}}>
+                              <div style={{width:8,height:8,borderRadius:'50%',background:s.ok?A.green:A.red,flexShrink:0}}/>
+                              <div style={{flex:1,fontSize:13,fontWeight:500,color:D.t2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name}</div>
+                              <div style={{fontSize:12,color:s.ok?A.green:A.red,fontWeight:600,flexShrink:0}}>{s.ok?(s.ms!=null?`${s.ms}ms`:'ok'):'down'}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                    {activePanelId==='w_nextdns'&&(()=>{
+                      const nd=widgetData.nextdns;
+                      return(
+                        <>
+                          <WLabel>NextDNS — 24h</WLabel>
+                          <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',gap:16}}>
+                            <div style={{textAlign:'center'}}>
+                              <div style={{fontSize:44,fontWeight:800,color:D.t1,letterSpacing:'-.04em',lineHeight:1}}>{nd.total?.toLocaleString()}</div>
+                              <div style={{fontSize:12,color:D.t4,marginTop:4}}>total queries</div>
+                            </div>
+                            <div style={{display:'flex',gap:8}}>
+                              <div style={{flex:1,background:'rgba(255,59,48,0.10)',borderRadius:8,padding:'10px',textAlign:'center'}}>
+                                <div style={{fontSize:22,fontWeight:700,color:A.red}}>{nd.blocked?.toLocaleString()}</div>
+                                <div style={{fontSize:10,color:D.t4,marginTop:2}}>blocked</div>
+                              </div>
+                              <div style={{flex:1,background:'rgba(52,199,89,0.10)',borderRadius:8,padding:'10px',textAlign:'center'}}>
+                                <div style={{fontSize:22,fontWeight:700,color:A.green}}>{nd.pct}%</div>
+                                <div style={{fontSize:10,color:D.t4,marginTop:2}}>block rate</div>
+                              </div>
+                            </div>
                           </div>
                         </>
                       );
@@ -2533,6 +2573,10 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [lastfmKey,setLastfmKey]=useState('');
   const [hasLastfmKey,setHasLastfmKey]=useState(false);
   const [lastfmUser,setLastfmUser]=useState('');
+  const [nextdnsKey,setNextdnsKey]=useState('');
+  const [hasNextdnsKey,setHasNextdnsKey]=useState(false);
+  const [nextdnsProfile,setNextdnsProfile]=useState('');
+  const [wUptimeUrls,setWUptimeUrls]=useState('');
   const [intSaving,setIntSaving]=useState(false);
   const [wQuote,setWQuote]=useState(false);
   const [wStocks,setWStocks]=useState(false);
@@ -2585,6 +2629,8 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
       if(st.widget_flight_number) setWFlightNum(st.widget_flight_number);
       if(st.ha_spotify_entity) setHaSpotifyEntity(st.ha_spotify_entity);
       if(st.lastfm_username) setLastfmUser(st.lastfm_username);
+      if(st.nextdns_profile_id) setNextdnsProfile(st.nextdns_profile_id);
+      if(st.widget_uptime_urls) setWUptimeUrls(st.widget_uptime_urls);
       if(st.custom_sport_paths) setCustomSportPath(st.custom_sport_paths);
       if(st.sports_leagues){
         const active=st.sports_leagues.split(',').map(s=>s.trim().toLowerCase());
@@ -2593,7 +2639,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
     }).catch(()=>{});
     api.get('/api/ha/secret').then(d=>{if(d.secret) setHaSecret(d.secret);}).catch(()=>{});
     fetch('/api/ha/smart-home-status',{headers:{..._authHdr()}}).then(r=>r.json()).then(d=>{if(d.ha){if(d.ha.url)setHaUrl(d.ha.url);if(d.ha.hasToken)setHaHasToken(true);}if(d.homey){if(d.homey.url)setHomeyUrl(d.homey.url);if(d.homey.hasToken)setHomeyHasToken(true);}}).catch(()=>{});
-    api.get('/api/settings/integrations').then(d=>{setHasAnthropicKey(!!d.has_anthropic);setHasBeehiivKey(!!d.has_beehiiv);setHasYoutubeKey(!!d.has_youtube);setHasEtsyKey(!!d.has_etsy);setHasTeslemetryKey(!!d.has_teslemetry);setHasAviationstackKey(!!d.has_aviationstack);setHasLastfmKey(!!d.has_lastfm);}).catch(()=>{});
+    api.get('/api/settings/integrations').then(d=>{setHasAnthropicKey(!!d.has_anthropic);setHasBeehiivKey(!!d.has_beehiiv);setHasYoutubeKey(!!d.has_youtube);setHasEtsyKey(!!d.has_etsy);setHasTeslemetryKey(!!d.has_teslemetry);setHasAviationstackKey(!!d.has_aviationstack);setHasLastfmKey(!!d.has_lastfm);setHasNextdnsKey(!!d.has_nextdns);}).catch(()=>{});
     api.get('/api/quick-actions').then(d=>{if(Array.isArray(d)) setQaList(d);}).catch(()=>{});
   },[]);
   const geocodeCity=async()=>{
@@ -3195,6 +3241,19 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
           }} disabled={intSaving}>{intSaving?'Saving…':'Save'}</Btn>
           <div style={{fontSize:12,color:A.label5,marginTop:8}}>Free at last.fm/api. Connect Spotify to Last.fm at last.fm/settings/applications.</div>
         </div>
+        <div style={{padding:'12px 16px'}}>
+          <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:8}}>NextDNS</div>
+          <div style={{marginBottom:10}}><Inp value={nextdnsKey} onChange={e=>setNextdnsKey(e.target.value)} placeholder={hasNextdnsKey?'Saved — paste to replace':'NextDNS API key'} type="password"/></div>
+          <Btn onClick={async()=>{
+            if(!nextdnsKey.trim()){toastAdd('Paste a key first','red');return;}
+            setIntSaving(true);
+            const r=await fetch('/api/settings/integrations',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify({nextdns_api_key:nextdnsKey.trim()})}).then(x=>x.json()).catch(()=>({error:'Failed'}));
+            setIntSaving(false);
+            if(r.ok){setHasNextdnsKey(true);setNextdnsKey('');toastAdd('Saved');}
+            else toastAdd(r.error||'Save failed','red');
+          }} disabled={intSaving}>{intSaving?'Saving…':'Save'}</Btn>
+          <div style={{fontSize:12,color:A.label5,marginTop:8}}>Get your API key at my.nextdns.io → Account.</div>
+        </div>
       </FormGroup>
 
       <FormGroup label="Widgets">
@@ -3232,13 +3291,117 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
           {!hasEtsyKey&&<div style={{fontSize:11,color:A.amber,marginBottom:6}}>Add Etsy key in Integrations to enable</div>}
           <Inp value={wEtsyShop} onChange={e=>setWEtsyShop(e.target.value)} onBlur={e=>saveSetting('widget_etsy_shop',e.target.value)} placeholder="YourShopName — leave blank to disable" disabled={!hasEtsyKey}/>
         </div>
-        <div style={{padding:'12px 16px'}}>
+        <div style={{padding:'12px 16px',borderBottom:`1px solid ${A.sep}`}}>
           <div style={{fontSize:13,fontWeight:500,color:A.label2,marginBottom:8}}>Flight tracker</div>
           {!hasAviationstackKey&&<div style={{fontSize:11,color:A.amber,marginBottom:6}}>Add AviationStack key in Integrations to enable</div>}
           <Inp value={wFlightNum} onChange={e=>setWFlightNum(e.target.value)} onBlur={e=>saveSetting('widget_flight_number',e.target.value)} placeholder="e.g. AA123 — leave blank to disable" disabled={!hasAviationstackKey}/>
         </div>
+        <div style={{padding:'12px 16px',borderBottom:`1px solid ${A.sep}`}}>
+          <div style={{fontSize:13,fontWeight:500,color:A.label2,marginBottom:8}}>Uptime monitor</div>
+          <Inp value={wUptimeUrls} onChange={e=>setWUptimeUrls(e.target.value)} onBlur={e=>saveSetting('widget_uptime_urls',e.target.value)} placeholder="https://kith.home, https://grafana.home — comma-separated"/>
+          <div style={{fontSize:11,color:A.label5,marginTop:4}}>Checks every 60s. Leave blank to disable.</div>
+        </div>
+        <div style={{padding:'12px 16px'}}>
+          <div style={{fontSize:13,fontWeight:500,color:A.label2,marginBottom:8}}>NextDNS profile ID</div>
+          {!hasNextdnsKey&&<div style={{fontSize:11,color:A.amber,marginBottom:6}}>Add NextDNS API key in Integrations to enable</div>}
+          <Inp value={nextdnsProfile} onChange={e=>setNextdnsProfile(e.target.value)} onBlur={e=>saveSetting('nextdns_profile_id',e.target.value)} placeholder="e.g. abc123 — leave blank to disable" disabled={!hasNextdnsKey}/>
+          <div style={{fontSize:11,color:A.label5,marginTop:4}}>Find your profile ID at my.nextdns.io.</div>
+        </div>
       </FormGroup>
 
+    </div>
+  );
+}
+
+/* ── Bookmarks Screen ────────────────────────────────────────────────── */
+function BookmarksScreen({bookmarks,setBookmarks,toastAdd}){
+  const isMobile=useIsMobile();
+  const [drawerOpen,setDrawerOpen]=useState(false);
+  const blank={title:'',url:'',category:'',emoji:'🔗'};
+  const [form,setForm]=useState(blank);
+
+  const open=()=>{setForm(blank);setDrawerOpen(true);};
+  const save=async()=>{
+    if(!form.title.trim()){toastAdd('Title is required','red');return;}
+    if(!form.url.trim()){toastAdd('URL is required','red');return;}
+    const url=form.url.startsWith('http')?form.url:`https://${form.url}`;
+    const created=await api.post('/api/bookmarks',{...form,url});
+    setBookmarks(p=>[...p,created]);
+    toastAdd('Bookmark added');
+    setDrawerOpen(false);setForm(blank);
+  };
+  const del=async id=>{
+    await api.del(`/api/bookmarks/${id}`);
+    setBookmarks(p=>p.filter(b=>b.id!==id));
+    toastAdd('Deleted','blue');
+  };
+
+  const categories=[...new Set(bookmarks.map(b=>b.category||'').filter(Boolean))];
+  const uncategorized=bookmarks.filter(b=>!b.category);
+
+  return(
+    <div>
+      <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:24}}>
+        <div>
+          <h1 style={{fontSize:isMobile?34:44,fontWeight:800,letterSpacing:'-.05em',lineHeight:1.05}}>Bookmarks</h1>
+          <p style={{color:A.label4,fontSize:15,marginTop:6}}>{bookmarks.length} link{bookmarks.length!==1?'s':''}</p>
+        </div>
+        <Btn onClick={open}>+ Add</Btn>
+      </div>
+
+      {bookmarks.length===0?(
+        <Card style={{padding:'52px 24px',textAlign:'center'}}>
+          <div style={{fontSize:13,fontWeight:700,color:A.label5,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:10}}>No bookmarks yet</div>
+          <div style={{fontSize:15,color:A.label3,fontWeight:500}}>School portals, pediatrician, HOA — save links your family actually uses</div>
+        </Card>
+      ):(
+        <>
+          {categories.map(cat=>(
+            <div key={cat} style={{marginBottom:20}}>
+              <div style={{fontSize:11,fontWeight:700,color:A.label4,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:8}}>{cat}</div>
+              <Card style={{padding:0,overflow:'hidden'}}>
+                {bookmarks.filter(b=>b.category===cat).map((b,i,arr)=>(
+                  <div key={b.id} style={{display:'flex',alignItems:'center',gap:12,padding:'13px 16px',borderBottom:i<arr.length-1?`1px solid ${A.sep}`:'none'}}>
+                    <span style={{fontSize:20,flexShrink:0}}>{b.emoji||'🔗'}</span>
+                    <div style={{flex:1,minWidth:0}}>
+                      <a href={b.url} target="_blank" rel="noopener noreferrer" style={{fontSize:15,fontWeight:600,color:A.blue,textDecoration:'none'}}>{b.title}</a>
+                      <div style={{fontSize:12,color:A.label4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.url}</div>
+                    </div>
+                    <button onClick={()=>del(b.id)} style={{background:'none',border:'none',fontSize:12,color:A.red,cursor:'pointer',fontWeight:500,padding:'4px 0',flexShrink:0}}>Delete</button>
+                  </div>
+                ))}
+              </Card>
+            </div>
+          ))}
+          {uncategorized.length>0&&(
+            <div style={{marginBottom:20}}>
+              {categories.length>0&&<div style={{fontSize:11,fontWeight:700,color:A.label4,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:8}}>Other</div>}
+              <Card style={{padding:0,overflow:'hidden'}}>
+                {uncategorized.map((b,i,arr)=>(
+                  <div key={b.id} style={{display:'flex',alignItems:'center',gap:12,padding:'13px 16px',borderBottom:i<arr.length-1?`1px solid ${A.sep}`:'none'}}>
+                    <span style={{fontSize:20,flexShrink:0}}>{b.emoji||'🔗'}</span>
+                    <div style={{flex:1,minWidth:0}}>
+                      <a href={b.url} target="_blank" rel="noopener noreferrer" style={{fontSize:15,fontWeight:600,color:A.blue,textDecoration:'none'}}>{b.title}</a>
+                      <div style={{fontSize:12,color:A.label4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.url}</div>
+                    </div>
+                    <button onClick={()=>del(b.id)} style={{background:'none',border:'none',fontSize:12,color:A.red,cursor:'pointer',fontWeight:500,padding:'4px 0',flexShrink:0}}>Delete</button>
+                  </div>
+                ))}
+              </Card>
+            </div>
+          )}
+        </>
+      )}
+
+      <Drawer open={drawerOpen} onClose={()=>setDrawerOpen(false)} title="Add Bookmark">
+        <FormGroup label="Details">
+          <div style={{padding:'12px 16px',borderBottom:`1px solid ${A.sep}`}}><Inp value={form.title} onChange={e=>setForm(p=>({...p,title:e.target.value}))} placeholder="Title (e.g. School Portal)"/></div>
+          <div style={{padding:'12px 16px',borderBottom:`1px solid ${A.sep}`}}><Inp value={form.url} onChange={e=>setForm(p=>({...p,url:e.target.value}))} placeholder="https://..." type="url"/></div>
+          <div style={{padding:'12px 16px',borderBottom:`1px solid ${A.sep}`}}><Inp value={form.category} onChange={e=>setForm(p=>({...p,category:e.target.value}))} placeholder="Category (e.g. School, Health) — optional"/></div>
+          <div style={{padding:'12px 16px'}}><Inp value={form.emoji} onChange={e=>setForm(p=>({...p,emoji:e.target.value}))} placeholder="Emoji (default 🔗)"/></div>
+        </FormGroup>
+        <div style={{padding:'16px'}}><Btn onClick={save} full>Add Bookmark</Btn></div>
+      </Drawer>
     </div>
   );
 }
@@ -3637,6 +3800,7 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
     {id:'family',label:'Family',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><circle cx="6" cy="5" r="2.5" stroke="currentColor" strokeWidth="1.5"/><circle cx="12" cy="5" r="2" stroke="currentColor" strokeWidth="1.5"/><path d="M1 14c0-2.76 2.24-5 5-5s5 2.24 5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M12 9c1.66 0 3 1.34 3 3v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
     {id:'goals',label:'Goals',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><circle cx="8.5" cy="8.5" r="6.5" stroke="currentColor" strokeWidth="1.5"/><circle cx="8.5" cy="8.5" r="3" stroke="currentColor" strokeWidth="1.5"/><circle cx="8.5" cy="8.5" r="1" fill="currentColor"/></svg>},
     {id:'notes',label:'Notes',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="2" y="2" width="13" height="13" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M5 6h7M5 9h5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
+    {id:'bookmarks',label:'Bookmarks',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><path d="M3.5 2h10a1 1 0 011 1v12l-5.5-3.5L3.5 15V3a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>},
     {id:'polls',label:'Polls',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="2" y="9" width="3" height="6" rx="1" fill="currentColor" opacity=".5"/><rect x="7" y="5" width="3" height="10" rx="1" fill="currentColor" opacity=".7"/><rect x="12" y="2" width="3" height="13" rx="1" fill="currentColor"/></svg>},
     {id:'inbox',label:'Inbox',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="1.5" y="3.5" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M1.5 6.5l7 4 7-4" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>,badge:inboxCount},
     {id:'settings',label:'Settings',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><circle cx="8.5" cy="8.5" r="2.5" stroke="currentColor" strokeWidth="1.5"/><path d="M8.5 1v2M8.5 14v2M1 8.5h2M14 8.5h2M3.05 3.05l1.42 1.42M12.53 12.53l1.42 1.42M12.53 3.05l-1.42 1.42M4.47 12.53l-1.42 1.42" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
@@ -3651,6 +3815,7 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
     family:     <FamilyScreen members={members} setMembers={setMembers} toastAdd={toastAdd}/>,
     goals:      <GoalsScreen goals={goals} setGoals={setGoals} toastAdd={toastAdd}/>,
     notes:      <NotesScreen notes={notes} setNotes={setNotes} toastAdd={toastAdd}/>,
+    bookmarks:  <BookmarksScreen bookmarks={bookmarks} setBookmarks={setBookmarks} toastAdd={toastAdd}/>,
     polls:      <PollsScreen polls={polls} setPolls={setPolls} toastAdd={toastAdd}/>,
     inbox:      <InboxScreen toastAdd={toastAdd} events={events} setEvents={setEvents} setInboxCount={setInboxCount}/>,
     settings:   <SettingsScreen toastAdd={toastAdd} icsSources={icsSources} setIcsSources={setIcsSources} onDisplay={onDisplay} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} setQuickActions={setQuickActions} setRotationMs={setRotationMs}/>,
@@ -4036,6 +4201,7 @@ function App(){
   const [goals,setGoals]=useState([]);
   const [notes,setNotes]=useState([]);
   const [polls,setPolls]=useState([]);
+  const [bookmarks,setBookmarks]=useState([]);
   const [quickActions,setQuickActions]=useState([]);
   const [photos,setPhotos]=useState([]);
   const [clockFormat,setClockFormat]=useState('12h');
@@ -4105,7 +4271,8 @@ function App(){
       api.get('/api/notes'),
       api.get('/api/polls'),
       api.get('/api/quick-actions'),
-    ]).then(([ev,ch,gr,ml,ics,inb,cd,mb,ph,st,gl,nt,pl,qa])=>{
+      api.get('/api/bookmarks'),
+    ]).then(([ev,ch,gr,ml,ics,inb,cd,mb,ph,st,gl,nt,pl,qa,bm])=>{
       if(ev.status==='fulfilled'&&Array.isArray(ev.value)) setEvents(ev.value);
       if(ch.status==='fulfilled'&&Array.isArray(ch.value)) setChores(ch.value);
       if(gr.status==='fulfilled'&&Array.isArray(gr.value)) setGrocery(gr.value);
@@ -4119,6 +4286,7 @@ function App(){
       if(nt.status==='fulfilled'&&Array.isArray(nt.value)) setNotes(nt.value);
       if(pl.status==='fulfilled'&&Array.isArray(pl.value)) setPolls(pl.value);
       if(qa.status==='fulfilled'&&Array.isArray(qa.value)) setQuickActions(qa.value);
+      if(bm.status==='fulfilled'&&Array.isArray(bm.value)) setBookmarks(bm.value);
       if(st.status==='fulfilled'){
         const s=st.value;
         if(s.clock_format) setClockFormat(s.clock_format);

@@ -684,7 +684,7 @@ app.post('/api/push/test', requireAuth, async (req, res) => {
 });
 
 // ── Routes: Settings ──────────────────────────────────────────────────────────
-const SETTINGS_SENSITIVE = new Set(['email_webhook_secret','anthropic_api_key','ai_api_key','beehiiv_api_key','youtube_api_key','etsy_api_key','teslemetry_api_key','aviationstack_api_key','lastfm_api_key','jwt_secret','vapid_public','vapid_private','admin_pin_hash','resend_api_key','ha_webhook_secret','smart_home_token','ha_token','homey_token']);
+const SETTINGS_SENSITIVE = new Set(['email_webhook_secret','anthropic_api_key','ai_api_key','beehiiv_api_key','youtube_api_key','etsy_api_key','teslemetry_api_key','aviationstack_api_key','lastfm_api_key','nextdns_api_key','jwt_secret','vapid_public','vapid_private','admin_pin_hash','resend_api_key','ha_webhook_secret','smart_home_token','ha_token','homey_token']);
 app.get('/api/settings', (req, res) => {
   const rows = db.prepare('SELECT key,value FROM settings').all();
   res.json(Object.fromEntries(rows.filter(r=>!SETTINGS_SENSITIVE.has(r.key)).map(r=>[r.key,r.value])));
@@ -729,6 +729,7 @@ app.get('/api/settings/integrations', requireAdmin, (req, res) => {
     has_teslemetry:    !!get('teslemetry_api_key'),
     has_aviationstack: !!get('aviationstack_api_key'),
     has_lastfm:        !!get('lastfm_api_key'),
+    has_nextdns:       !!get('nextdns_api_key'),
   });
 });
 app.put('/api/settings/integrations', requireAdmin, (req, res) => {
@@ -740,6 +741,7 @@ app.put('/api/settings/integrations', requireAdmin, (req, res) => {
   if (req.body.teslemetry_api_key    !== undefined) upd.run('teslemetry_api_key',    String(req.body.teslemetry_api_key));
   if (req.body.aviationstack_api_key !== undefined) upd.run('aviationstack_api_key', String(req.body.aviationstack_api_key));
   if (req.body.lastfm_api_key        !== undefined) upd.run('lastfm_api_key',        String(req.body.lastfm_api_key));
+  if (req.body.nextdns_api_key       !== undefined) upd.run('nextdns_api_key',       String(req.body.nextdns_api_key));
   res.json({ ok: true });
 });
 
@@ -1343,6 +1345,39 @@ app.get('/api/widgets/data', async (req, res) => {
       };
     }).then(d => { if (d) result.flight = d; }));
 
+  const uptimeUrls = gs('widget_uptime_urls');
+  if (uptimeUrls)
+    p.push((async () => {
+      const urls = uptimeUrls.split(',').map(s => s.trim()).filter(Boolean);
+      const checks = await Promise.all(urls.map(async raw => {
+        const url = /^https?:\/\//.test(raw) ? raw : `https://${raw}`;
+        let name = raw;
+        try { name = new URL(url).hostname.replace(/^www\./, ''); } catch {}
+        const start = Date.now();
+        try {
+          const r = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(5000) });
+          return { name, ok: r.status < 500, ms: Date.now() - start };
+        } catch {
+          return { name, ok: false, ms: null };
+        }
+      }));
+      if (checks.length) result.uptime = checks;
+    })());
+
+  const nextdnsKey = gs('nextdns_api_key');
+  const nextdnsProfile = gs('nextdns_profile_id');
+  if (nextdnsKey && nextdnsProfile)
+    p.push(_wFetch(`nextdns:${nextdnsProfile}`, 300000, async () => {
+      const headers = { 'X-Api-Key': nextdnsKey };
+      const r = await fetch(`https://api.nextdns.io/profiles/${nextdnsProfile}/analytics?from=-24h`, { headers, signal: AbortSignal.timeout(8000) });
+      if (!r.ok) return null;
+      const d = await r.json();
+      const total = d.data?.queries ?? 0;
+      const blocked = d.data?.blockedQueries ?? 0;
+      if (!total) return null;
+      return { total, blocked, pct: Math.round((blocked / total) * 100) };
+    }).then(d => { if (d) result.nextdns = d; }));
+
   await Promise.allSettled(p);
   res.json(result);
 });
@@ -1406,6 +1441,23 @@ app.delete('/api/photos/:id', requireAuth, (req, res) => {
     try { fs.unlinkSync(path.join(PHOTOS_DIR, p.filename)); } catch {}
     db.prepare('DELETE FROM photos WHERE id=?').run(Number(req.params.id));
   }
+  res.json({ ok: true });
+});
+
+// ── Routes: Bookmarks ─────────────────────────────────────────────────────────
+app.get('/api/bookmarks', requireAuth, (req, res) => {
+  res.json(db.prepare('SELECT * FROM bookmarks ORDER BY category, id').all());
+});
+
+app.post('/api/bookmarks', requireAuth, (req, res) => {
+  const { title, url, category = '', emoji = '🔗' } = req.body;
+  if (!title?.trim() || !url?.trim()) return res.status(400).json({ error: 'title and url required' });
+  const r = db.prepare('INSERT INTO bookmarks (title, url, category, emoji) VALUES (?,?,?,?)').run(title.trim(), url.trim(), category.trim(), emoji);
+  res.status(201).json({ id: r.lastInsertRowid, title: title.trim(), url: url.trim(), category: category.trim(), emoji });
+});
+
+app.delete('/api/bookmarks/:id', requireAuth, (req, res) => {
+  db.prepare('DELETE FROM bookmarks WHERE id=?').run(Number(req.params.id));
   res.json({ ok: true });
 });
 

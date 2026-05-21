@@ -1524,23 +1524,32 @@ app.get('/api/widgets/data', async (req, res) => {
 // ── Routes: Spotify ───────────────────────────────────────────────────────────
 let _spotifyCache = null; let _spotifyCacheAt = 0;
 let _spotifyAccessToken = null; let _spotifyAccessTokenAt = 0;
+let _spotifyRefreshPromise = null; // deduplicates concurrent refresh calls
 
 async function refreshSpotifyToken() {
   if (_spotifyAccessToken && Date.now() - _spotifyAccessTokenAt < 3000000) return _spotifyAccessToken;
-  const refresh = gs('spotify_refresh_token');
-  const proxyUrl = (gs('spotify_proxy_url') || 'https://spotify.mjflanigan.com').replace(/\/$/, '');
-  if (!refresh) return null;
-  const r = await fetch(`${proxyUrl}/refresh`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ refresh_token: refresh }),
-    signal: AbortSignal.timeout(8000),
-  });
-  const d = await r.json();
-  if (!d.access_token) return null;
-  _spotifyAccessToken = d.access_token;
-  _spotifyAccessTokenAt = Date.now();
-  return _spotifyAccessToken;
+  if (_spotifyRefreshPromise) return _spotifyRefreshPromise;
+  _spotifyRefreshPromise = (async () => {
+    try {
+      const refresh = gs('spotify_refresh_token');
+      const proxyUrl = (gs('spotify_proxy_url') || 'https://spotify.mjflanigan.com').replace(/\/$/, '');
+      if (!refresh) return null;
+      const r = await fetch(`${proxyUrl}/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: refresh }),
+        signal: AbortSignal.timeout(8000),
+      });
+      const d = await r.json();
+      if (!d.access_token) return null;
+      _spotifyAccessToken = d.access_token;
+      _spotifyAccessTokenAt = Date.now();
+      return _spotifyAccessToken;
+    } finally {
+      _spotifyRefreshPromise = null;
+    }
+  })();
+  return _spotifyRefreshPromise;
 }
 
 // Kick off OAuth via the proxy — just needs the user's Kith base URL
@@ -1566,6 +1575,11 @@ app.get('/api/spotify/now-playing', requireAdmin, async (req, res) => {
     if (!token) return res.json({ playing: false });
     const r = await fetch('https://api.spotify.com/v1/me/player/currently-playing', { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(5000) });
     if (r.status === 204) { _spotifyCache = null; return res.json({ playing: false }); }
+    if (r.status === 401) {
+      // Token rejected — bust cached token so the next call forces a fresh refresh
+      _spotifyAccessToken = null; _spotifyAccessTokenAt = 0;
+      _spotifyCache = null; return res.json({ playing: false });
+    }
     if (r.ok) {
       const d = await r.json();
       if (d.is_playing && d.item) {

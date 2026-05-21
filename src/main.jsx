@@ -3369,7 +3369,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
           <div style={{fontSize:12,color:A.label5,marginBottom:10}}>Shows what's currently scrobbling from Spotify (or any source). Needs your Last.fm API key and username.</div>
           <input placeholder="API Key" value={lastfmApiKey} onChange={e=>setLastfmApiKey(e.target.value)} style={{width:'100%',background:A.inputBg,border:`1px solid ${A.sep}`,borderRadius:A.r,padding:'8px 10px',fontSize:13,color:A.label1,marginBottom:8,boxSizing:'border-box'}}/>
           <input placeholder="Username" value={lastfmUser} onChange={e=>setLastfmUser(e.target.value)} style={{width:'100%',background:A.inputBg,border:`1px solid ${A.sep}`,borderRadius:A.r,padding:'8px 10px',fontSize:13,color:A.label1,marginBottom:10,boxSizing:'border-box'}}/>
-          <Btn onClick={async()=>{await fetch('/api/settings/integrations',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify({lastfm_api_key:lastfmApiKey,lastfm_user:lastfmUser})});setHasLastfm(!!(lastfmApiKey&&lastfmUser));setLastfmApiKey('');toastAdd('Saved');}}>Save Last.fm</Btn>
+          <Btn onClick={async()=>{const payload={lastfm_user:lastfmUser};if(lastfmApiKey)payload.lastfm_api_key=lastfmApiKey;await fetch('/api/settings/integrations',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify(payload)});setHasLastfm(!!(lastfmUser));setLastfmApiKey('');toastAdd('Saved');}}>Save Last.fm</Btn>
         </div>
       </FormGroup>
 

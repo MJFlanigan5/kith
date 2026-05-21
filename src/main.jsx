@@ -1023,9 +1023,9 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                     {activePanelId==='w_beszel'&&(
                       <>
                         <WLabel>Servers</WLabel>
-                        <div style={{flex:1,display:'flex',gap:8,alignItems:'stretch'}}>
+                        <div style={{flex:1,display:'flex',flexWrap:'wrap',gap:8,alignContent:'flex-start'}}>
                           {(widgetData.beszel||[]).map((srv,i)=>(
-                            <div key={i} style={{flex:1,background:'rgba(255,255,255,0.05)',borderRadius:10,padding:'10px 12px',display:'flex',flexDirection:'column',gap:7}}>
+                            <div key={i} style={{flex:'1 1 45%',minWidth:0,background:'rgba(255,255,255,0.05)',borderRadius:10,padding:'10px 12px',display:'flex',flexDirection:'column',gap:7}}>
                               <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:2}}>
                                 <div style={{width:7,height:7,borderRadius:'50%',background:srv.status==='up'?A.green:A.red,flexShrink:0}}/>
                                 <div style={{fontSize:12,fontWeight:700,color:D.t1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{srv.name}</div>

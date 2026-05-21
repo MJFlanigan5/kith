@@ -550,6 +550,9 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
     ...(widgetData.nextdns?['w_nextdns']:[]),
     ...(widgetData.beszel?.length?['w_beszel']:[]),
     ...(widgetData.plex?['w_plex']:[]),
+    ...(widgetData.moen?['w_moen']:[]),
+    ...(widgetData.unifi?['w_unifi']:[]),
+    ...(widgetData.span?['w_span']:[]),
   ];
   const activePanelId=centerPanels[centerIdx%Math.max(1,centerPanels.length)];
 
@@ -1111,6 +1114,95 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         </>
                       );
                     })()}
+                    {activePanelId==='w_moen'&&(()=>{
+                      const m=widgetData.moen;
+                      const modeColor={home:A.green,away:A.amber,sleep:A.indigo}[m.system_mode]||D.t3;
+                      return(
+                        <>
+                          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+                            <WLabel>Moen Flo</WLabel>
+                            {m.has_alert&&<span style={{fontSize:11,fontWeight:700,color:A.red}}>LEAK ALERT</span>}
+                          </div>
+                          <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',gap:14}}>
+                            <div style={{display:'flex',gap:10,alignItems:'stretch'}}>
+                              <div style={{flex:1,background:'rgba(255,255,255,0.06)',borderRadius:10,padding:'12px',textAlign:'center'}}>
+                                <div style={{fontSize:36,fontWeight:800,color:D.t1,letterSpacing:'-.03em',lineHeight:1}}>{m.daily_gal}</div>
+                                <div style={{fontSize:11,color:D.t4,marginTop:4}}>gal today</div>
+                              </div>
+                              <div style={{flex:1,background:'rgba(255,255,255,0.06)',borderRadius:10,padding:'12px',textAlign:'center'}}>
+                                <div style={{fontSize:36,fontWeight:800,color:m.flow_gpm>0?A.blue:D.t1,letterSpacing:'-.03em',lineHeight:1}}>{m.flow_gpm}</div>
+                                <div style={{fontSize:11,color:D.t4,marginTop:4}}>gpm now</div>
+                              </div>
+                            </div>
+                            {[
+                              {label:'Pressure',val:`${m.psi} psi`,color:D.t2},
+                              {label:'Mode',val:m.system_mode,color:modeColor},
+                              {label:'Status',val:m.connected?'Connected':'Offline',color:m.connected?A.green:A.red},
+                            ].map(row=>(
+                              <div key={row.label} style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                                <span style={{fontSize:13,color:D.t3}}>{row.label}</span>
+                                <span style={{fontSize:14,fontWeight:600,color:row.color,textTransform:'capitalize'}}>{row.val}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      );
+                    })()}
+                    {activePanelId==='w_unifi'&&(()=>{
+                      const u=widgetData.unifi;
+                      const upColor=u.status==='up'?A.green:A.red;
+                      return(
+                        <>
+                          <WLabel>UniFi Network</WLabel>
+                          <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',gap:12}}>
+                            <div style={{display:'flex',gap:10}}>
+                              <div style={{flex:1,background:'rgba(255,255,255,0.06)',borderRadius:10,padding:'12px',textAlign:'center'}}>
+                                <div style={{fontSize:40,fontWeight:800,color:D.t1,letterSpacing:'-.04em',lineHeight:1}}>{u.clients}</div>
+                                <div style={{fontSize:11,color:D.t4,marginTop:4}}>devices online</div>
+                              </div>
+                              <div style={{flex:1,background:'rgba(255,255,255,0.06)',borderRadius:10,padding:'12px',textAlign:'center'}}>
+                                <div style={{fontSize:24,fontWeight:700,color:D.t1}}>{u.ap_count}</div>
+                                <div style={{fontSize:11,color:D.t4,marginTop:4}}>access points</div>
+                              </div>
+                            </div>
+                            {[
+                              {label:'WAN',val:u.status,color:upColor},
+                              {label:'Download',val:`${u.rx_mbps} Mbps`,color:D.t2},
+                              {label:'Upload',val:`${u.tx_mbps} Mbps`,color:D.t2},
+                            ].map(row=>(
+                              <div key={row.label} style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                                <span style={{fontSize:13,color:D.t3}}>{row.label}</span>
+                                <span style={{fontSize:14,fontWeight:600,color:row.color,textTransform:'capitalize'}}>{row.val}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      );
+                    })()}
+                    {activePanelId==='w_span'&&(()=>{
+                      const s=widgetData.span;
+                      return(
+                        <>
+                          <WLabel>Span Panel</WLabel>
+                          <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',gap:12}}>
+                            <div style={{display:'flex',gap:10}}>
+                              <div style={{flex:1,background:'rgba(255,149,0,0.10)',borderRadius:10,padding:'12px',textAlign:'center'}}>
+                                <div style={{fontSize:32,fontWeight:800,color:s.solar_active?A.amber:D.t4,letterSpacing:'-.03em',lineHeight:1}}>{s.solar_kw}</div>
+                                <div style={{fontSize:11,color:D.t4,marginTop:4}}>kW solar</div>
+                              </div>
+                              <div style={{flex:1,background:'rgba(255,255,255,0.06)',borderRadius:10,padding:'12px',textAlign:'center'}}>
+                                <div style={{fontSize:32,fontWeight:800,color:D.t1,letterSpacing:'-.03em',lineHeight:1}}>{s.home_kw}</div>
+                                <div style={{fontSize:11,color:D.t4,marginTop:4}}>kW home</div>
+                              </div>
+                            </div>
+                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                              <span style={{fontSize:13,color:D.t3}}>Grid</span>
+                              <span style={{fontSize:14,fontWeight:600,color:s.grid_importing?A.red:A.green}}>{s.grid_kw} kW {s.grid_importing?'import':'export'}</span>
+                            </div>
+                          </div>
+                        </>
+                      );
+                    })()}
                   </Widget>
                 </div>
               )}
@@ -1166,12 +1258,14 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
               {(grocery||[]).filter(g=>!g.checked).length>0&&(
                 <Widget style={{flexShrink:0}}>
                   <WLabel>Grocery</WLabel>
-                  {(grocery||[]).filter(g=>!g.checked).slice(0,4).map((item,i)=>(
-                    <div key={item.id} style={{display:'flex',alignItems:'center',gap:9,padding:'5px 0',borderBottom:i>0?`1px solid ${D.sep}`:'none'}}>
-                      <div style={{width:5,height:5,borderRadius:'50%',background:'rgba(255,255,255,0.30)',flexShrink:0}}/>
-                      <span style={{fontSize:13,color:D.t2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{item.name}</span>
-                    </div>
-                  ))}
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'2px 12px'}}>
+                    {(grocery||[]).filter(g=>!g.checked).slice(0,8).map(item=>(
+                      <div key={item.id} style={{display:'flex',alignItems:'center',gap:7,padding:'4px 0'}}>
+                        <div style={{width:4,height:4,borderRadius:'50%',background:'rgba(255,255,255,0.35)',flexShrink:0}}/>
+                        <span style={{fontSize:13,color:D.t2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{item.name}</span>
+                      </div>
+                    ))}
+                  </div>
                 </Widget>
               )}
               {/* Pinned notes — fills remaining space */}
@@ -1180,9 +1274,9 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                   <WLabel>Notes</WLabel>
                   <div style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:8}}>
                     {pinnedNotes.map(n=>(
-                      <div key={n.id} style={{background:n.color&&n.color!=='#FAFAF5'?n.color+'28':'rgba(255,255,255,0.05)',borderRadius:8,padding:'10px 12px',borderLeft:`3px solid ${n.color&&n.color!=='#FAFAF5'?n.color:'rgba(255,255,255,0.15)'}`}}>
-                        <div style={{fontSize:14,fontWeight:700,color:D.t1,marginBottom:n.content?5:0,lineHeight:1.3}}>{n.title}</div>
-                        {n.content&&<div style={{fontSize:12,color:D.t3,lineHeight:1.5,whiteSpace:'pre-wrap'}}>{n.content}</div>}
+                      <div key={n.id} style={{background:n.color&&n.color!=='#FAFAF5'?n.color+'28':'rgba(255,255,255,0.07)',borderRadius:8,padding:'10px 12px',borderLeft:`3px solid ${n.color&&n.color!=='#FAFAF5'?n.color:'rgba(255,255,255,0.25)'}`}}>
+                        <div style={{fontSize:13,fontWeight:700,color:D.t2,marginBottom:n.content?6:0,lineHeight:1.3,textTransform:'uppercase',letterSpacing:'.04em'}}>{n.title}</div>
+                        {n.content&&<div style={{fontSize:15,fontWeight:500,color:D.t1,lineHeight:1.5,whiteSpace:'pre-wrap',fontFamily:'JetBrains Mono,monospace',letterSpacing:'.02em'}}>{n.content}</div>}
                       </div>
                     ))}
                   </div>
@@ -2509,22 +2603,24 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,toastAdd}){
           <div key={cat} style={{marginBottom:16}}>
             <div style={{fontSize:12,fontWeight:700,color:A.label4,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:6,paddingLeft:4}}>{cat}</div>
             <Card>
-              {unchecked.filter(i=>i.category===cat).map((item,idx)=>{
-                let _tx=0;
-                return(
-                  <div key={item.id} className="tap"
-                    onTouchStart={e=>{_tx=e.touches[0].clientX;}}
-                    onTouchEnd={e=>{if(e.changedTouches[0].clientX-_tx>60){e.preventDefault();toggle(item.id);}}}
-                    onClick={()=>toggle(item.id)}
-                    style={{display:'flex',alignItems:'center',gap:14,padding:'13px 16px',borderTop:idx>0?`1px solid ${A.sep}`:'none',cursor:'pointer'}}
-                    onMouseEnter={e=>e.currentTarget.style.background=A.systemBg}
-                    onMouseLeave={e=>e.currentTarget.style.background='transparent'}
-                  >
-                    <div style={{width:24,height:24,borderRadius:'50%',border:`2px solid ${A.sepOpaque}`,flexShrink:0}}/>
-                    <span style={{fontSize:15,color:A.label1}}>{item.name}</span>
-                  </div>
-                );
-              })}
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr'}}>
+                {unchecked.filter(i=>i.category===cat).map((item,idx)=>{
+                  let _tx=0;
+                  return(
+                    <div key={item.id} className="tap"
+                      onTouchStart={e=>{_tx=e.touches[0].clientX;}}
+                      onTouchEnd={e=>{if(e.changedTouches[0].clientX-_tx>60){e.preventDefault();toggle(item.id);}}}
+                      onClick={()=>toggle(item.id)}
+                      style={{display:'flex',alignItems:'center',gap:12,padding:'12px 16px',borderTop:idx>1?`1px solid ${A.sep}`:'none',borderRight:idx%2===0?`1px solid ${A.sep}`:'none',cursor:'pointer'}}
+                      onMouseEnter={e=>e.currentTarget.style.background=A.systemBg}
+                      onMouseLeave={e=>e.currentTarget.style.background='transparent'}
+                    >
+                      <div style={{width:22,height:22,borderRadius:'50%',border:`2px solid ${A.sepOpaque}`,flexShrink:0}}/>
+                      <span style={{fontSize:15,color:A.label1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{item.name}</span>
+                    </div>
+                  );
+                })}
+              </div>
             </Card>
           </div>
         ))}
@@ -2675,6 +2771,18 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [hasLastfm,setHasLastfm]=useState(false);
   const [lastfmApiKey,setLastfmApiKey]=useState('');
   const [lastfmUser,setLastfmUser]=useState('');
+  const [hasMoen,setHasMoen]=useState(false);
+  const [moenUser,setMoenUser]=useState('');
+  const [moenPass,setMoenPass]=useState('');
+  const [hasUnifi,setHasUnifi]=useState(false);
+  const [unifiUrl,setUnifiUrl]=useState('');
+  const [unifiUser,setUnifiUser]=useState('');
+  const [unifiPass,setUnifiPass]=useState('');
+  const [unifiSite,setUnifiSite]=useState('default');
+  const [unifiInterval,setUnifiInterval]=useState('60');
+  const [hasSpan,setHasSpan]=useState(false);
+  const [spanIp,setSpanIp]=useState('');
+  const [spanToken,setSpanToken]=useState('');
   const [wUptimeUrls,setWUptimeUrls]=useState('');
   const [intSaving,setIntSaving]=useState(false);
   const [wQuote,setWQuote]=useState(false);
@@ -2738,7 +2846,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
     }).catch(()=>{});
     api.get('/api/ha/secret').then(d=>{if(d.secret) setHaSecret(d.secret);}).catch(()=>{});
     fetch('/api/ha/smart-home-status',{headers:{..._authHdr()}}).then(r=>r.json()).then(d=>{if(d.ha){if(d.ha.url)setHaUrl(d.ha.url);if(d.ha.hasToken)setHaHasToken(true);}if(d.homey){if(d.homey.url)setHomeyUrl(d.homey.url);if(d.homey.hasToken)setHomeyHasToken(true);}}).catch(()=>{});
-    api.get('/api/settings/integrations').then(d=>{setHasAnthropicKey(!!d.has_anthropic);setHasBeehiivKey(!!d.has_beehiiv);setHasYoutubeKey(!!d.has_youtube);setHasEtsyKey(!!d.has_etsy);setHasTeslemetryKey(!!d.has_teslemetry);setHasAviationstackKey(!!d.has_aviationstack);setHasNextdnsKey(!!d.has_nextdns);setHasBeszel(!!d.has_beszel);if(d.beszel_url)setBeszelUrl(d.beszel_url);setHasPlexKey(!!d.has_plex);if(d.plex_url)setPlexUrl(d.plex_url);setHasLastfm(!!d.has_lastfm);if(d.lastfm_user)setLastfmUser(d.lastfm_user);}).catch(()=>{});
+    api.get('/api/settings/integrations').then(d=>{setHasAnthropicKey(!!d.has_anthropic);setHasBeehiivKey(!!d.has_beehiiv);setHasYoutubeKey(!!d.has_youtube);setHasEtsyKey(!!d.has_etsy);setHasTeslemetryKey(!!d.has_teslemetry);setHasAviationstackKey(!!d.has_aviationstack);setHasNextdnsKey(!!d.has_nextdns);setHasBeszel(!!d.has_beszel);if(d.beszel_url)setBeszelUrl(d.beszel_url);setHasPlexKey(!!d.has_plex);if(d.plex_url)setPlexUrl(d.plex_url);setHasLastfm(!!d.has_lastfm);if(d.lastfm_user)setLastfmUser(d.lastfm_user);setHasMoen(!!d.has_moen);setHasUnifi(!!d.has_unifi);if(d.unifi_url)setUnifiUrl(d.unifi_url);if(d.unifi_site)setUnifiSite(d.unifi_site);if(d.unifi_pull_interval)setUnifiInterval(d.unifi_pull_interval);setHasSpan(!!d.has_span);}).catch(()=>{});
     api.get('/api/quick-actions').then(d=>{if(Array.isArray(d)) setQaList(d);}).catch(()=>{});
   },[]);
   const geocodeCity=async()=>{
@@ -3370,6 +3478,38 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
           <input placeholder="API Key" value={lastfmApiKey} onChange={e=>setLastfmApiKey(e.target.value)} style={{width:'100%',background:A.inputBg,border:`1px solid ${A.sep}`,borderRadius:A.r,padding:'8px 10px',fontSize:13,color:A.label1,marginBottom:8,boxSizing:'border-box'}}/>
           <input placeholder="Username" value={lastfmUser} onChange={e=>setLastfmUser(e.target.value)} style={{width:'100%',background:A.inputBg,border:`1px solid ${A.sep}`,borderRadius:A.r,padding:'8px 10px',fontSize:13,color:A.label1,marginBottom:10,boxSizing:'border-box'}}/>
           <Btn onClick={async()=>{const payload={lastfm_user:lastfmUser};if(lastfmApiKey)payload.lastfm_api_key=lastfmApiKey;await fetch('/api/settings/integrations',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify(payload)});setHasLastfm(!!(lastfmUser));setLastfmApiKey('');toastAdd('Saved');}}>Save Last.fm</Btn>
+        </div>
+        <div style={{padding:'14px 16px',borderTop:`1px solid ${A.sep}`}}>
+          <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:6}}>Moen Flo{hasMoen&&<span style={{marginLeft:8,fontSize:11,color:A.green,fontWeight:500}}>Connected</span>}</div>
+          <div style={{fontSize:12,color:A.label5,marginBottom:10}}>Water monitoring — shows daily usage, flow rate, pressure, and leak alerts. Uses your Moen account credentials.</div>
+          <input placeholder="Moen email" value={moenUser} onChange={e=>setMoenUser(e.target.value)} style={{width:'100%',background:A.inputBg,border:`1px solid ${A.sep}`,borderRadius:A.r,padding:'8px 10px',fontSize:13,color:A.label1,marginBottom:8,boxSizing:'border-box'}}/>
+          <input placeholder="Password" type="password" value={moenPass} onChange={e=>setMoenPass(e.target.value)} style={{width:'100%',background:A.inputBg,border:`1px solid ${A.sep}`,borderRadius:A.r,padding:'8px 10px',fontSize:13,color:A.label1,marginBottom:10,boxSizing:'border-box'}}/>
+          <Btn onClick={async()=>{if(!moenUser.trim()||!moenPass.trim()){toastAdd('Email and password required','red');return;}await fetch('/api/settings/integrations',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify({moen_user:moenUser.trim(),moen_pass:moenPass.trim()})});setHasMoen(true);setMoenPass('');toastAdd('Saved');}}>Save Moen Flo</Btn>
+        </div>
+        <div style={{padding:'14px 16px',borderTop:`1px solid ${A.sep}`}}>
+          <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:6}}>UniFi Network{hasUnifi&&<span style={{marginLeft:8,fontSize:11,color:A.green,fontWeight:500}}>Connected</span>}</div>
+          <div style={{fontSize:12,color:A.label5,marginBottom:10}}>Shows devices online, WAN status, and real-time bandwidth from your UniFi controller.</div>
+          <input placeholder="Controller URL (e.g. https://192.168.1.1)" value={unifiUrl} onChange={e=>setUnifiUrl(e.target.value)} style={{width:'100%',background:A.inputBg,border:`1px solid ${A.sep}`,borderRadius:A.r,padding:'8px 10px',fontSize:13,color:A.label1,marginBottom:8,boxSizing:'border-box'}}/>
+          <input placeholder="Username" value={unifiUser} onChange={e=>setUnifiUser(e.target.value)} style={{width:'100%',background:A.inputBg,border:`1px solid ${A.sep}`,borderRadius:A.r,padding:'8px 10px',fontSize:13,color:A.label1,marginBottom:8,boxSizing:'border-box'}}/>
+          <input placeholder="Password" type="password" value={unifiPass} onChange={e=>setUnifiPass(e.target.value)} style={{width:'100%',background:A.inputBg,border:`1px solid ${A.sep}`,borderRadius:A.r,padding:'8px 10px',fontSize:13,color:A.label1,marginBottom:8,boxSizing:'border-box'}}/>
+          <input placeholder="Site name (default)" value={unifiSite} onChange={e=>setUnifiSite(e.target.value)} style={{width:'100%',background:A.inputBg,border:`1px solid ${A.sep}`,borderRadius:A.r,padding:'8px 10px',fontSize:13,color:A.label1,marginBottom:8,boxSizing:'border-box'}}/>
+          <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
+            <span style={{fontSize:13,color:A.label2,flexShrink:0}}>Pull every</span>
+            <select value={unifiInterval} onChange={e=>setUnifiInterval(e.target.value)} style={{flex:1,background:A.inputBg,border:`1px solid ${A.sep}`,borderRadius:A.r,padding:'8px 10px',fontSize:13,color:A.label1}}>
+              <option value="30">30 seconds</option>
+              <option value="60">60 seconds</option>
+              <option value="120">2 minutes</option>
+              <option value="300">5 minutes</option>
+            </select>
+          </div>
+          <Btn onClick={async()=>{if(!unifiUrl.trim()||!unifiUser.trim()||!unifiPass.trim()){toastAdd('URL, username, and password required','red');return;}await fetch('/api/settings/integrations',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify({unifi_url:unifiUrl.trim(),unifi_user:unifiUser.trim(),unifi_pass:unifiPass.trim(),unifi_site:unifiSite.trim()||'default',unifi_pull_interval:unifiInterval})});setHasUnifi(true);setUnifiPass('');toastAdd('Saved');}}>Save UniFi</Btn>
+        </div>
+        <div style={{padding:'14px 16px',borderTop:`1px solid ${A.sep}`}}>
+          <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:6}}>Span Panel{hasSpan&&<span style={{marginLeft:8,fontSize:11,color:A.green,fontWeight:500}}>Connected</span>}</div>
+          <div style={{fontSize:12,color:A.label5,marginBottom:10}}>Circuit-level power monitoring. Local API — no cloud required. To get a token: press the door sensor button 3 times, then the token appears in the Span app under Settings → API.</div>
+          <input placeholder="Panel IP (e.g. 192.168.1.50)" value={spanIp} onChange={e=>setSpanIp(e.target.value)} style={{width:'100%',background:A.inputBg,border:`1px solid ${A.sep}`,borderRadius:A.r,padding:'8px 10px',fontSize:13,color:A.label1,marginBottom:8,boxSizing:'border-box'}}/>
+          <input placeholder="Access token" value={spanToken} onChange={e=>setSpanToken(e.target.value)} style={{width:'100%',background:A.inputBg,border:`1px solid ${A.sep}`,borderRadius:A.r,padding:'8px 10px',fontSize:13,color:A.label1,marginBottom:10,boxSizing:'border-box'}}/>
+          <Btn onClick={async()=>{if(!spanIp.trim()||!spanToken.trim()){toastAdd('IP and token required','red');return;}await fetch('/api/settings/integrations',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify({span_ip:spanIp.trim(),span_token:spanToken.trim()})});setHasSpan(true);setSpanToken('');toastAdd('Saved');}}>Save Span</Btn>
         </div>
       </FormGroup>
 

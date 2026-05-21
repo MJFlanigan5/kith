@@ -735,6 +735,12 @@ app.get('/api/settings/integrations', requireAdmin, (req, res) => {
     beszel_url:        get('beszel_url'),
     has_plex:          !!(get('plex_url') && get('plex_token')),
     plex_url:          get('plex_url'),
+    has_moen:          !!(get('moen_user') && get('moen_pass')),
+    has_unifi:         !!(get('unifi_url') && get('unifi_user') && get('unifi_pass')),
+    unifi_url:         get('unifi_url'),
+    unifi_site:        get('unifi_site') || 'default',
+    unifi_pull_interval: get('unifi_pull_interval') || '60',
+    has_span:          !!(get('span_ip') && get('span_token')),
   });
 });
 app.put('/api/settings/integrations', requireAdmin, (req, res) => {
@@ -753,6 +759,15 @@ app.put('/api/settings/integrations', requireAdmin, (req, res) => {
   if (req.body.beszel_pass           !== undefined) upd.run('beszel_pass',           String(req.body.beszel_pass));
   if (req.body.plex_url              !== undefined) upd.run('plex_url',              String(req.body.plex_url));
   if (req.body.plex_token            !== undefined) upd.run('plex_token',            String(req.body.plex_token));
+  if (req.body.moen_user             !== undefined) upd.run('moen_user',             String(req.body.moen_user));
+  if (req.body.moen_pass             !== undefined) upd.run('moen_pass',             String(req.body.moen_pass));
+  if (req.body.unifi_url             !== undefined) upd.run('unifi_url',             String(req.body.unifi_url));
+  if (req.body.unifi_user            !== undefined) upd.run('unifi_user',            String(req.body.unifi_user));
+  if (req.body.unifi_pass            !== undefined) upd.run('unifi_pass',            String(req.body.unifi_pass));
+  if (req.body.unifi_site            !== undefined) upd.run('unifi_site',            String(req.body.unifi_site));
+  if (req.body.unifi_pull_interval   !== undefined) upd.run('unifi_pull_interval',   String(req.body.unifi_pull_interval));
+  if (req.body.span_ip               !== undefined) upd.run('span_ip',               String(req.body.span_ip));
+  if (req.body.span_token            !== undefined) upd.run('span_token',            String(req.body.span_token));
   res.json({ ok: true });
 });
 
@@ -1515,6 +1530,134 @@ app.get('/api/widgets/data', async (req, res) => {
         })),
       };
     }).then(d => { if (d) result.plex = d; }));
+
+  // ── Moen Flo ───────────────────────────────────────────────────────────────
+  const moenUser = gs('moen_user');
+  const moenPass = gs('moen_pass');
+  if (moenUser && moenPass)
+    p.push(_wFetch('moen', 300000, async () => {
+      const authR = await fetch('https://api.meetflo.com/api/v1/users/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: moenUser, password: moenPass }),
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!authR.ok) return null;
+      const authD = await authR.json();
+      const token = authD.token; if (!token) return null;
+      const locR = await fetch('https://api.meetflo.com/api/v2/locations?expand=devices', {
+        headers: { 'Authorization': token },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!locR.ok) return null;
+      const locs = await locR.json();
+      const device = locs?.[0]?.devices?.[0]; if (!device) return null;
+      return {
+        system_mode: device.systemMode?.target || 'home',
+        has_alert:   (device.notifications?.criticalCount || 0) > 0,
+        flow_gpm:    +(device.telemetry?.current?.gpm ?? 0).toFixed(2),
+        daily_gal:   Math.round(device.todayGallonsUsed ?? 0),
+        psi:         Math.round(device.telemetry?.current?.psi ?? 0),
+        connected:   !!device.isConnected,
+      };
+    }).then(d => { if (d) result.moen = d; }));
+
+  // ── UniFi Network ──────────────────────────────────────────────────────────
+  const unifiUrl = gs('unifi_url');
+  const unifiUser = gs('unifi_user');
+  const unifiPass = gs('unifi_pass');
+  const unifiSite = gs('unifi_site') || 'default';
+  const unifiIntervalMs = Math.max(30, parseInt(gs('unifi_pull_interval') || '60')) * 1000;
+  if (unifiUrl && unifiUser && unifiPass)
+    p.push(_wFetch(`unifi:${unifiUrl}`, unifiIntervalMs, async () => {
+      // Use https.request so we can skip self-signed cert validation (common for local controllers)
+      const https = require('https');
+      const http  = require('http');
+      function uReq(url, opts = {}) {
+        return new Promise((resolve, reject) => {
+          const u = new URL(url);
+          const mod = u.protocol === 'https:' ? https : http;
+          const body = opts.body || null;
+          const req = mod.request({
+            hostname: u.hostname, port: u.port || (u.protocol === 'https:' ? 443 : 80),
+            path: u.pathname + u.search, method: opts.method || 'GET',
+            headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
+            rejectUnauthorized: false,
+          }, res => {
+            let d = '';
+            res.on('data', c => d += c);
+            res.on('end', () => resolve({ ok: res.statusCode < 400, status: res.statusCode, headers: res.headers, json: () => JSON.parse(d) }));
+          });
+          req.on('error', reject);
+          if (body) req.write(body);
+          req.end();
+        });
+      }
+      const base = unifiUrl.replace(/\/$/, '');
+      // Try UniFi OS path first, fall back to classic controller
+      let token = null; let cookieStr = '';
+      const loginBody = JSON.stringify({ username: unifiUser, password: unifiPass, remember: false });
+      // UniFi OS (UDM/UDM Pro)
+      const osAuth = await uReq(`${base}/api/auth/login`, { method: 'POST', body: loginBody }).catch(() => null);
+      if (osAuth?.ok) {
+        const setCookie = (Array.isArray(osAuth.headers['set-cookie']) ? osAuth.headers['set-cookie'] : [osAuth.headers['set-cookie'] || '']).join('; ');
+        token = setCookie.match(/TOKEN=([^;]+)/)?.[1];
+        cookieStr = setCookie.split(',').map(c => c.trim().split(';')[0]).join('; ');
+        const healthR = await uReq(`${base}/proxy/network/api/s/${unifiSite}/stat/health`, { headers: { Cookie: cookieStr, ...(token ? { 'X-Csrf-Token': token } : {}) } }).catch(() => null);
+        if (healthR?.ok) {
+          const d = healthR.json();
+          const wan = d.data?.find(s => s.subsystem === 'wan') || {};
+          const wlan = d.data?.find(s => s.subsystem === 'wlan') || {};
+          return {
+            clients: (wan.num_user || 0) + (wlan.num_user || 0),
+            rx_mbps: +(Math.round((wan.rx_bytes_r || 0) / 125000 * 10) / 10).toFixed(1),
+            tx_mbps: +(Math.round((wan.tx_bytes_r || 0) / 125000 * 10) / 10).toFixed(1),
+            ap_count: wlan.num_ap || 0,
+            status: wan.status === 'connected' ? 'up' : (wan.status || 'unknown'),
+          };
+        }
+      }
+      // Classic controller fallback
+      const authR = await uReq(`${base}/api/login`, { method: 'POST', body: loginBody }).catch(() => null);
+      if (!authR?.ok) return null;
+      const rawCookies = Array.isArray(authR.headers['set-cookie']) ? authR.headers['set-cookie'] : [authR.headers['set-cookie'] || ''];
+      cookieStr = rawCookies.map(c => c.split(';')[0]).join('; ');
+      const healthR = await uReq(`${base}/api/s/${unifiSite}/stat/health`, { headers: { Cookie: cookieStr } }).catch(() => null);
+      if (!healthR?.ok) return null;
+      const d = healthR.json();
+      const wan = d.data?.find(s => s.subsystem === 'wan') || {};
+      const wlan = d.data?.find(s => s.subsystem === 'wlan') || {};
+      return {
+        clients: (wan.num_user || 0) + (wlan.num_user || 0),
+        rx_mbps: +(Math.round((wan.rx_bytes_r || 0) / 125000 * 10) / 10).toFixed(1),
+        tx_mbps: +(Math.round((wan.tx_bytes_r || 0) / 125000 * 10) / 10).toFixed(1),
+        ap_count: wlan.num_ap || 0,
+        status: wan.status === 'connected' ? 'up' : (wan.status || 'unknown'),
+      };
+    }).then(d => { if (d) result.unifi = d; }));
+
+  // ── Span Panel ─────────────────────────────────────────────────────────────
+  const spanIp = gs('span_ip');
+  const spanToken = gs('span_token');
+  if (spanIp && spanToken)
+    p.push(_wFetch(`span:${spanIp}`, 30000, async () => {
+      const r = await fetch(`http://${spanIp}/api/v1/panel`, {
+        headers: { Authorization: `Bearer ${spanToken}` },
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!r.ok) return null;
+      const d = await r.json();
+      const gridW  = d.instantGridPowerW  ?? 0;
+      const solarW = d.instantSolarPowerW ?? 0;
+      const loadW  = d.instantLoadPowerW  ?? 0;
+      return {
+        grid_kw:       +(gridW  / 1000).toFixed(2),
+        solar_kw:      +(solarW / 1000).toFixed(2),
+        home_kw:       +(loadW  / 1000).toFixed(2),
+        grid_importing: gridW > 0,
+        solar_active:   solarW > 50,
+      };
+    }).then(d => { if (d) result.span = d; }));
 
   await Promise.allSettled(p);
   res.json(result);

@@ -2654,6 +2654,9 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [plexUrl,setPlexUrl]=useState('');
   const [plexToken,setPlexToken]=useState('');
   const [hasPlexKey,setHasPlexKey]=useState(false);
+  const [spotifyClientId,setSpotifyClientId]=useState('');
+  const [spotifyClientSecret,setSpotifyClientSecret]=useState('');
+  const [hasSpotify,setHasSpotify]=useState(false);
   const [wUptimeUrls,setWUptimeUrls]=useState('');
   const [intSaving,setIntSaving]=useState(false);
   const [wQuote,setWQuote]=useState(false);
@@ -2719,7 +2722,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
     }).catch(()=>{});
     api.get('/api/ha/secret').then(d=>{if(d.secret) setHaSecret(d.secret);}).catch(()=>{});
     fetch('/api/ha/smart-home-status',{headers:{..._authHdr()}}).then(r=>r.json()).then(d=>{if(d.ha){if(d.ha.url)setHaUrl(d.ha.url);if(d.ha.hasToken)setHaHasToken(true);}if(d.homey){if(d.homey.url)setHomeyUrl(d.homey.url);if(d.homey.hasToken)setHomeyHasToken(true);}}).catch(()=>{});
-    api.get('/api/settings/integrations').then(d=>{setHasAnthropicKey(!!d.has_anthropic);setHasBeehiivKey(!!d.has_beehiiv);setHasYoutubeKey(!!d.has_youtube);setHasEtsyKey(!!d.has_etsy);setHasTeslemetryKey(!!d.has_teslemetry);setHasAviationstackKey(!!d.has_aviationstack);setHasLastfmKey(!!d.has_lastfm);setHasNextdnsKey(!!d.has_nextdns);setHasBeszel(!!d.has_beszel);if(d.beszel_url)setBeszelUrl(d.beszel_url);setHasPlexKey(!!d.has_plex);if(d.plex_url)setPlexUrl(d.plex_url);}).catch(()=>{});
+    api.get('/api/settings/integrations').then(d=>{setHasAnthropicKey(!!d.has_anthropic);setHasBeehiivKey(!!d.has_beehiiv);setHasYoutubeKey(!!d.has_youtube);setHasEtsyKey(!!d.has_etsy);setHasTeslemetryKey(!!d.has_teslemetry);setHasAviationstackKey(!!d.has_aviationstack);setHasLastfmKey(!!d.has_lastfm);setHasNextdnsKey(!!d.has_nextdns);setHasBeszel(!!d.has_beszel);if(d.beszel_url)setBeszelUrl(d.beszel_url);setHasPlexKey(!!d.has_plex);if(d.plex_url)setPlexUrl(d.plex_url);setHasSpotify(!!d.has_spotify);if(d.spotify_client_id)setSpotifyClientId(d.spotify_client_id);}).catch(()=>{});
     api.get('/api/quick-actions').then(d=>{if(Array.isArray(d)) setQaList(d);}).catch(()=>{});
   },[]);
   const geocodeCity=async()=>{
@@ -3369,6 +3372,26 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
             else toastAdd(r.error||'Save failed','red');
           }} disabled={intSaving}>{intSaving?'Saving…':'Save'}</Btn>
           <div style={{fontSize:12,color:A.label5,marginTop:8}}>Shows now playing (with progress) or recently added when idle. Refreshes every 30s.</div>
+        </div>
+        <div style={{padding:'14px 16px'}}>
+          <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:8}}>Spotify{hasSpotify&&<span style={{marginLeft:8,fontSize:11,color:A.green,fontWeight:500}}>Connected</span>}</div>
+          <div style={{marginBottom:8}}><Inp value={spotifyClientId} onChange={e=>setSpotifyClientId(e.target.value)} placeholder="Client ID"/></div>
+          <div style={{marginBottom:10}}><Inp value={spotifyClientSecret} onChange={e=>setSpotifyClientSecret(e.target.value)} placeholder={hasSpotify?'Client Secret (saved — paste to replace)':'Client Secret'} type="password"/></div>
+          <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:8}}>
+            <Btn onClick={async()=>{
+              if(!spotifyClientId.trim()){toastAdd('Enter Client ID','red');return;}
+              if(!spotifyClientSecret.trim()&&!hasSpotify){toastAdd('Enter Client Secret','red');return;}
+              setIntSaving(true);
+              const payload={spotify_client_id:spotifyClientId.trim()};
+              if(spotifyClientSecret.trim()) payload.spotify_client_secret=spotifyClientSecret.trim();
+              const r=await fetch('/api/settings/integrations',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify(payload)}).then(x=>x.json()).catch(()=>({error:'Failed'}));
+              setIntSaving(false);
+              if(r.ok){setSpotifyClientSecret('');toastAdd('Saved');}
+              else toastAdd(r.error||'Save failed','red');
+            }} disabled={intSaving}>{intSaving?'Saving…':'Save credentials'}</Btn>
+            {spotifyClientId&&<Btn variant="ghost" onClick={()=>window.open('/api/spotify/auth','_blank','width=500,height=700')}>Connect Spotify</Btn>}
+          </div>
+          <div style={{fontSize:12,color:A.label5}}>Create an app at developer.spotify.com. Add <code style={{background:'rgba(0,0,0,0.06)',padding:'1px 4px',borderRadius:3}}>{window.location.origin}/api/spotify/callback</code> as the Redirect URI. Save credentials first, then Connect.</div>
         </div>
       </FormGroup>
 

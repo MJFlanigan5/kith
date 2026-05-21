@@ -1551,7 +1551,8 @@ app.get('/api/widgets/data', async (req, res) => {
       });
       if (!locR.ok) return null;
       const locs = await locR.json();
-      const device = locs?.[0]?.devices?.[0]; if (!device) return null;
+      const locItems = Array.isArray(locs) ? locs : (locs?.items || []);
+      const device = locItems[0]?.devices?.[0]; if (!device) return null;
       return {
         system_mode: device.systemMode?.target || 'home',
         has_alert:   (device.notifications?.criticalCount || 0) > 0,
@@ -1600,9 +1601,9 @@ app.get('/api/widgets/data', async (req, res) => {
       // UniFi OS (UDM/UDM Pro)
       const osAuth = await uReq(`${base}/api/auth/login`, { method: 'POST', body: loginBody }).catch(() => null);
       if (osAuth?.ok) {
-        const setCookie = (Array.isArray(osAuth.headers['set-cookie']) ? osAuth.headers['set-cookie'] : [osAuth.headers['set-cookie'] || '']).join('; ');
-        token = setCookie.match(/TOKEN=([^;]+)/)?.[1];
-        cookieStr = setCookie.split(',').map(c => c.trim().split(';')[0]).join('; ');
+        const setCookies = Array.isArray(osAuth.headers['set-cookie']) ? osAuth.headers['set-cookie'] : (osAuth.headers['set-cookie'] ? [osAuth.headers['set-cookie']] : []);
+        cookieStr = setCookies.map(c => c.split(';')[0]).join('; ');
+        token = cookieStr.match(/TOKEN=([^;& ]+)/)?.[1];
         const healthR = await uReq(`${base}/proxy/network/api/s/${unifiSite}/stat/health`, { headers: { Cookie: cookieStr, ...(token ? { 'X-Csrf-Token': token } : {}) } }).catch(() => null);
         if (healthR?.ok) {
           const d = healthR.json();
@@ -1613,7 +1614,7 @@ app.get('/api/widgets/data', async (req, res) => {
             rx_mbps: +(Math.round((wan.rx_bytes_r || 0) / 125000 * 10) / 10).toFixed(1),
             tx_mbps: +(Math.round((wan.tx_bytes_r || 0) / 125000 * 10) / 10).toFixed(1),
             ap_count: wlan.num_ap || 0,
-            status: wan.status === 'connected' ? 'up' : (wan.status || 'unknown'),
+            status: (wan.status === 'ok' || wan.status === 'connected') ? 'up' : (wan.status || 'unknown'),
           };
         }
       }

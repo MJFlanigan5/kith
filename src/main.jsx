@@ -1276,7 +1276,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                     {pinnedNotes.map(n=>(
                       <div key={n.id} style={{background:n.color&&n.color!=='#FAFAF5'?n.color+'28':'rgba(255,255,255,0.07)',borderRadius:8,padding:'10px 12px',borderLeft:`3px solid ${n.color&&n.color!=='#FAFAF5'?n.color:'rgba(255,255,255,0.25)'}`}}>
                         <div style={{fontSize:13,fontWeight:700,color:D.t2,marginBottom:n.content?6:0,lineHeight:1.3,textTransform:'uppercase',letterSpacing:'.04em'}}>{n.title}</div>
-                        {n.content&&<div style={{fontSize:15,fontWeight:500,color:D.t1,lineHeight:1.5,whiteSpace:'pre-wrap',fontFamily:'JetBrains Mono,monospace',letterSpacing:'.02em'}}>{n.content}</div>}
+                        {n.content&&<div style={{fontSize:16,fontWeight:600,color:D.t1,lineHeight:1.6,whiteSpace:'pre-wrap',fontFamily:'JetBrains Mono,monospace',letterSpacing:'.06em',wordBreak:'break-all'}}>{n.content}</div>}
                       </div>
                     ))}
                   </div>
@@ -2599,31 +2599,36 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,toastAdd}){
             <div style={{fontSize:14,color:A.label4}}>Type an item above and press Enter</div>
           </div>
         )}
-        {cats.map(cat=>(
-          <div key={cat} style={{marginBottom:16}}>
-            <div style={{fontSize:12,fontWeight:700,color:A.label4,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:6,paddingLeft:4}}>{cat}</div>
-            <Card>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr'}}>
-                {unchecked.filter(i=>i.category===cat).map((item,idx)=>{
-                  let _tx=0;
-                  return(
-                    <div key={item.id} className="tap"
-                      onTouchStart={e=>{_tx=e.touches[0].clientX;}}
-                      onTouchEnd={e=>{if(e.changedTouches[0].clientX-_tx>60){e.preventDefault();toggle(item.id);}}}
-                      onClick={()=>toggle(item.id)}
-                      style={{display:'flex',alignItems:'center',gap:12,padding:'12px 16px',borderTop:idx>1?`1px solid ${A.sep}`:'none',borderRight:idx%2===0?`1px solid ${A.sep}`:'none',cursor:'pointer'}}
-                      onMouseEnter={e=>e.currentTarget.style.background=A.systemBg}
-                      onMouseLeave={e=>e.currentTarget.style.background='transparent'}
-                    >
-                      <div style={{width:22,height:22,borderRadius:'50%',border:`2px solid ${A.sepOpaque}`,flexShrink:0}}/>
-                      <span style={{fontSize:15,color:A.label1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{item.name}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </Card>
-          </div>
-        ))}
+        {cats.map(cat=>{
+          const catItems=unchecked.filter(i=>i.category===cat);
+          return(
+            <div key={cat} style={{marginBottom:16}}>
+              <div style={{fontSize:12,fontWeight:700,color:A.label4,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:6,paddingLeft:4}}>{cat}</div>
+              <Card>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr'}}>
+                  {catItems.map((item,idx)=>{
+                    let _tx=0;
+                    const isLeftCol=idx%2===0;
+                    const hasRightNeighbor=idx+1<catItems.length;
+                    return(
+                      <div key={item.id} className="tap"
+                        onTouchStart={e=>{_tx=e.touches[0].clientX;}}
+                        onTouchEnd={e=>{if(e.changedTouches[0].clientX-_tx>60){e.preventDefault();toggle(item.id);}}}
+                        onClick={()=>toggle(item.id)}
+                        style={{display:'flex',alignItems:'center',gap:12,padding:'12px 16px',borderTop:idx>1?`1px solid ${A.sep}`:'none',borderRight:isLeftCol&&hasRightNeighbor?`1px solid ${A.sep}`:'none',cursor:'pointer'}}
+                        onMouseEnter={e=>e.currentTarget.style.background=A.systemBg}
+                        onMouseLeave={e=>e.currentTarget.style.background='transparent'}
+                      >
+                        <div style={{width:22,height:22,borderRadius:'50%',border:`2px solid ${A.sepOpaque}`,flexShrink:0}}/>
+                        <span style={{fontSize:15,color:A.label1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{item.name}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Card>
+            </div>
+          );
+        })}
         {checked.length>0&&(
           <div style={{marginBottom:16}}>
             <div style={{fontSize:12,fontWeight:700,color:A.label5,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:6,paddingLeft:4}}>Checked ({checked.length})</div>
@@ -3506,7 +3511,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
         </div>
         <div style={{padding:'14px 16px',borderTop:`1px solid ${A.sep}`}}>
           <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:6}}>Span Panel{hasSpan&&<span style={{marginLeft:8,fontSize:11,color:A.green,fontWeight:500}}>Connected</span>}</div>
-          <div style={{fontSize:12,color:A.label5,marginBottom:10}}>Circuit-level power monitoring. Local API — no cloud required. To get a token: press the door sensor button 3 times, then the token appears in the Span app under Settings → API.</div>
+          <div style={{fontSize:12,color:A.label5,marginBottom:10}}>Circuit-level power monitoring. Local HTTP API — works on MAIN 32 panels (firmware ≥ r202603). MAIN 40 (Gen3) uses gRPC and is not currently supported. To get a token: press the door sensor button 3 times, then POST to http://&#123;panel-ip&#125;/api/v1/auth/register — the panel returns an accessToken.</div>
           <input placeholder="Panel IP (e.g. 192.168.1.50)" value={spanIp} onChange={e=>setSpanIp(e.target.value)} style={{width:'100%',background:A.inputBg,border:`1px solid ${A.sep}`,borderRadius:A.r,padding:'8px 10px',fontSize:13,color:A.label1,marginBottom:8,boxSizing:'border-box'}}/>
           <input placeholder="Access token" value={spanToken} onChange={e=>setSpanToken(e.target.value)} style={{width:'100%',background:A.inputBg,border:`1px solid ${A.sep}`,borderRadius:A.r,padding:'8px 10px',fontSize:13,color:A.label1,marginBottom:10,boxSizing:'border-box'}}/>
           <Btn onClick={async()=>{if(!spanIp.trim()||!spanToken.trim()){toastAdd('IP and token required','red');return;}await fetch('/api/settings/integrations',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify({span_ip:spanIp.trim(),span_token:spanToken.trim()})});setHasSpan(true);setSpanToken('');toastAdd('Saved');}}>Save Span</Btn>

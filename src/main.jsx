@@ -1065,26 +1065,49 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                     {activePanelId==='w_plex'&&(()=>{
                       const px=widgetData.plex;
                       const isPlaying=px?.type==='playing';
-                      return(
+                      const items=px?.items||[];
+                      if(isPlaying) return(
                         <>
-                          <WLabel>{isPlaying?'Now Playing on Plex':'Recently Added'}</WLabel>
-                          <div style={{flex:1,display:'flex',flexDirection:'column',gap:10,justifyContent:'center'}}>
-                            {(px?.items||[]).map((item,i)=>(
-                              <div key={i} style={{display:'flex',gap:12,alignItems:'center'}}>
-                                {item.thumb&&<img src={item.thumb} alt="" style={{width:48,height:isPlaying?48:72,objectFit:'cover',borderRadius:6,flexShrink:0,background:'rgba(255,255,255,0.06)'}} onError={e=>e.target.style.display='none'}/>}
+                          <WLabel>Now Playing on Plex</WLabel>
+                          <div style={{flex:1,display:'flex',flexDirection:'column',gap:10,justifyContent:'space-evenly'}}>
+                            {items.map((item,i)=>(
+                              <div key={i} style={{display:'flex',gap:14,alignItems:'center'}}>
+                                {item.thumb&&<img src={item.thumb} alt="" style={{width:72,height:72,objectFit:'cover',borderRadius:9,flexShrink:0,background:'rgba(255,255,255,0.06)'}} onError={e=>e.target.style.display='none'}/>}
                                 <div style={{flex:1,minWidth:0}}>
-                                  <div style={{fontSize:13,fontWeight:600,color:D.t1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{item.title}</div>
-                                  {isPlaying&&item.user&&<div style={{fontSize:11,color:D.t4,marginTop:2}}>{item.state==='paused'?'Paused · ':''}{item.user}</div>}
-                                  {!isPlaying&&item.year&&<div style={{fontSize:11,color:D.t4,marginTop:2}}>{item.year}</div>}
-                                  {isPlaying&&item.pct!=null&&(
-                                    <div style={{marginTop:6,height:3,borderRadius:2,background:'rgba(255,255,255,0.10)'}}>
-                                      <div style={{width:`${item.pct}%`,height:'100%',borderRadius:2,background:A.amber}}/>
-                                    </div>
+                                  <div style={{fontSize:15,fontWeight:700,color:D.t1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',letterSpacing:'-.01em'}}>{item.title}</div>
+                                  {item.user&&<div style={{fontSize:12,color:D.t3,marginTop:3}}>{item.state==='paused'?'Paused · ':''}{item.user}</div>}
+                                  {item.pct!=null&&(
+                                    <>
+                                      <div style={{marginTop:10,height:4,borderRadius:3,background:'rgba(255,255,255,0.12)'}}>
+                                        <div style={{width:`${item.pct}%`,height:'100%',borderRadius:3,background:A.amber}}/>
+                                      </div>
+                                      <div style={{fontSize:10,color:D.t4,marginTop:4}}>{item.pct}%</div>
+                                    </>
                                   )}
                                 </div>
                               </div>
                             ))}
                           </div>
+                        </>
+                      );
+                      return(
+                        <>
+                          <WLabel>Recently Added</WLabel>
+                          {items.length===0?(
+                            <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                              <div style={{fontSize:12,color:D.t4}}>Nothing playing</div>
+                            </div>
+                          ):(
+                            <div style={{flex:1,display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,alignContent:'stretch'}}>
+                              {items.map((item,i)=>(
+                                <div key={i} style={{display:'flex',flexDirection:'column',minHeight:0}}>
+                                  {item.thumb&&<img src={item.thumb} alt="" style={{width:'100%',flex:1,minHeight:0,objectFit:'cover',borderRadius:7,background:'rgba(255,255,255,0.06)',display:'block'}} onError={e=>e.target.style.display='none'}/>}
+                                  <div style={{fontSize:11,fontWeight:600,color:D.t1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginTop:5}}>{item.title}</div>
+                                  {item.year&&<div style={{fontSize:10,color:D.t4}}>{item.year}</div>}
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </>
                       );
                     })()}

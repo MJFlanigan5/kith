@@ -1503,7 +1503,7 @@ app.get('/api/widgets/data', async (req, res) => {
         };
       }
       // Nothing playing — show recently added
-      const recentR = await fetch(`${base}/library/recentlyAdded?X-Plex-Token=${plexToken}&X-Plex-Container-Start=0&X-Plex-Container-Size=5`, { headers, signal: AbortSignal.timeout(8000) });
+      const recentR = await fetch(`${base}/library/recentlyAdded?X-Plex-Token=${plexToken}&X-Plex-Container-Start=0&X-Plex-Container-Size=6`, { headers, signal: AbortSignal.timeout(8000) });
       if (!recentR.ok) return null;
       const recentData = await recentR.json();
       const recent = recentData.MediaContainer?.Metadata || [];

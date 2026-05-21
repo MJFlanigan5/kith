@@ -464,7 +464,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
   const allSmartEvents=useMemo(()=>[...smEvents,...haEvents].slice(0,10),[smEvents,haEvents]);
   const [nowPlaying,setNowPlaying]=useState({playing:false});
   useEffect(()=>{
-    const load=()=>api.get('/api/spotify/now-playing').then(d=>setNowPlaying(d||{playing:false})).catch(()=>{});
+    const load=()=>api.get('/api/music/now-playing').then(d=>setNowPlaying(d||{playing:false})).catch(()=>{});
     load();
     const id=setInterval(load,12000);
     return()=>clearInterval(id);
@@ -1233,10 +1233,8 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
           {nowPlaying.playing&&(
             <>
               {(news.length>0||allSmartEvents.length>0||liveGames.length>0)&&<span style={{color:D.sep,flexShrink:0}}>·</span>}
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="#1DB954" style={{flexShrink:0}}>
-                <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm4.586 14.424a.624.624 0 01-.857.207c-2.348-1.435-5.304-1.76-8.785-.964a.624.624 0 01-.277-1.219c3.809-.87 7.076-.496 9.712 1.119a.625.625 0 01.207.857zm1.223-2.722a.78.78 0 01-1.072.258c-2.687-1.652-6.785-2.131-9.965-1.166a.78.78 0 01-.973-.519.781.781 0 01.518-.973c3.632-1.102 8.147-.568 11.234 1.328a.78.78 0 01.258 1.072zm.105-2.835C14.692 8.95 9.375 8.775 6.297 9.71a.937.937 0 11-.543-1.794c3.527-1.07 9.393-.862 13.097 1.329a.937.937 0 01-.937 1.622z"/>
-              </svg>
-              <span style={{fontSize:12,color:'#1DB954',fontWeight:600,flexShrink:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:'28%'}}>
+              {nowPlaying.thumb?<img src={nowPlaying.thumb} style={{width:14,height:14,borderRadius:2,objectFit:'cover',flexShrink:0}}/>:<svg width="12" height="12" viewBox="0 0 24 24" fill={A.amber} style={{flexShrink:0}}><path d="M12 3v10.55A4 4 0 1014 17V7h4V3h-6z"/></svg>}
+              <span style={{fontSize:12,color:A.amber,fontWeight:600,flexShrink:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:'28%'}}>
                 {nowPlaying.title}{nowPlaying.artist?` · ${nowPlaying.artist}`:''}
               </span>
             </>
@@ -2674,7 +2672,9 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [plexUrl,setPlexUrl]=useState('');
   const [plexToken,setPlexToken]=useState('');
   const [hasPlexKey,setHasPlexKey]=useState(false);
-  const [hasSpotify,setHasSpotify]=useState(false);
+  const [hasLastfm,setHasLastfm]=useState(false);
+  const [lastfmApiKey,setLastfmApiKey]=useState('');
+  const [lastfmUser,setLastfmUser]=useState('');
   const [wUptimeUrls,setWUptimeUrls]=useState('');
   const [intSaving,setIntSaving]=useState(false);
   const [wQuote,setWQuote]=useState(false);
@@ -2738,7 +2738,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
     }).catch(()=>{});
     api.get('/api/ha/secret').then(d=>{if(d.secret) setHaSecret(d.secret);}).catch(()=>{});
     fetch('/api/ha/smart-home-status',{headers:{..._authHdr()}}).then(r=>r.json()).then(d=>{if(d.ha){if(d.ha.url)setHaUrl(d.ha.url);if(d.ha.hasToken)setHaHasToken(true);}if(d.homey){if(d.homey.url)setHomeyUrl(d.homey.url);if(d.homey.hasToken)setHomeyHasToken(true);}}).catch(()=>{});
-    api.get('/api/settings/integrations').then(d=>{setHasAnthropicKey(!!d.has_anthropic);setHasBeehiivKey(!!d.has_beehiiv);setHasYoutubeKey(!!d.has_youtube);setHasEtsyKey(!!d.has_etsy);setHasTeslemetryKey(!!d.has_teslemetry);setHasAviationstackKey(!!d.has_aviationstack);setHasNextdnsKey(!!d.has_nextdns);setHasBeszel(!!d.has_beszel);if(d.beszel_url)setBeszelUrl(d.beszel_url);setHasPlexKey(!!d.has_plex);if(d.plex_url)setPlexUrl(d.plex_url);setHasSpotify(!!d.has_spotify);}).catch(()=>{});
+    api.get('/api/settings/integrations').then(d=>{setHasAnthropicKey(!!d.has_anthropic);setHasBeehiivKey(!!d.has_beehiiv);setHasYoutubeKey(!!d.has_youtube);setHasEtsyKey(!!d.has_etsy);setHasTeslemetryKey(!!d.has_teslemetry);setHasAviationstackKey(!!d.has_aviationstack);setHasNextdnsKey(!!d.has_nextdns);setHasBeszel(!!d.has_beszel);if(d.beszel_url)setBeszelUrl(d.beszel_url);setHasPlexKey(!!d.has_plex);if(d.plex_url)setPlexUrl(d.plex_url);setHasLastfm(!!d.has_lastfm);if(d.lastfm_user)setLastfmUser(d.lastfm_user);}).catch(()=>{});
     api.get('/api/quick-actions').then(d=>{if(Array.isArray(d)) setQaList(d);}).catch(()=>{});
   },[]);
   const geocodeCity=async()=>{
@@ -3365,9 +3365,11 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
           <div style={{fontSize:12,color:A.label5,marginTop:8}}>Shows now playing (with progress) or recently added when idle. Refreshes every 30s.</div>
         </div>
         <div style={{padding:'14px 16px'}}>
-          <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:6}}>Spotify{hasSpotify&&<span style={{marginLeft:8,fontSize:11,color:A.green,fontWeight:500}}>Connected</span>}</div>
-          <div style={{fontSize:12,color:A.label5,marginBottom:10}}>{hasSpotify?'Reconnect at any time to re-authorise.':'Click below to link your Spotify account. No credentials needed.'}</div>
-          <Btn onClick={()=>window.open('/api/spotify/auth','_blank','width=500,height=700')}>{hasSpotify?'Reconnect Spotify':'Connect Spotify'}</Btn>
+          <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:6}}>Last.fm{hasLastfm&&<span style={{marginLeft:8,fontSize:11,color:A.green,fontWeight:500}}>Connected</span>}</div>
+          <div style={{fontSize:12,color:A.label5,marginBottom:10}}>Shows what's currently scrobbling from Spotify (or any source). Needs your Last.fm API key and username.</div>
+          <input placeholder="API Key" value={lastfmApiKey} onChange={e=>setLastfmApiKey(e.target.value)} style={{width:'100%',background:A.inputBg,border:`1px solid ${A.sep}`,borderRadius:A.r,padding:'8px 10px',fontSize:13,color:A.label1,marginBottom:8,boxSizing:'border-box'}}/>
+          <input placeholder="Username" value={lastfmUser} onChange={e=>setLastfmUser(e.target.value)} style={{width:'100%',background:A.inputBg,border:`1px solid ${A.sep}`,borderRadius:A.r,padding:'8px 10px',fontSize:13,color:A.label1,marginBottom:10,boxSizing:'border-box'}}/>
+          <Btn onClick={async()=>{await fetch('/api/settings/integrations',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify({lastfm_api_key:lastfmApiKey,lastfm_user:lastfmUser})});setHasLastfm(!!(lastfmApiKey&&lastfmUser));setLastfmApiKey('');toastAdd('Saved');}}>Save Last.fm</Btn>
         </div>
       </FormGroup>
 

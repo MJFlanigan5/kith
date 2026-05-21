@@ -728,14 +728,13 @@ app.get('/api/settings/integrations', requireAdmin, (req, res) => {
     has_etsy:          !!get('etsy_api_key'),
     has_teslemetry:    !!get('teslemetry_api_key'),
     has_aviationstack: !!get('aviationstack_api_key'),
-    has_lastfm:        !!get('lastfm_api_key'),
+    has_lastfm:        !!(get('lastfm_api_key') && get('lastfm_user')),
+    lastfm_user:       get('lastfm_user') || '',
     has_nextdns:       !!get('nextdns_api_key'),
     has_beszel:        !!(get('beszel_url') && get('beszel_user')),
     beszel_url:        get('beszel_url'),
     has_plex:          !!(get('plex_url') && get('plex_token')),
     plex_url:          get('plex_url'),
-    has_spotify:       !!get('spotify_refresh_token'),
-    spotify_proxy_url: get('spotify_proxy_url') || 'https://spotify.mjflanigan.com',
   });
 });
 app.put('/api/settings/integrations', requireAdmin, (req, res) => {
@@ -747,13 +746,13 @@ app.put('/api/settings/integrations', requireAdmin, (req, res) => {
   if (req.body.teslemetry_api_key    !== undefined) upd.run('teslemetry_api_key',    String(req.body.teslemetry_api_key));
   if (req.body.aviationstack_api_key !== undefined) upd.run('aviationstack_api_key', String(req.body.aviationstack_api_key));
   if (req.body.lastfm_api_key        !== undefined) upd.run('lastfm_api_key',        String(req.body.lastfm_api_key));
+  if (req.body.lastfm_user           !== undefined) upd.run('lastfm_user',           String(req.body.lastfm_user));
   if (req.body.nextdns_api_key       !== undefined) upd.run('nextdns_api_key',       String(req.body.nextdns_api_key));
   if (req.body.beszel_url            !== undefined) upd.run('beszel_url',            String(req.body.beszel_url));
   if (req.body.beszel_user           !== undefined) upd.run('beszel_user',           String(req.body.beszel_user));
   if (req.body.beszel_pass           !== undefined) upd.run('beszel_pass',           String(req.body.beszel_pass));
   if (req.body.plex_url              !== undefined) upd.run('plex_url',              String(req.body.plex_url));
   if (req.body.plex_token            !== undefined) upd.run('plex_token',            String(req.body.plex_token));
-  if (req.body.spotify_proxy_url     !== undefined) upd.run('spotify_proxy_url',     String(req.body.spotify_proxy_url));
   res.json({ ok: true });
 });
 
@@ -1521,74 +1520,34 @@ app.get('/api/widgets/data', async (req, res) => {
   res.json(result);
 });
 
-// ── Routes: Spotify ───────────────────────────────────────────────────────────
-let _spotifyCache = null; let _spotifyCacheAt = 0;
-let _spotifyAccessToken = null; let _spotifyAccessTokenAt = 0;
-let _spotifyRefreshPromise = null; // deduplicates concurrent refresh calls
+// ── Routes: Music (Last.fm now-playing) ──────────────────────────────────────
+let _lastfmCache = null; let _lastfmCacheAt = 0;
 
-async function refreshSpotifyToken() {
-  if (_spotifyAccessToken && Date.now() - _spotifyAccessTokenAt < 3000000) return _spotifyAccessToken;
-  if (_spotifyRefreshPromise) return _spotifyRefreshPromise;
-  _spotifyRefreshPromise = (async () => {
-    try {
-      const refresh = gs('spotify_refresh_token');
-      const proxyUrl = (gs('spotify_proxy_url') || 'https://spotify.mjflanigan.com').replace(/\/$/, '');
-      if (!refresh) return null;
-      const r = await fetch(`${proxyUrl}/refresh`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refresh_token: refresh }),
-        signal: AbortSignal.timeout(8000),
-      });
-      const d = await r.json();
-      if (!d.access_token) return null;
-      _spotifyAccessToken = d.access_token;
-      _spotifyAccessTokenAt = Date.now();
-      return _spotifyAccessToken;
-    } finally {
-      _spotifyRefreshPromise = null;
-    }
-  })();
-  return _spotifyRefreshPromise;
-}
-
-// Kick off OAuth via the proxy — just needs the user's Kith base URL
-app.get('/api/spotify/auth', requireAdmin, (req, res) => {
-  const proxyUrl = (gs('spotify_proxy_url') || 'https://spotify.mjflanigan.com').replace(/\/$/, '');
-  const kithBase = (gs('kith_url') || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
-  res.redirect(`${proxyUrl}/auth?kith=${encodeURIComponent(kithBase)}`);
-});
-
-// Proxy redirects back here with the refresh token already in hand
-app.get('/api/spotify/callback', (req, res) => {
-  const { refresh_token, error } = req.query;
-  if (error || !refresh_token) return res.send(`<p>Spotify auth failed: ${error || 'no token'}</p>`);
-  db.prepare('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)').run('spotify_refresh_token', refresh_token);
-  _spotifyAccessToken = null; _spotifyAccessTokenAt = 0; // force refresh on next call
-  res.send('<html><body style="font-family:sans-serif;padding:40px;background:#111;color:#fff"><h2>Spotify connected!</h2><p>You can close this tab.</p><script>window.close();</script></body></html>');
-});
-
-app.get('/api/spotify/now-playing', requireAdmin, async (req, res) => {
+app.get('/api/music/now-playing', requireAdmin, async (req, res) => {
   try {
-    if (_spotifyCache?.playing && Date.now() - _spotifyCacheAt < 10000) return res.json(_spotifyCache);
-    const token = await refreshSpotifyToken().catch(() => null);
-    if (!token) return res.json({ playing: false });
-    const r = await fetch('https://api.spotify.com/v1/me/player/currently-playing', { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(5000) });
-    if (r.status === 204) { _spotifyCache = null; return res.json({ playing: false }); }
-    if (r.status === 401) {
-      // Token rejected — bust cached token so the next call forces a fresh refresh
-      _spotifyAccessToken = null; _spotifyAccessTokenAt = 0;
-      _spotifyCache = null; return res.json({ playing: false });
+    if (_lastfmCache && Date.now() - _lastfmCacheAt < 15000) return res.json(_lastfmCache);
+    const key  = gs('lastfm_api_key');
+    const user = gs('lastfm_user');
+    if (!key || !user) return res.json({ playing: false });
+    const url = `https://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user=${encodeURIComponent(user)}&api_key=${encodeURIComponent(key)}&format=json&limit=1`;
+    const r = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    if (!r.ok) return res.json({ playing: false });
+    const d = await r.json();
+    const track = d?.recenttracks?.track?.[0];
+    if (!track || track['@attr']?.nowplaying !== 'true') {
+      _lastfmCache = { playing: false };
+      _lastfmCacheAt = Date.now();
+      return res.json(_lastfmCache);
     }
-    if (r.ok) {
-      const d = await r.json();
-      if (d.is_playing && d.item) {
-        _spotifyCache = { playing: true, title: d.item.name, artist: d.item.artists?.map(a => a.name).join(', ') || '' };
-        _spotifyCacheAt = Date.now();
-        return res.json(_spotifyCache);
-      }
-    }
-    _spotifyCache = null; res.json({ playing: false });
+    const thumb = track.image?.find(i => i.size === 'medium')?.['#text'] || '';
+    _lastfmCache = {
+      playing: true,
+      title:   track.name || '',
+      artist:  track.artist?.['#text'] || '',
+      thumb:   thumb && !thumb.includes('2a96cbd8b46e442fc41c2b86b821562f') ? thumb : '',
+    };
+    _lastfmCacheAt = Date.now();
+    return res.json(_lastfmCache);
   } catch { res.json({ playing: false }); }
 });
 

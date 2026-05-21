@@ -3360,8 +3360,8 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
         </div>
         <div style={{padding:'12px 16px',borderBottom:`1px solid ${A.sep}`}}>
           <div style={{fontSize:13,fontWeight:500,color:A.label2,marginBottom:8}}>Uptime monitor</div>
-          <Inp value={wUptimeUrls} onChange={e=>setWUptimeUrls(e.target.value)} onBlur={e=>saveSetting('widget_uptime_urls',e.target.value)} placeholder="http://kith.home, http://grafana.home — comma-separated"/>
-          <div style={{fontSize:11,color:A.label5,marginTop:4}}>Use http:// for local servers (self-signed certs will fail). Checks every 60s.</div>
+          <Inp value={wUptimeUrls} onChange={e=>setWUptimeUrls(e.target.value)} onBlur={e=>saveSetting('widget_uptime_urls',e.target.value)} placeholder="Home Assistant|http://ha.local:8123, Pi|http://pi.local — comma-separated"/>
+          <div style={{fontSize:11,color:A.label5,marginTop:4}}>Format: Label|url, or just a URL (uses hostname). Use http:// for local servers. Checks every 60s.</div>
         </div>
         <div style={{padding:'12px 16px'}}>
           <div style={{fontSize:13,fontWeight:500,color:A.label2,marginBottom:8}}>NextDNS profile ID</div>

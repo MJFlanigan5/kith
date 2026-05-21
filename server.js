@@ -1355,12 +1355,15 @@ app.get('/api/widgets/data', async (req, res) => {
     p.push(_wFetch(`uptime:${uptimeUrls}`, 60000, async () => {
       const urls = uptimeUrls.split(',').map(s => s.trim()).filter(Boolean);
       const checks = await Promise.all(urls.map(async raw => {
-        const url = /^https?:\/\//.test(raw) ? raw : `https://${raw}`;
-        let name = raw;
-        try { name = new URL(url).hostname.replace(/^www\./, ''); } catch {}
+        const [labelPart, ...rest] = raw.split('|');
+        const hasLabel = rest.length > 0;
+        const url = hasLabel ? rest.join('|').trim() : raw;
+        const urlFull = /^https?:\/\//.test(url) ? url : `https://${url}`;
+        let name = hasLabel ? labelPart.trim() : url;
+        if (!hasLabel) { try { name = new URL(urlFull).hostname.replace(/^www\./, ''); } catch {} }
         const start = Date.now();
         try {
-          const r = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(5000) });
+          const r = await fetch(urlFull, { method: 'HEAD', signal: AbortSignal.timeout(5000) });
           return { name, ok: r.status < 500, ms: Date.now() - start };
         } catch {
           return { name, ok: false, ms: null };

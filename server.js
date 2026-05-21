@@ -1350,8 +1350,28 @@ app.get('/api/widgets/data', async (req, res) => {
       };
     }).then(d => { if (d) result.flight = d; }));
 
+  const kumaUrl = gs('uptime_kuma_url');
+  const kumaSlug = gs('uptime_kuma_slug');
   const uptimeUrls = gs('widget_uptime_urls');
-  if (uptimeUrls)
+  if (kumaUrl && kumaSlug)
+    p.push(_wFetch(`kuma:${kumaUrl}:${kumaSlug}`, 60000, async () => {
+      const base = kumaUrl.replace(/\/$/, '');
+      const [pageRes, hbRes] = await Promise.all([
+        fetch(`${base}/api/status-page/${kumaSlug}`, { signal: AbortSignal.timeout(8000) }),
+        fetch(`${base}/api/status-page/heartbeat/${kumaSlug}`, { signal: AbortSignal.timeout(8000) }),
+      ]);
+      if (!pageRes.ok || !hbRes.ok) return null;
+      const [page, hb] = await Promise.all([pageRes.json(), hbRes.json()]);
+      const monitors = (page.publicGroupList || []).flatMap(g => g.monitorList || []);
+      if (!monitors.length) return null;
+      return monitors.map(m => {
+        const beats = hb.heartbeatList?.[String(m.id)] || [];
+        const latest = beats[beats.length - 1];
+        const uptime = hb.uptimeList?.[`${m.id}_24`] ?? null;
+        return { name: m.name, ok: latest?.status === 1, ms: latest?.ping ?? null, uptime };
+      });
+    }).then(d => { if (d?.length) result.uptime = d; }));
+  else if (uptimeUrls)
     p.push(_wFetch(`uptime:${uptimeUrls}`, 60000, async () => {
       const urls = uptimeUrls.split(',').map(s => s.trim()).filter(Boolean);
       const checks = await Promise.all(urls.map(async raw => {

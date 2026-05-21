@@ -985,12 +985,15 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                     {activePanelId==='w_uptime'&&(
                       <>
                         <WLabel>Services</WLabel>
-                        <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',gap:6}}>
+                        <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',gap:8}}>
                           {(widgetData.uptime||[]).map((s,i)=>(
                             <div key={i} style={{display:'flex',alignItems:'center',gap:10}}>
                               <div style={{width:8,height:8,borderRadius:'50%',background:s.ok?A.green:A.red,flexShrink:0}}/>
                               <div style={{flex:1,fontSize:13,fontWeight:500,color:D.t2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name}</div>
-                              <div style={{fontSize:12,color:s.ok?A.green:A.red,fontWeight:600,flexShrink:0}}>{s.ok?(s.ms!=null?`${s.ms}ms`:'ok'):'down'}</div>
+                              <div style={{textAlign:'right',flexShrink:0}}>
+                                <div style={{fontSize:12,color:s.ok?A.green:A.red,fontWeight:600}}>{s.ok?(s.ms!=null?`${s.ms}ms`:'ok'):'down'}</div>
+                                {s.uptime!=null&&<div style={{fontSize:10,color:D.t4}}>{(s.uptime*100).toFixed(1)}%</div>}
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -2619,6 +2622,8 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [beszelUser,setBeszelUser]=useState('');
   const [beszelPass,setBeszelPass]=useState('');
   const [hasBeszel,setHasBeszel]=useState(false);
+  const [kumaUrl,setKumaUrl]=useState('');
+  const [kumaSlug,setKumaSlug]=useState('');
   const [wUptimeUrls,setWUptimeUrls]=useState('');
   const [intSaving,setIntSaving]=useState(false);
   const [wQuote,setWQuote]=useState(false);
@@ -2674,6 +2679,8 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
       if(st.lastfm_username) setLastfmUser(st.lastfm_username);
       if(st.nextdns_profile_id) setNextdnsProfile(st.nextdns_profile_id);
       if(st.widget_uptime_urls) setWUptimeUrls(st.widget_uptime_urls);
+      if(st.uptime_kuma_url) setKumaUrl(st.uptime_kuma_url);
+      if(st.uptime_kuma_slug) setKumaSlug(st.uptime_kuma_slug);
       if(st.custom_sport_paths) setCustomSportPath(st.custom_sport_paths);
       if(st.sports_leagues){
         const active=st.sports_leagues.split(',').map(s=>s.trim().toLowerCase());
@@ -3359,9 +3366,15 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
           <Inp value={wFlightNum} onChange={e=>setWFlightNum(e.target.value)} onBlur={e=>saveSetting('widget_flight_number',e.target.value)} placeholder="e.g. AA123 — leave blank to disable" disabled={!hasAviationstackKey}/>
         </div>
         <div style={{padding:'12px 16px',borderBottom:`1px solid ${A.sep}`}}>
-          <div style={{fontSize:13,fontWeight:500,color:A.label2,marginBottom:8}}>Uptime monitor</div>
+          <div style={{fontSize:13,fontWeight:500,color:A.label2,marginBottom:8}}>Uptime Kuma</div>
+          <div style={{marginBottom:6}}><Inp value={kumaUrl} onChange={e=>setKumaUrl(e.target.value)} onBlur={e=>saveSetting('uptime_kuma_url',e.target.value)} onKeyDown={e=>e.key==='Enter'&&saveSetting('uptime_kuma_url',kumaUrl)} placeholder="https://uptimekuma.example.com"/></div>
+          <Inp value={kumaSlug} onChange={e=>setKumaSlug(e.target.value)} onBlur={e=>saveSetting('uptime_kuma_slug',e.target.value)} onKeyDown={e=>e.key==='Enter'&&saveSetting('uptime_kuma_slug',kumaSlug)} placeholder="Status page slug (e.g. home)"/>
+          <div style={{fontSize:11,color:A.label5,marginTop:4}}>Uses your public status page. Overrides manual URLs below when set.</div>
+        </div>
+        <div style={{padding:'12px 16px',borderBottom:`1px solid ${A.sep}`}}>
+          <div style={{fontSize:13,fontWeight:500,color:A.label2,marginBottom:8}}>Uptime monitor (manual URLs)</div>
           <Inp value={wUptimeUrls} onChange={e=>setWUptimeUrls(e.target.value)} onBlur={e=>saveSetting('widget_uptime_urls',e.target.value)} placeholder="Home Assistant|http://ha.local:8123, Pi|http://pi.local — comma-separated"/>
-          <div style={{fontSize:11,color:A.label5,marginTop:4}}>Format: Label|url, or just a URL (uses hostname). Use http:// for local servers. Checks every 60s.</div>
+          <div style={{fontSize:11,color:A.label5,marginTop:4}}>Format: Label|url. Use http:// for local servers. Used only if Uptime Kuma is not set.</div>
         </div>
         <div style={{padding:'12px 16px'}}>
           <div style={{fontSize:13,fontWeight:500,color:A.label2,marginBottom:8}}>NextDNS profile ID</div>

@@ -549,6 +549,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
     ...(widgetData.uptime?.length?['w_uptime']:[]),
     ...(widgetData.nextdns?['w_nextdns']:[]),
     ...(widgetData.beszel?.length?['w_beszel']:[]),
+    ...(widgetData.plex?['w_plex']:[]),
   ];
   const activePanelId=centerPanels[centerIdx%Math.max(1,centerPanels.length)];
 
@@ -1061,6 +1062,32 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         </div>
                       </>
                     )}
+                    {activePanelId==='w_plex'&&(()=>{
+                      const px=widgetData.plex;
+                      const isPlaying=px?.type==='playing';
+                      return(
+                        <>
+                          <WLabel>{isPlaying?'Now Playing on Plex':'Recently Added'}</WLabel>
+                          <div style={{flex:1,display:'flex',flexDirection:'column',gap:10,justifyContent:'center'}}>
+                            {(px?.items||[]).map((item,i)=>(
+                              <div key={i} style={{display:'flex',gap:12,alignItems:'center'}}>
+                                {item.thumb&&<img src={item.thumb} alt="" style={{width:48,height:isPlaying?48:72,objectFit:'cover',borderRadius:6,flexShrink:0,background:'rgba(255,255,255,0.06)'}} onError={e=>e.target.style.display='none'}/>}
+                                <div style={{flex:1,minWidth:0}}>
+                                  <div style={{fontSize:13,fontWeight:600,color:D.t1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{item.title}</div>
+                                  {isPlaying&&item.user&&<div style={{fontSize:11,color:D.t4,marginTop:2}}>{item.state==='paused'?'Paused · ':''}{item.user}</div>}
+                                  {!isPlaying&&item.year&&<div style={{fontSize:11,color:D.t4,marginTop:2}}>{item.year}</div>}
+                                  {isPlaying&&item.pct!=null&&(
+                                    <div style={{marginTop:6,height:3,borderRadius:2,background:'rgba(255,255,255,0.10)'}}>
+                                      <div style={{width:`${item.pct}%`,height:'100%',borderRadius:2,background:A.amber}}/>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      );
+                    })()}
                   </Widget>
                 </div>
               )}
@@ -2624,6 +2651,9 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [hasBeszel,setHasBeszel]=useState(false);
   const [kumaUrl,setKumaUrl]=useState('');
   const [kumaSlug,setKumaSlug]=useState('');
+  const [plexUrl,setPlexUrl]=useState('');
+  const [plexToken,setPlexToken]=useState('');
+  const [hasPlexKey,setHasPlexKey]=useState(false);
   const [wUptimeUrls,setWUptimeUrls]=useState('');
   const [intSaving,setIntSaving]=useState(false);
   const [wQuote,setWQuote]=useState(false);
@@ -2689,7 +2719,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
     }).catch(()=>{});
     api.get('/api/ha/secret').then(d=>{if(d.secret) setHaSecret(d.secret);}).catch(()=>{});
     fetch('/api/ha/smart-home-status',{headers:{..._authHdr()}}).then(r=>r.json()).then(d=>{if(d.ha){if(d.ha.url)setHaUrl(d.ha.url);if(d.ha.hasToken)setHaHasToken(true);}if(d.homey){if(d.homey.url)setHomeyUrl(d.homey.url);if(d.homey.hasToken)setHomeyHasToken(true);}}).catch(()=>{});
-    api.get('/api/settings/integrations').then(d=>{setHasAnthropicKey(!!d.has_anthropic);setHasBeehiivKey(!!d.has_beehiiv);setHasYoutubeKey(!!d.has_youtube);setHasEtsyKey(!!d.has_etsy);setHasTeslemetryKey(!!d.has_teslemetry);setHasAviationstackKey(!!d.has_aviationstack);setHasLastfmKey(!!d.has_lastfm);setHasNextdnsKey(!!d.has_nextdns);setHasBeszel(!!d.has_beszel);if(d.beszel_url)setBeszelUrl(d.beszel_url);}).catch(()=>{});
+    api.get('/api/settings/integrations').then(d=>{setHasAnthropicKey(!!d.has_anthropic);setHasBeehiivKey(!!d.has_beehiiv);setHasYoutubeKey(!!d.has_youtube);setHasEtsyKey(!!d.has_etsy);setHasTeslemetryKey(!!d.has_teslemetry);setHasAviationstackKey(!!d.has_aviationstack);setHasLastfmKey(!!d.has_lastfm);setHasNextdnsKey(!!d.has_nextdns);setHasBeszel(!!d.has_beszel);if(d.beszel_url)setBeszelUrl(d.beszel_url);setHasPlexKey(!!d.has_plex);if(d.plex_url)setPlexUrl(d.plex_url);}).catch(()=>{});
     api.get('/api/quick-actions').then(d=>{if(Array.isArray(d)) setQaList(d);}).catch(()=>{});
   },[]);
   const geocodeCity=async()=>{
@@ -3322,6 +3352,23 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
             else toastAdd(r.error||'Save failed','red');
           }} disabled={intSaving}>{intSaving?'Saving…':'Save'}</Btn>
           <div style={{fontSize:12,color:A.label5,marginTop:8}}>Fetches CPU, RAM, and temperature for all your servers every 60s.</div>
+        </div>
+        <div style={{padding:'14px 16px'}}>
+          <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:8}}>Plex</div>
+          <div style={{marginBottom:8}}><Inp value={plexUrl} onChange={e=>setPlexUrl(e.target.value)} placeholder={hasPlexKey?'Server URL (saved)':'http://192.168.1.x:32400'}/></div>
+          <div style={{marginBottom:10}}><Inp value={plexToken} onChange={e=>setPlexToken(e.target.value)} placeholder={hasPlexKey?'Token (saved — paste to replace)':'X-Plex-Token'} type="password"/></div>
+          <Btn onClick={async()=>{
+            if(!plexUrl.trim()){toastAdd('Enter Plex server URL','red');return;}
+            if(!plexToken.trim()&&!hasPlexKey){toastAdd('Enter Plex token','red');return;}
+            setIntSaving(true);
+            const payload={plex_url:plexUrl.trim()};
+            if(plexToken.trim()) payload.plex_token=plexToken.trim();
+            const r=await fetch('/api/settings/integrations',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify(payload)}).then(x=>x.json()).catch(()=>({error:'Failed'}));
+            setIntSaving(false);
+            if(r.ok){setHasPlexKey(true);setPlexToken('');toastAdd('Saved');}
+            else toastAdd(r.error||'Save failed','red');
+          }} disabled={intSaving}>{intSaving?'Saving…':'Save'}</Btn>
+          <div style={{fontSize:12,color:A.label5,marginTop:8}}>Shows now playing (with progress) or recently added when idle. Refreshes every 30s.</div>
         </div>
       </FormGroup>
 

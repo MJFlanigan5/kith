@@ -684,7 +684,7 @@ app.post('/api/push/test', requireAuth, async (req, res) => {
 });
 
 // ── Routes: Settings ──────────────────────────────────────────────────────────
-const SETTINGS_SENSITIVE = new Set(['email_webhook_secret','anthropic_api_key','ai_api_key','beehiiv_api_key','youtube_api_key','etsy_api_key','teslemetry_api_key','aviationstack_api_key','lastfm_api_key','nextdns_api_key','beszel_user','beszel_pass','jwt_secret','vapid_public','vapid_private','admin_pin_hash','resend_api_key','ha_webhook_secret','smart_home_token','ha_token','homey_token']);
+const SETTINGS_SENSITIVE = new Set(['email_webhook_secret','anthropic_api_key','ai_api_key','beehiiv_api_key','youtube_api_key','etsy_api_key','teslemetry_api_key','aviationstack_api_key','lastfm_api_key','nextdns_api_key','beszel_user','beszel_pass','jwt_secret','vapid_public','vapid_private','admin_pin_hash','resend_api_key','ha_webhook_secret','smart_home_token','ha_token','homey_token','plex_token']);
 app.get('/api/settings', (req, res) => {
   const rows = db.prepare('SELECT key,value FROM settings').all();
   res.json(Object.fromEntries(rows.filter(r=>!SETTINGS_SENSITIVE.has(r.key)).map(r=>[r.key,r.value])));
@@ -732,6 +732,8 @@ app.get('/api/settings/integrations', requireAdmin, (req, res) => {
     has_nextdns:       !!get('nextdns_api_key'),
     has_beszel:        !!(get('beszel_url') && get('beszel_user')),
     beszel_url:        get('beszel_url'),
+    has_plex:          !!(get('plex_url') && get('plex_token')),
+    plex_url:          get('plex_url'),
   });
 });
 app.put('/api/settings/integrations', requireAdmin, (req, res) => {
@@ -747,6 +749,8 @@ app.put('/api/settings/integrations', requireAdmin, (req, res) => {
   if (req.body.beszel_url            !== undefined) upd.run('beszel_url',            String(req.body.beszel_url));
   if (req.body.beszel_user           !== undefined) upd.run('beszel_user',           String(req.body.beszel_user));
   if (req.body.beszel_pass           !== undefined) upd.run('beszel_pass',           String(req.body.beszel_pass));
+  if (req.body.plex_url              !== undefined) upd.run('plex_url',              String(req.body.plex_url));
+  if (req.body.plex_token            !== undefined) upd.run('plex_token',            String(req.body.plex_token));
   res.json({ ok: true });
 });
 
@@ -1471,6 +1475,44 @@ app.get('/api/widgets/data', async (req, res) => {
       }));
       return servers;
     }).then(d => { if (d?.length) result.beszel = d; }));
+
+  const plexUrl = gs('plex_url');
+  const plexToken = gs('plex_token');
+  if (plexUrl && plexToken)
+    p.push(_wFetch('plex', 30000, async () => {
+      const base = plexUrl.replace(/\/$/, '');
+      const headers = { 'X-Plex-Token': plexToken, Accept: 'application/json' };
+      const sessR = await fetch(`${base}/status/sessions`, { headers, signal: AbortSignal.timeout(8000) });
+      if (!sessR.ok) return null;
+      const sessData = await sessR.json();
+      const sessions = sessData.MediaContainer?.Metadata || [];
+      if (sessions.length) {
+        return {
+          type: 'playing',
+          items: sessions.map(s => ({
+            title: s.grandparentTitle ? `${s.grandparentTitle} — ${s.title}` : s.title,
+            user: s.User?.title || '',
+            thumb: s.thumb ? `${base}${s.thumb}?X-Plex-Token=${plexToken}` : null,
+            pct: s.viewOffset && s.duration ? Math.round((s.viewOffset / s.duration) * 100) : null,
+            state: s.Player?.state || 'playing',
+          })),
+        };
+      }
+      // Nothing playing — show recently added
+      const recentR = await fetch(`${base}/library/recentlyAdded?X-Plex-Token=${plexToken}&X-Plex-Container-Start=0&X-Plex-Container-Size=5`, { headers, signal: AbortSignal.timeout(8000) });
+      if (!recentR.ok) return null;
+      const recentData = await recentR.json();
+      const recent = recentData.MediaContainer?.Metadata || [];
+      if (!recent.length) return null;
+      return {
+        type: 'recent',
+        items: recent.map(r => ({
+          title: r.grandparentTitle ? `${r.grandparentTitle} — ${r.title}` : r.title,
+          year: r.year || '',
+          thumb: r.thumb ? `${base}${r.thumb}?X-Plex-Token=${plexToken}` : null,
+        })),
+      };
+    }).then(d => { if (d) result.plex = d; }));
 
   await Promise.allSettled(p);
   res.json(result);

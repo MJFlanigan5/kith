@@ -3366,7 +3366,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
         <div style={{padding:'12px 16px'}}>
           <div style={{fontSize:13,fontWeight:500,color:A.label2,marginBottom:8}}>NextDNS profile ID</div>
           {!hasNextdnsKey&&<div style={{fontSize:11,color:A.amber,marginBottom:6}}>Add NextDNS API key in Integrations to enable</div>}
-          <Inp value={nextdnsProfile} onChange={e=>setNextdnsProfile(e.target.value)} onBlur={e=>saveSetting('nextdns_profile_id',e.target.value)} placeholder="e.g. abc123 — leave blank to disable" disabled={!hasNextdnsKey}/>
+          <Inp value={nextdnsProfile} onChange={e=>setNextdnsProfile(e.target.value)} onBlur={e=>saveSetting('nextdns_profile_id',e.target.value)} onKeyDown={e=>e.key==='Enter'&&saveSetting('nextdns_profile_id',nextdnsProfile)} placeholder="e.g. abc123 — leave blank to disable" disabled={!hasNextdnsKey}/>
           <div style={{fontSize:11,color:A.label5,marginTop:4}}>Find your profile ID at my.nextdns.io.</div>
         </div>
       </FormGroup>

@@ -1423,6 +1423,8 @@ app.get('/api/widgets/data', async (req, res) => {
             { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(5000) }
           );
           const statsBody = statsR.ok ? await statsR.json() : {};
+          if (!statsR.ok) console.error(`[beszel] ${sys.name} stats HTTP ${statsR.status}`);
+          else console.log(`[beszel] ${sys.name} stats keys:`, JSON.stringify(Object.keys(statsBody.items?.[0]?.stats || {})), 'sample:', JSON.stringify(statsBody.items?.[0]?.stats)?.slice(0, 150));
           const s = statsBody.items?.[0]?.stats || {};
           // s.t is a map[string]float64 — prefer any key with "cpu" in it, else average all
           let temp = null;

@@ -1371,16 +1371,25 @@ app.get('/api/widgets/data', async (req, res) => {
 
   const nextdnsKey = gs('nextdns_api_key');
   const nextdnsProfile = gs('nextdns_profile_id');
+  if (!nextdnsKey || !nextdnsProfile)
+    console.log(`[nextdns] skipping — key=${!!nextdnsKey} profile=${JSON.stringify(nextdnsProfile)}`);
   if (nextdnsKey && nextdnsProfile)
     p.push(_wFetch(`nextdns:${nextdnsProfile}`, 300000, async () => {
       const headers = { 'X-Api-Key': nextdnsKey };
       const r = await fetch(`https://api.nextdns.io/profiles/${nextdnsProfile}/analytics/status?from=-24h`, { headers, signal: AbortSignal.timeout(8000) });
-      if (!r.ok) return null;
+      if (!r.ok) {
+        console.error(`[nextdns] API error ${r.status} for profile ${nextdnsProfile}`);
+        return null;
+      }
       const d = await r.json();
       const rows = d.data;
-      if (!Array.isArray(rows)) return null;
+      if (!Array.isArray(rows)) {
+        console.error('[nextdns] unexpected response shape:', JSON.stringify(d).slice(0, 200));
+        return null;
+      }
       const total = rows.reduce((s, x) => s + (x.queries || 0), 0);
       const blocked = rows.find(x => x.status === 'blocked')?.queries ?? 0;
+      console.log(`[nextdns] profile=${nextdnsProfile} total=${total} blocked=${blocked}`);
       if (!total) return null;
       return { total, blocked, pct: Math.round((blocked / total) * 100) };
     }).then(d => { if (d) result.nextdns = d; }));

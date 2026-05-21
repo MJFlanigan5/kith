@@ -2644,7 +2644,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [haToken,setHaToken]=useState('');
   const [haHasToken,setHaHasToken]=useState(false);
   const [haSaving,setHaSaving]=useState(false);
-  const [haSpotifyEntity,setHaSpotifyEntity]=useState('');
+
   const [homeyUrl,setHomeyUrl]=useState('');
   const [homeyToken,setHomeyToken]=useState('');
   const [homeyHasToken,setHomeyHasToken]=useState(false);
@@ -2662,9 +2662,6 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [hasTeslemetryKey,setHasTeslemetryKey]=useState(false);
   const [aviationstackKey,setAviationstackKey]=useState('');
   const [hasAviationstackKey,setHasAviationstackKey]=useState(false);
-  const [lastfmKey,setLastfmKey]=useState('');
-  const [hasLastfmKey,setHasLastfmKey]=useState(false);
-  const [lastfmUser,setLastfmUser]=useState('');
   const [nextdnsKey,setNextdnsKey]=useState('');
   const [hasNextdnsKey,setHasNextdnsKey]=useState(false);
   const [nextdnsProfile,setNextdnsProfile]=useState('');
@@ -2677,8 +2674,6 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [plexUrl,setPlexUrl]=useState('');
   const [plexToken,setPlexToken]=useState('');
   const [hasPlexKey,setHasPlexKey]=useState(false);
-  const [spotifyClientId,setSpotifyClientId]=useState('');
-  const [spotifyClientSecret,setSpotifyClientSecret]=useState('');
   const [hasSpotify,setHasSpotify]=useState(false);
   const [wUptimeUrls,setWUptimeUrls]=useState('');
   const [intSaving,setIntSaving]=useState(false);
@@ -2731,8 +2726,6 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
       setWEtsy(st.widget_etsy_enabled==='1');
       if(st.widget_etsy_shop) setWEtsyShop(st.widget_etsy_shop);
       if(st.widget_flight_number) setWFlightNum(st.widget_flight_number);
-      if(st.ha_spotify_entity) setHaSpotifyEntity(st.ha_spotify_entity);
-      if(st.lastfm_username) setLastfmUser(st.lastfm_username);
       if(st.nextdns_profile_id) setNextdnsProfile(st.nextdns_profile_id);
       if(st.widget_uptime_urls) setWUptimeUrls(st.widget_uptime_urls);
       if(st.uptime_kuma_url) setKumaUrl(st.uptime_kuma_url);
@@ -2745,7 +2738,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
     }).catch(()=>{});
     api.get('/api/ha/secret').then(d=>{if(d.secret) setHaSecret(d.secret);}).catch(()=>{});
     fetch('/api/ha/smart-home-status',{headers:{..._authHdr()}}).then(r=>r.json()).then(d=>{if(d.ha){if(d.ha.url)setHaUrl(d.ha.url);if(d.ha.hasToken)setHaHasToken(true);}if(d.homey){if(d.homey.url)setHomeyUrl(d.homey.url);if(d.homey.hasToken)setHomeyHasToken(true);}}).catch(()=>{});
-    api.get('/api/settings/integrations').then(d=>{setHasAnthropicKey(!!d.has_anthropic);setHasBeehiivKey(!!d.has_beehiiv);setHasYoutubeKey(!!d.has_youtube);setHasEtsyKey(!!d.has_etsy);setHasTeslemetryKey(!!d.has_teslemetry);setHasAviationstackKey(!!d.has_aviationstack);setHasLastfmKey(!!d.has_lastfm);setHasNextdnsKey(!!d.has_nextdns);setHasBeszel(!!d.has_beszel);if(d.beszel_url)setBeszelUrl(d.beszel_url);setHasPlexKey(!!d.has_plex);if(d.plex_url)setPlexUrl(d.plex_url);setHasSpotify(!!d.has_spotify);if(d.spotify_client_id)setSpotifyClientId(d.spotify_client_id);}).catch(()=>{});
+    api.get('/api/settings/integrations').then(d=>{setHasAnthropicKey(!!d.has_anthropic);setHasBeehiivKey(!!d.has_beehiiv);setHasYoutubeKey(!!d.has_youtube);setHasEtsyKey(!!d.has_etsy);setHasTeslemetryKey(!!d.has_teslemetry);setHasAviationstackKey(!!d.has_aviationstack);setHasNextdnsKey(!!d.has_nextdns);setHasBeszel(!!d.has_beszel);if(d.beszel_url)setBeszelUrl(d.beszel_url);setHasPlexKey(!!d.has_plex);if(d.plex_url)setPlexUrl(d.plex_url);setHasSpotify(!!d.has_spotify);}).catch(()=>{});
     api.get('/api/quick-actions').then(d=>{if(Array.isArray(d)) setQaList(d);}).catch(()=>{});
   },[]);
   const geocodeCity=async()=>{
@@ -3194,18 +3187,6 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
           <div style={{fontSize:12,color:A.label5}}>Create a long-lived token in your HA profile page.</div>
         </div>
         <div style={{padding:'14px 16px',borderBottom:`1px solid ${A.sep}`}}>
-          <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:8}}>Spotify entity (now playing bar)</div>
-          <div style={{marginBottom:8}}><Inp value={haSpotifyEntity} onChange={e=>setHaSpotifyEntity(e.target.value)} placeholder="media_player.spotify_yourname"/></div>
-          <div style={{marginBottom:6}}><Btn sm onClick={()=>saveSetting('ha_spotify_entity',haSpotifyEntity)}>Save</Btn></div>
-          <div style={{fontSize:12,color:A.label5}}>Find in HA → Developer Tools → States, search media_player.spotify. Requires HA URL + token above.</div>
-        </div>
-        <div style={{padding:'14px 16px',borderBottom:`1px solid ${A.sep}`}}>
-          <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:8}}>Last.fm username (now playing bar)</div>
-          {!hasLastfmKey&&<div style={{fontSize:11,color:A.amber,marginBottom:6}}>Add Last.fm API key in Integrations to enable</div>}
-          <div style={{marginBottom:6}}><Inp value={lastfmUser} onChange={e=>setLastfmUser(e.target.value)} onBlur={e=>saveSetting('lastfm_username',e.target.value)} placeholder="your Last.fm username" disabled={!hasLastfmKey}/></div>
-          <div style={{fontSize:12,color:A.label5}}>Last.fm is checked first; HA entity is used as fallback if no Last.fm key is set.</div>
-        </div>
-        <div style={{padding:'14px 16px',borderBottom:`1px solid ${A.sep}`}}>
           <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:10}}>Homey Pro — pull notifications</div>
           <div style={{marginBottom:8}}><Inp value={homeyUrl} onChange={e=>setHomeyUrl(e.target.value)} placeholder="https://xxx.connect.athom.com"/></div>
           <div style={{marginBottom:10}}><Inp value={homeyToken} onChange={e=>setHomeyToken(e.target.value)} placeholder={homeyHasToken?'Token saved — paste to replace':'Personal access token'} type="password"/></div>
@@ -3334,19 +3315,6 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
           }} disabled={intSaving}>{intSaving?'Saving…':'Save'}</Btn>
           <div style={{fontSize:12,color:A.label5,marginTop:8}}>Free tier at aviationstack.com (100 calls/month). Enter a flight in Widgets to track it.</div>
         </div>
-        <div style={{padding:'14px 16px'}}>
-          <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:8}}>Last.fm (now playing bar)</div>
-          <div style={{marginBottom:10}}><Inp value={lastfmKey} onChange={e=>setLastfmKey(e.target.value)} placeholder={hasLastfmKey?'Saved — paste to replace':'Last.fm API key'} type="password"/></div>
-          <Btn sm onClick={async()=>{
-            if(!lastfmKey.trim()){toastAdd('Paste a key first','red');return;}
-            setIntSaving(true);
-            const r=await fetch('/api/settings/integrations',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify({lastfm_api_key:lastfmKey.trim()})}).then(x=>x.json()).catch(()=>({error:'Failed'}));
-            setIntSaving(false);
-            if(r.ok){setHasLastfmKey(true);setLastfmKey('');toastAdd('Saved');}
-            else toastAdd(r.error||'Save failed','red');
-          }} disabled={intSaving}>{intSaving?'Saving…':'Save'}</Btn>
-          <div style={{fontSize:12,color:A.label5,marginTop:8}}>Free at last.fm/api. Connect Spotify to Last.fm at last.fm/settings/applications.</div>
-        </div>
         <div style={{padding:'12px 16px'}}>
           <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:8}}>NextDNS</div>
           <div style={{marginBottom:10}}><Inp value={nextdnsKey} onChange={e=>setNextdnsKey(e.target.value)} placeholder={hasNextdnsKey?'Saved — paste to replace':'NextDNS API key'} type="password"/></div>
@@ -3397,24 +3365,9 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
           <div style={{fontSize:12,color:A.label5,marginTop:8}}>Shows now playing (with progress) or recently added when idle. Refreshes every 30s.</div>
         </div>
         <div style={{padding:'14px 16px'}}>
-          <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:8}}>Spotify{hasSpotify&&<span style={{marginLeft:8,fontSize:11,color:A.green,fontWeight:500}}>Connected</span>}</div>
-          <div style={{marginBottom:8}}><Inp value={spotifyClientId} onChange={e=>setSpotifyClientId(e.target.value)} placeholder="Client ID"/></div>
-          <div style={{marginBottom:10}}><Inp value={spotifyClientSecret} onChange={e=>setSpotifyClientSecret(e.target.value)} placeholder={hasSpotify?'Client Secret (saved — paste to replace)':'Client Secret'} type="password"/></div>
-          <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:8}}>
-            <Btn onClick={async()=>{
-              if(!spotifyClientId.trim()){toastAdd('Enter Client ID','red');return;}
-              if(!spotifyClientSecret.trim()&&!hasSpotify){toastAdd('Enter Client Secret','red');return;}
-              setIntSaving(true);
-              const payload={spotify_client_id:spotifyClientId.trim()};
-              if(spotifyClientSecret.trim()) payload.spotify_client_secret=spotifyClientSecret.trim();
-              const r=await fetch('/api/settings/integrations',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify(payload)}).then(x=>x.json()).catch(()=>({error:'Failed'}));
-              setIntSaving(false);
-              if(r.ok){setSpotifyClientSecret('');toastAdd('Saved');}
-              else toastAdd(r.error||'Save failed','red');
-            }} disabled={intSaving}>{intSaving?'Saving…':'Save credentials'}</Btn>
-            {spotifyClientId&&<Btn variant="ghost" onClick={()=>window.open('/api/spotify/auth','_blank','width=500,height=700')}>Connect Spotify</Btn>}
-          </div>
-          <div style={{fontSize:12,color:A.label5}}>Create an app at developer.spotify.com. Add <code style={{background:'rgba(0,0,0,0.06)',padding:'1px 4px',borderRadius:3}}>{window.location.origin}/api/spotify/callback</code> as the Redirect URI. Save credentials first, then Connect.</div>
+          <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:6}}>Spotify{hasSpotify&&<span style={{marginLeft:8,fontSize:11,color:A.green,fontWeight:500}}>Connected</span>}</div>
+          <div style={{fontSize:12,color:A.label5,marginBottom:10}}>{hasSpotify?'Reconnect at any time to re-authorise.':'Click below to link your Spotify account. No credentials needed.'}</div>
+          <Btn onClick={()=>window.open('/api/spotify/auth','_blank','width=500,height=700')}>{hasSpotify?'Reconnect Spotify':'Connect Spotify'}</Btn>
         </div>
       </FormGroup>
 

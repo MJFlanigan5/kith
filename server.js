@@ -684,7 +684,7 @@ app.post('/api/push/test', requireAuth, async (req, res) => {
 });
 
 // ── Routes: Settings ──────────────────────────────────────────────────────────
-const SETTINGS_SENSITIVE = new Set(['email_webhook_secret','anthropic_api_key','ai_api_key','beehiiv_api_key','youtube_api_key','etsy_api_key','teslemetry_api_key','aviationstack_api_key','lastfm_api_key','nextdns_api_key','beszel_user','beszel_pass','jwt_secret','vapid_public','vapid_private','admin_pin_hash','resend_api_key','ha_webhook_secret','smart_home_token','ha_token','homey_token','plex_token','spotify_client_secret','spotify_refresh_token']);
+const SETTINGS_SENSITIVE = new Set(['email_webhook_secret','anthropic_api_key','ai_api_key','beehiiv_api_key','youtube_api_key','etsy_api_key','teslemetry_api_key','aviationstack_api_key','lastfm_api_key','nextdns_api_key','beszel_user','beszel_pass','jwt_secret','vapid_public','vapid_private','admin_pin_hash','resend_api_key','ha_webhook_secret','smart_home_token','ha_token','homey_token','plex_token','spotify_refresh_token']);
 app.get('/api/settings', (req, res) => {
   const rows = db.prepare('SELECT key,value FROM settings').all();
   res.json(Object.fromEntries(rows.filter(r=>!SETTINGS_SENSITIVE.has(r.key)).map(r=>[r.key,r.value])));
@@ -732,10 +732,10 @@ app.get('/api/settings/integrations', requireAdmin, (req, res) => {
     has_nextdns:       !!get('nextdns_api_key'),
     has_beszel:        !!(get('beszel_url') && get('beszel_user')),
     beszel_url:        get('beszel_url'),
-    has_plex:             !!(get('plex_url') && get('plex_token')),
-    plex_url:             get('plex_url'),
-    has_spotify:          !!get('spotify_refresh_token'),
-    spotify_client_id:    get('spotify_client_id'),
+    has_plex:          !!(get('plex_url') && get('plex_token')),
+    plex_url:          get('plex_url'),
+    has_spotify:       !!get('spotify_refresh_token'),
+    spotify_proxy_url: get('spotify_proxy_url') || 'https://spotify.mjflanigan.com',
   });
 });
 app.put('/api/settings/integrations', requireAdmin, (req, res) => {
@@ -753,8 +753,7 @@ app.put('/api/settings/integrations', requireAdmin, (req, res) => {
   if (req.body.beszel_pass           !== undefined) upd.run('beszel_pass',           String(req.body.beszel_pass));
   if (req.body.plex_url              !== undefined) upd.run('plex_url',              String(req.body.plex_url));
   if (req.body.plex_token            !== undefined) upd.run('plex_token',            String(req.body.plex_token));
-  if (req.body.spotify_client_id     !== undefined) upd.run('spotify_client_id',     String(req.body.spotify_client_id));
-  if (req.body.spotify_client_secret !== undefined) upd.run('spotify_client_secret', String(req.body.spotify_client_secret));
+  if (req.body.spotify_proxy_url     !== undefined) upd.run('spotify_proxy_url',     String(req.body.spotify_proxy_url));
   res.json({ ok: true });
 });
 
@@ -1526,21 +1525,16 @@ app.get('/api/widgets/data', async (req, res) => {
 let _spotifyCache = null; let _spotifyCacheAt = 0;
 let _spotifyAccessToken = null; let _spotifyAccessTokenAt = 0;
 
-function spotifyRedirectUri(req) {
-  const base = (gs('kith_url') || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
-  return `${base}/api/spotify/callback`;
-}
-
-async function refreshSpotifyToken(req) {
+async function refreshSpotifyToken() {
   if (_spotifyAccessToken && Date.now() - _spotifyAccessTokenAt < 3000000) return _spotifyAccessToken;
-  const id = gs('spotify_client_id'); const secret = gs('spotify_client_secret');
   const refresh = gs('spotify_refresh_token');
-  if (!id || !secret || !refresh) return null;
-  const r = await fetch('https://accounts.spotify.com/api/token', {
+  const proxyUrl = (gs('spotify_proxy_url') || 'https://spotify.mjflanigan.com').replace(/\/$/, '');
+  if (!refresh) return null;
+  const r = await fetch(`${proxyUrl}/refresh`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Authorization: 'Basic ' + Buffer.from(`${id}:${secret}`).toString('base64') },
-    body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: refresh }),
-    signal: AbortSignal.timeout(5000),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refresh_token: refresh }),
+    signal: AbortSignal.timeout(8000),
   });
   const d = await r.json();
   if (!d.access_token) return null;
@@ -1549,75 +1543,38 @@ async function refreshSpotifyToken(req) {
   return _spotifyAccessToken;
 }
 
+// Kick off OAuth via the proxy — just needs the user's Kith base URL
 app.get('/api/spotify/auth', requireAdmin, (req, res) => {
-  const id = gs('spotify_client_id');
-  if (!id) return res.status(400).send('Set spotify_client_id first');
-  const params = new URLSearchParams({ client_id: id, response_type: 'code', redirect_uri: spotifyRedirectUri(req), scope: 'user-read-currently-playing' });
-  res.redirect(`https://accounts.spotify.com/authorize?${params}`);
+  const proxyUrl = (gs('spotify_proxy_url') || 'https://spotify.mjflanigan.com').replace(/\/$/, '');
+  const kithBase = (gs('kith_url') || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+  res.redirect(`${proxyUrl}/auth?kith=${encodeURIComponent(kithBase)}`);
 });
 
-app.get('/api/spotify/callback', async (req, res) => {
-  const { code, error } = req.query;
-  if (error || !code) return res.send(`<p>Spotify auth failed: ${error || 'no code'}</p>`);
-  const id = gs('spotify_client_id'); const secret = gs('spotify_client_secret');
-  try {
-    const r = await fetch('https://accounts.spotify.com/api/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Authorization: 'Basic ' + Buffer.from(`${id}:${secret}`).toString('base64') },
-      body: new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: spotifyRedirectUri(req) }),
-      signal: AbortSignal.timeout(8000),
-    });
-    const d = await r.json();
-    if (!d.refresh_token) return res.send(`<p>No refresh token: ${JSON.stringify(d)}</p>`);
-    db.prepare('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)').run('spotify_refresh_token', d.refresh_token);
-    _spotifyAccessToken = d.access_token; _spotifyAccessTokenAt = Date.now();
-    res.send('<html><body style="font-family:sans-serif;padding:40px;background:#111;color:#fff"><h2>Spotify connected!</h2><p>You can close this tab.</p><script>window.close();</script></body></html>');
-  } catch (e) { res.send(`<p>Error: ${e.message}</p>`); }
+// Proxy redirects back here with the refresh token already in hand
+app.get('/api/spotify/callback', (req, res) => {
+  const { refresh_token, error } = req.query;
+  if (error || !refresh_token) return res.send(`<p>Spotify auth failed: ${error || 'no token'}</p>`);
+  db.prepare('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)').run('spotify_refresh_token', refresh_token);
+  _spotifyAccessToken = null; _spotifyAccessTokenAt = 0; // force refresh on next call
+  res.send('<html><body style="font-family:sans-serif;padding:40px;background:#111;color:#fff"><h2>Spotify connected!</h2><p>You can close this tab.</p><script>window.close();</script></body></html>');
 });
 
 app.get('/api/spotify/now-playing', requireAdmin, async (req, res) => {
   try {
     if (_spotifyCache?.playing && Date.now() - _spotifyCacheAt < 10000) return res.json(_spotifyCache);
-    // 1. Direct Spotify API
-    const token = await refreshSpotifyToken(req).catch(() => null);
-    if (token) {
-      const r = await fetch('https://api.spotify.com/v1/me/player/currently-playing', { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(5000) });
-      if (r.status === 204) { _spotifyCache = null; return res.json({ playing: false }); }
-      if (r.ok) {
-        const d = await r.json();
-        if (d.is_playing && d.item) {
-          _spotifyCache = { playing: true, title: d.item.name, artist: d.item.artists?.map(a => a.name).join(', ') || '' };
-          _spotifyCacheAt = Date.now();
-          return res.json(_spotifyCache);
-        }
-        _spotifyCache = null; return res.json({ playing: false });
+    const token = await refreshSpotifyToken().catch(() => null);
+    if (!token) return res.json({ playing: false });
+    const r = await fetch('https://api.spotify.com/v1/me/player/currently-playing', { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(5000) });
+    if (r.status === 204) { _spotifyCache = null; return res.json({ playing: false }); }
+    if (r.ok) {
+      const d = await r.json();
+      if (d.is_playing && d.item) {
+        _spotifyCache = { playing: true, title: d.item.name, artist: d.item.artists?.map(a => a.name).join(', ') || '' };
+        _spotifyCacheAt = Date.now();
+        return res.json(_spotifyCache);
       }
     }
-    // 2. Last.fm fallback
-    const lfmKey = gs('lastfm_api_key'); const lfmUser = gs('lastfm_username');
-    if (lfmKey && lfmUser) {
-      const r = await fetch(`https://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user=${encodeURIComponent(lfmUser)}&api_key=${lfmKey}&format=json&limit=1`, { signal: AbortSignal.timeout(5000) });
-      if (r.ok) {
-        const d = await r.json();
-        if (!d.error) {
-          const raw = d.recenttracks?.track; const track = Array.isArray(raw) ? raw[0] : raw;
-          if (track?.['@attr']?.nowplaying === 'true') {
-            _spotifyCache = { playing: true, title: track.name || '', artist: track.artist?.['#text'] || '' };
-            _spotifyCacheAt = Date.now(); return res.json(_spotifyCache);
-          }
-        }
-      }
-      _spotifyCache = null; return res.json({ playing: false });
-    }
-    // 3. Home Assistant fallback
-    const haUrl = gs('ha_url').replace(/\/$/, ''); const haToken = gs('ha_token'); const entity = gs('ha_spotify_entity');
-    if (!haUrl || !haToken || !entity) return res.json({ playing: false });
-    const r = await fetch(`${haUrl}/api/states/${entity}`, { headers: { Authorization: `Bearer ${haToken}` }, signal: AbortSignal.timeout(5000) });
-    if (!r.ok) return res.json({ playing: false });
-    const d = await r.json();
-    if (d.state !== 'playing') { _spotifyCache = null; return res.json({ playing: false }); }
-    _spotifyCache = { playing: true, title: d.attributes?.media_title || '', artist: d.attributes?.media_artist || '' };
-    _spotifyCacheAt = Date.now(); res.json(_spotifyCache);
+    _spotifyCache = null; res.json({ playing: false });
   } catch { res.json({ playing: false }); }
 });
 

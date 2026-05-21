@@ -229,6 +229,7 @@ const defaults = {
   night_mode_end: '06:00',
   ha_webhook_secret: require('crypto').randomBytes(24).toString('hex'),
   quick_actions: '[]',
+  spotify_proxy_url: 'https://spotify.mjflanigan.com',
 };
 const insSetting = db.prepare('INSERT OR IGNORE INTO settings (key,value) VALUES (?,?)');
 for (const [k, v] of Object.entries(defaults)) insSetting.run(k, v);

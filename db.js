@@ -229,6 +229,7 @@ const defaults = {
   night_mode_end: '06:00',
   ha_webhook_secret: require('crypto').randomBytes(24).toString('hex'),
   quick_actions: '[]',
+  lastfm_api_key: '',
   lastfm_user: '',
 };
 const insSetting = db.prepare('INSERT OR IGNORE INTO settings (key,value) VALUES (?,?)');

@@ -1177,6 +1177,11 @@ app.put('/api/settings/smart-home', requireAdmin, (req, res) => {
   if (ha_token !== undefined && ha_token !== '') upd.run('ha_token', String(ha_token));
   if (homey_url !== undefined) upd.run('homey_url', String(homey_url));
   if (homey_token !== undefined && homey_token !== '') upd.run('homey_token', String(homey_token));
+  // ADV-007: clear presence/thermostat caches when credentials change
+  if (homey_url !== undefined || homey_token !== undefined) {
+    delete _wCache['who_home'];
+    delete _wCache['thermostat'];
+  }
   res.json({ ok: true });
 });
 
@@ -1318,13 +1323,16 @@ app.post('/api/homey/discover', requireAdmin, async (req, res) => {
     return res.status(400).json({ error: `Could not reach Homey: ${e.message}${detail ? ` (${detail})` : ''}` });
   }
 
-  // Homey cloud API wraps the payload in { result: {...} }; local API returns the map directly
-  const devicesData = raw?.result ?? raw;
+  // ADV-001/005 fix: use 'result' in check so {result:null} correctly signals missing/scope error
+  const devicesData = (raw && typeof raw === 'object' && 'result' in raw) ? raw.result : raw;
+  if (!devicesData) {
+    return res.status(400).json({ error: 'Homey returned empty device list — check your token has the devices scope (homey.device:read)' });
+  }
 
   // F6 fix: when response is a map keyed by device ID, inject the key as `id` if missing
   const devices = Array.isArray(devicesData)
     ? devicesData
-    : Object.entries(devicesData || {}).map(([key, d]) => ({ ...d, id: d.id || key }));
+    : Object.entries(devicesData).map(([key, d]) => ({ ...d, id: d.id || key }));
 
   const persons = devices
     .filter(d => Array.isArray(d.capabilities) && d.capabilities.includes('presence'))
@@ -1766,6 +1774,9 @@ app.get('/api/widgets/data', async (req, res) => {
   // ── Homey fetch helper ──────────────────────────────────────────────────────
   const homeyBaseUrl = (gs('homey_url') || '').replace(/\/$/, '');
   const homeyAuthToken = gs('homey_token');
+  // ADV-001/005 fix: use 'result' in check so {result:null} correctly returns null
+  const homeyUnwrap = (body) => (body && typeof body === 'object' && 'result' in body) ? body.result : body;
+
   const homeyGetDevice = async (deviceId) => {
     if (!deviceId || !homeyBaseUrl || !homeyAuthToken) return null;
     const r = await fetch(`${homeyBaseUrl}/api/manager/devices/device/${deviceId}/`, {
@@ -1773,9 +1784,7 @@ app.get('/api/widgets/data', async (req, res) => {
       signal: AbortSignal.timeout(6000),
     });
     if (!r.ok) throw new Error(`Homey ${r.status} for device ${deviceId}`);
-    const body = await r.json();
-    // Homey cloud API wraps in { result: {...} }
-    return body?.result ?? body;
+    return homeyUnwrap(await r.json());
   };
 
   const haFlowEntity = gs('ha_moen_flow');
@@ -2049,7 +2058,8 @@ app.get('/api/widgets/data', async (req, res) => {
           };
         } catch(e) {
           if (!useHomeyClimate) throw e; // no fallback — propagate so _wFetch logs the error
-          // else fall through to Homey below
+          console.warn(`[thermostat] HA failed, trying Homey: ${e.message}`);
+          // fall through to Homey below
         }
       }
       // Homey path — reached when HA not configured or HA failed with Homey as backup

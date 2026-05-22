@@ -3415,8 +3415,8 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
               // Auto-fill maps from discovered matches
               if(r.moen?.map) setHaMoenMap(m=>({...m,...Object.fromEntries(Object.entries(r.moen.map).filter(([,v])=>v))}));
               if(r.unifi?.map) setHaUnifiMap(m=>({...m,...Object.fromEntries(Object.entries(r.unifi.map).filter(([,v])=>v))}));
-              // Auto-select all discovered persons
-              if(r.persons?.length) setHaPersonIds(r.persons.map(p=>p.entity_id));
+              // ADV-002 fix: only auto-select if user hasn't already saved a subset
+              if(r.persons?.length&&haPersonIds.length===0) setHaPersonIds(r.persons.map(p=>p.entity_id));
               // Auto-select first climate entity if only one found
               if(r.climates?.length===1) setHaClimateEntity(r.climates[0].entity_id);
               const moenFound=Object.values(r.moen?.map||{}).filter(Boolean).length;

@@ -740,6 +740,14 @@ app.get('/api/settings/integrations', requireAdmin, (req, res) => {
     unifi_url:         get('unifi_url'),
     unifi_site:        get('unifi_site') || 'default',
     unifi_pull_interval: get('unifi_pull_interval') || '60',
+    ha_moen_flow:      get('ha_moen_flow'),
+    ha_moen_pressure:  get('ha_moen_pressure'),
+    ha_moen_daily:     get('ha_moen_daily'),
+    ha_moen_mode:      get('ha_moen_mode'),
+    ha_moen_alert:     get('ha_moen_alert'),
+    ha_unifi_clients:  get('ha_unifi_clients'),
+    ha_unifi_rx:       get('ha_unifi_rx'),
+    ha_unifi_tx:       get('ha_unifi_tx'),
   });
 });
 app.put('/api/settings/integrations', requireAdmin, (req, res) => {
@@ -765,6 +773,14 @@ app.put('/api/settings/integrations', requireAdmin, (req, res) => {
   if (req.body.unifi_pass            !== undefined) upd.run('unifi_pass',            String(req.body.unifi_pass));
   if (req.body.unifi_site            !== undefined) upd.run('unifi_site',            String(req.body.unifi_site));
   if (req.body.unifi_pull_interval   !== undefined) upd.run('unifi_pull_interval',   String(req.body.unifi_pull_interval));
+  if (req.body.ha_moen_flow     !== undefined) upd.run('ha_moen_flow',     String(req.body.ha_moen_flow));
+  if (req.body.ha_moen_pressure !== undefined) upd.run('ha_moen_pressure', String(req.body.ha_moen_pressure));
+  if (req.body.ha_moen_daily    !== undefined) upd.run('ha_moen_daily',    String(req.body.ha_moen_daily));
+  if (req.body.ha_moen_mode     !== undefined) upd.run('ha_moen_mode',     String(req.body.ha_moen_mode));
+  if (req.body.ha_moen_alert    !== undefined) upd.run('ha_moen_alert',    String(req.body.ha_moen_alert));
+  if (req.body.ha_unifi_clients !== undefined) upd.run('ha_unifi_clients', String(req.body.ha_unifi_clients));
+  if (req.body.ha_unifi_rx      !== undefined) upd.run('ha_unifi_rx',      String(req.body.ha_unifi_rx));
+  if (req.body.ha_unifi_tx      !== undefined) upd.run('ha_unifi_tx',      String(req.body.ha_unifi_tx));
   res.json({ ok: true });
 });
 
@@ -1155,6 +1171,79 @@ app.get('/api/ha/smart-home-status', requireAdmin, (req, res) => {
     ha: { url: get('ha_url'), hasToken: !!get('ha_token') },
     homey: { url: get('homey_url'), hasToken: !!get('homey_token') },
   });
+});
+
+// ── HA entity discovery — finds Moen/Flo and UniFi entities ─────────────────
+app.post('/api/ha/discover', requireAdmin, async (req, res) => {
+  const get = k => db.prepare('SELECT value FROM settings WHERE key=?').get(k)?.value || '';
+  const haUrl = (req.body?.ha_url || get('ha_url')).replace(/\/$/, '');
+  const haToken = req.body?.ha_token || get('ha_token');
+  if (!haUrl || !haToken) return res.status(400).json({ error: 'HA URL and token required' });
+
+  let states;
+  try {
+    const r = await fetch(`${haUrl}/api/states`, {
+      headers: { 'Authorization': `Bearer ${haToken}`, 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!r.ok) {
+      const body = await r.text().catch(() => '');
+      return res.status(400).json({ error: `HA returned ${r.status}: ${body.slice(0, 200)}` });
+    }
+    states = await r.json();
+  } catch (e) {
+    return res.status(400).json({ error: `Could not reach HA: ${e.message}` });
+  }
+  if (!Array.isArray(states)) return res.status(400).json({ error: 'Unexpected HA response format' });
+
+  // Score and filter states for Moen/Flo
+  const isMoen = s => /flo|moen/i.test(s.entity_id);
+  const moenAll = states.filter(isMoen).map(s => ({
+    entity_id: s.entity_id,
+    state: s.state,
+    unit: s.attributes?.unit_of_measurement || '',
+    friendly_name: s.attributes?.friendly_name || s.entity_id,
+  }));
+
+  // Auto-map Moen entities by keyword
+  const moenFind = (patterns) => moenAll.find(s =>
+    patterns.some(p => s.entity_id.toLowerCase().includes(p))
+  )?.entity_id || '';
+
+  const moenMap = {
+    flow:     moenFind(['flow_rate', 'current_flow']),
+    pressure: moenFind(['pressure']),
+    daily:    moenFind(['daily', 'consumption', 'usage', 'today']),
+    mode:     moenFind(['mode', 'monitoring']),
+    alert:    moenFind(['alert', 'leak', 'detector']),
+  };
+
+  // Score and filter states for UniFi
+  const unifiAll = states
+    .filter(s => s.entity_id.startsWith('sensor.') &&
+      (/unifi/i.test(s.entity_id) ||
+       (s.entity_id.endsWith('_clients') && (s.attributes?.unit_of_measurement === 'clients' || s.attributes?.unit_of_measurement === '')) ||
+       (['Mbit/s','Mbps'].includes(s.attributes?.unit_of_measurement) && /rx|tx|down|up/i.test(s.entity_id))
+      )
+    )
+    .map(s => ({
+      entity_id: s.entity_id,
+      state: s.state,
+      unit: s.attributes?.unit_of_measurement || '',
+      friendly_name: s.attributes?.friendly_name || s.entity_id,
+    }));
+
+  const unifiFind = (patterns) => unifiAll.find(s =>
+    patterns.some(p => s.entity_id.toLowerCase().includes(p))
+  )?.entity_id || '';
+
+  const unifiMap = {
+    clients: unifiFind(['_clients', 'clients']),
+    rx:      unifiFind(['_rx', '_download', '_down']),
+    tx:      unifiFind(['_tx', '_upload', '_up']),
+  };
+
+  res.json({ ok: true, moen: { all: moenAll, map: moenMap }, unifi: { all: unifiAll, map: unifiMap } });
 });
 
 app.get('/api/ha/pull', async (req, res) => {
@@ -1559,10 +1648,48 @@ app.get('/api/widgets/data', async (req, res) => {
     }).then(d => { if (d) result.plex = d; }));
 
   // ── Moen Flo ───────────────────────────────────────────────────────────────
+  // Shared HA fetch helper (reused for UniFi too)
+  const haBaseUrl = (gs('ha_url') || '').replace(/\/$/, '');
+  const haAuthToken = gs('ha_token');
+  const haGet = async (entityId) => {
+    if (!entityId || !haBaseUrl || !haAuthToken) return null;
+    const r = await fetch(`${haBaseUrl}/api/states/${entityId}`, {
+      headers: { 'Authorization': `Bearer ${haAuthToken}`, 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!r.ok) throw new Error(`HA ${r.status} for ${entityId}`);
+    const d = await r.json();
+    return d;
+  };
+  const haNum = (s) => { const n = parseFloat(s?.state); return isNaN(n) ? 0 : n; };
+
+  const haFlowEntity = gs('ha_moen_flow');
   const moenUser = gs('moen_user');
   const moenPass = gs('moen_pass');
-  if (moenUser && moenPass)
+  const useMoenHa = !!(haBaseUrl && haAuthToken && haFlowEntity);
+  if (useMoenHa || (moenUser && moenPass))
     p.push(_wFetch('moen', 300000, async () => {
+      if (useMoenHa) {
+        const [flow, psi, daily, mode, alert] = await Promise.all([
+          haGet(haFlowEntity),
+          haGet(gs('ha_moen_pressure')),
+          haGet(gs('ha_moen_daily')),
+          haGet(gs('ha_moen_mode')),
+          haGet(gs('ha_moen_alert')),
+        ]);
+        if (!flow) throw new Error('HA Moen: flow entity returned null — check entity ID and HA connection');
+        if (flow.state === 'unavailable') throw new Error(`HA Moen: entity ${haFlowEntity} is unavailable — is the Flo device online?`);
+        return {
+          flow_gpm:    +haNum(flow).toFixed(2),
+          psi:         Math.round(haNum(psi)),
+          daily_gal:   Math.round(haNum(daily)),
+          system_mode: mode?.state || 'home',
+          has_alert:   alert?.state === 'on',
+          connected:   flow.state !== 'unavailable',
+          source:      'ha',
+        };
+      }
+      // Direct Moen API fallback
       // Try new OAuth2 endpoint first (Moen migrated to api-gw in late 2024)
       let authHeader = null, apiBase = null, userId = null;
       const oauthR = await fetch('https://api-gw.meetflo.com/api/v1/oauth2/token', {
@@ -1634,17 +1761,38 @@ app.get('/api/widgets/data', async (req, res) => {
         daily_gal:   Math.round(device.todayGallonsUsed ?? 0),
         psi:         Math.round(device.telemetry?.current?.psi ?? 0),
         connected:   !!device.isConnected,
+        source:      'direct',
       };
     }).then(d => { if (d) result.moen = d; }));
 
   // ── UniFi Network ──────────────────────────────────────────────────────────
+  const haClientsEntity = gs('ha_unifi_clients');
   const unifiUrl = gs('unifi_url');
   const unifiUser = gs('unifi_user');
   const unifiPass = gs('unifi_pass');
   const unifiSite = gs('unifi_site') || 'default';
   const unifiIntervalMs = Math.max(30, parseInt(gs('unifi_pull_interval') || '60')) * 1000;
-  if (unifiUrl && unifiUser && unifiPass)
-    p.push(_wFetch(`unifi:${unifiUrl}`, unifiIntervalMs, async () => {
+  const useUnifiHa = !!(haBaseUrl && haAuthToken && haClientsEntity);
+  if (useUnifiHa || (unifiUrl && unifiUser && unifiPass))
+    p.push(_wFetch(`unifi:${useUnifiHa ? 'ha' : unifiUrl}`, unifiIntervalMs, async () => {
+      if (useUnifiHa) {
+        const [clients, rx, tx] = await Promise.all([
+          haGet(haClientsEntity),
+          haGet(gs('ha_unifi_rx')),
+          haGet(gs('ha_unifi_tx')),
+        ]);
+        if (!clients) throw new Error('HA UniFi: clients entity returned null — check entity ID');
+        if (clients.state === 'unavailable') throw new Error(`HA UniFi: entity ${haClientsEntity} is unavailable`);
+        return {
+          clients:  Math.round(haNum(clients)),
+          rx_mbps:  +haNum(rx).toFixed(1),
+          tx_mbps:  +haNum(tx).toFixed(1),
+          ap_count: 0,
+          status:   clients.state !== 'unavailable' ? 'up' : 'unknown',
+          source:   'ha',
+        };
+      }
+      // Direct UniFi API fallback
       // Use https.request so we can skip self-signed cert validation (common for local controllers)
       const https = require('https');
       const http  = require('http');
@@ -1693,6 +1841,7 @@ app.get('/api/widgets/data', async (req, res) => {
             tx_mbps: +(Math.round((wan.tx_bytes_r || 0) / 125000 * 10) / 10).toFixed(1),
             ap_count: wlan.num_ap || 0,
             status: (wan.status === 'ok' || wan.status === 'connected') ? 'up' : (wan.status || 'unknown'),
+            source: 'direct',
           };
         }
         throw new Error(`UniFi OS login ok but health check failed ${healthR?.status} — site "${unifiSite}", path: /proxy/network/api/s/${unifiSite}/stat/health`);
@@ -1714,6 +1863,7 @@ app.get('/api/widgets/data', async (req, res) => {
         tx_mbps: +(Math.round((wan.tx_bytes_r || 0) / 125000 * 10) / 10).toFixed(1),
         ap_count: wlan.num_ap || 0,
         status: (wan.status === 'ok' || wan.status === 'connected') ? 'up' : (wan.status || 'unknown'),
+        source: 'direct',
       };
     }).then(d => { if (d) result.unifi = d; }));
 
@@ -1727,9 +1877,21 @@ app.get('/api/widgets/debug', requireAdmin, (req, res) => {
     cached: Object.fromEntries(Object.entries(_wCache).map(([k,v])=>[k,{age_s: Math.round((Date.now()-v.at)/1000), has_data: v.data!==null}])),
     errors: _wErrors,
     settings: {
-      has_moen:  !!(gs('moen_user') && gs('moen_pass')),
-      has_unifi: !!(gs('unifi_url') && gs('unifi_user') && gs('unifi_pass')),
-      unifi_url: gs('unifi_url'),
+      has_moen:         !!(gs('moen_user') && gs('moen_pass')),
+      has_unifi:        !!(gs('unifi_url') && gs('unifi_user') && gs('unifi_pass')),
+      unifi_url:        gs('unifi_url'),
+      ha_url:           gs('ha_url'),
+      ha_has_token:     !!gs('ha_token'),
+      ha_moen_flow:     gs('ha_moen_flow'),
+      ha_moen_pressure: gs('ha_moen_pressure'),
+      ha_moen_daily:    gs('ha_moen_daily'),
+      ha_moen_mode:     gs('ha_moen_mode'),
+      ha_moen_alert:    gs('ha_moen_alert'),
+      ha_unifi_clients: gs('ha_unifi_clients'),
+      ha_unifi_rx:      gs('ha_unifi_rx'),
+      ha_unifi_tx:      gs('ha_unifi_tx'),
+      moen_source:      !!(gs('ha_url') && gs('ha_token') && gs('ha_moen_flow')) ? 'ha' : 'direct',
+      unifi_source:     !!(gs('ha_url') && gs('ha_token') && gs('ha_unifi_clients')) ? 'ha' : 'direct',
     },
   });
 });

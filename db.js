@@ -240,6 +240,14 @@ const defaults = {
   unifi_pull_interval: '60',
   wifi_ssid: '',
   wifi_password: '',
+  ha_moen_flow: '',
+  ha_moen_pressure: '',
+  ha_moen_daily: '',
+  ha_moen_mode: '',
+  ha_moen_alert: '',
+  ha_unifi_clients: '',
+  ha_unifi_rx: '',
+  ha_unifi_tx: '',
 };
 const insSetting = db.prepare('INSERT OR IGNORE INTO settings (key,value) VALUES (?,?)');
 for (const [k, v] of Object.entries(defaults)) insSetting.run(k, v);

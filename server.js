@@ -773,14 +773,18 @@ app.put('/api/settings/integrations', requireAdmin, (req, res) => {
   if (req.body.unifi_pass            !== undefined) upd.run('unifi_pass',            String(req.body.unifi_pass));
   if (req.body.unifi_site            !== undefined) upd.run('unifi_site',            String(req.body.unifi_site));
   if (req.body.unifi_pull_interval   !== undefined) upd.run('unifi_pull_interval',   String(req.body.unifi_pull_interval));
-  if (req.body.ha_moen_flow     !== undefined) upd.run('ha_moen_flow',     String(req.body.ha_moen_flow));
-  if (req.body.ha_moen_pressure !== undefined) upd.run('ha_moen_pressure', String(req.body.ha_moen_pressure));
-  if (req.body.ha_moen_daily    !== undefined) upd.run('ha_moen_daily',    String(req.body.ha_moen_daily));
-  if (req.body.ha_moen_mode     !== undefined) upd.run('ha_moen_mode',     String(req.body.ha_moen_mode));
-  if (req.body.ha_moen_alert    !== undefined) upd.run('ha_moen_alert',    String(req.body.ha_moen_alert));
-  if (req.body.ha_unifi_clients !== undefined) upd.run('ha_unifi_clients', String(req.body.ha_unifi_clients));
-  if (req.body.ha_unifi_rx      !== undefined) upd.run('ha_unifi_rx',      String(req.body.ha_unifi_rx));
-  if (req.body.ha_unifi_tx      !== undefined) upd.run('ha_unifi_tx',      String(req.body.ha_unifi_tx));
+  let clearMoenCache = false, clearUnifiCache = false;
+  if (req.body.ha_moen_flow     !== undefined) { upd.run('ha_moen_flow',     String(req.body.ha_moen_flow));     clearMoenCache = true; }
+  if (req.body.ha_moen_pressure !== undefined) { upd.run('ha_moen_pressure', String(req.body.ha_moen_pressure)); clearMoenCache = true; }
+  if (req.body.ha_moen_daily    !== undefined) { upd.run('ha_moen_daily',    String(req.body.ha_moen_daily));    clearMoenCache = true; }
+  if (req.body.ha_moen_mode     !== undefined) { upd.run('ha_moen_mode',     String(req.body.ha_moen_mode));     clearMoenCache = true; }
+  if (req.body.ha_moen_alert    !== undefined) { upd.run('ha_moen_alert',    String(req.body.ha_moen_alert));    clearMoenCache = true; }
+  if (req.body.ha_unifi_clients !== undefined) { upd.run('ha_unifi_clients', String(req.body.ha_unifi_clients)); clearUnifiCache = true; }
+  if (req.body.ha_unifi_rx      !== undefined) { upd.run('ha_unifi_rx',      String(req.body.ha_unifi_rx));      clearUnifiCache = true; }
+  if (req.body.ha_unifi_tx      !== undefined) { upd.run('ha_unifi_tx',      String(req.body.ha_unifi_tx));      clearUnifiCache = true; }
+  // Clear widget cache so next poll picks up the new entity IDs immediately
+  if (clearMoenCache) { delete _wCache['moen:ha']; delete _wCache['moen:direct']; }
+  if (clearUnifiCache) { for (const k of Object.keys(_wCache)) if (k.startsWith('unifi:')) delete _wCache[k]; }
   res.json({ ok: true });
 });
 
@@ -1218,7 +1222,7 @@ app.post('/api/ha/discover', requireAdmin, async (req, res) => {
     alert:    moenFind(['alert', 'leak', 'detector']),
   };
 
-  // All sensors for manual UniFi entity mapping
+  // All sensors for manual entity mapping (capped to avoid huge payloads)
   const allSensors = states
     .filter(s => s.entity_id.startsWith('sensor.') || s.entity_id.startsWith('binary_sensor.'))
     .map(s => ({
@@ -1227,7 +1231,8 @@ app.post('/api/ha/discover', requireAdmin, async (req, res) => {
       unit: s.attributes?.unit_of_measurement || '',
       friendly_name: s.attributes?.friendly_name || s.entity_id,
     }))
-    .sort((a, b) => a.entity_id.localeCompare(b.entity_id));
+    .sort((a, b) => a.entity_id.localeCompare(b.entity_id))
+    .slice(0, 400);
 
   // Auto-detect likely UniFi entities for pre-selection
   const unifiLikely = allSensors.filter(s =>

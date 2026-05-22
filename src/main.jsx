@@ -492,11 +492,12 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
   useEffect(()=>{const id=setInterval(()=>setCenterIdx(i=>i+1),rotationMs);return()=>clearInterval(id);},[rotationMs]);
   const [plexIdx,setPlexIdx]=useState(0);
   useEffect(()=>{
+    setPlexIdx(0);
     const items=widgetData?.plex?.items||[];
-    if(items.length<=1){setPlexIdx(0);return;}
+    if(items.length<=1) return;
     const id=setInterval(()=>setPlexIdx(i=>(i+1)%items.length),6000);
     return()=>clearInterval(id);
-  },[widgetData?.plex?.items?.length]);
+  },[widgetData?.plex?.items?.length, widgetData?.plex?.type]);
   const [showControls,setShowControls]=useState(false);
   const hideTimer=useRef(null);
   useEffect(()=>{
@@ -2849,7 +2850,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
       const um={clients:d.ha_unifi_clients||'',rx:d.ha_unifi_rx||'',tx:d.ha_unifi_tx||''};
       setHaMoenMap(mm); setHaUnifiMap(um);
       if(mm.flow) setHaMoenSource('ha');
-      if(um.clients) setHaUnifiSource('ha');
+      if(um.clients||um.rx||um.tx) setHaUnifiSource('ha');
     }).catch(()=>{});
     api.get('/api/quick-actions').then(d=>{if(Array.isArray(d)) setQaList(d);}).catch(()=>{});
   },[]);
@@ -3362,7 +3363,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
                 const payload={ha_moen_flow:haMoenMap.flow,ha_moen_pressure:haMoenMap.pressure,ha_moen_daily:haMoenMap.daily,ha_moen_mode:haMoenMap.mode,ha_moen_alert:haMoenMap.alert,ha_unifi_clients:haUnifiMap.clients,ha_unifi_rx:haUnifiMap.rx,ha_unifi_tx:haUnifiMap.tx};
                 await fetch('/api/settings/integrations',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify(payload)});
                 if(haMoenMap.flow) setHaMoenSource('ha'); else setHaMoenSource('direct');
-                if(haUnifiMap.clients) setHaUnifiSource('ha'); else setHaUnifiSource('direct');
+                if(haUnifiMap.clients||haUnifiMap.rx||haUnifiMap.tx) setHaUnifiSource('ha'); else setHaUnifiSource('direct');
                 toastAdd('Entity mapping saved — widgets will refresh');
               }}>Save Mapping</Btn>
             </div>

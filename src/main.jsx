@@ -2703,7 +2703,7 @@ function WebhookSecretPanel({toastAdd}){
 }
 
 /* ── Settings ────────────────────────────────────────────────────────── */
-function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setPhotos,clockFormat,setClockFormat,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd,setRefreshMs,parseRefreshMs,setQuickActions,setRotationMs}){
+function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setPhotos,clockFormat,setClockFormat,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd,setRefreshMs,parseRefreshMs,setQuickActions,setRotationMs,setWifiQrData}){
   const isMobile=useIsMobile();
   const [weatherCity,setWeatherCity]=useState('');
   const [weatherLat,setWeatherLat]=useState('33.749');
@@ -2773,7 +2773,6 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [unifiInterval,setUnifiInterval]=useState('60');
   const [wifiSsid,setWifiSsid]=useState('');
   const [wifiPassword,setWifiPassword]=useState('');
-  const [wifiQrData,setWifiQrData]=useState(null);
   const [wUptimeUrls,setWUptimeUrls]=useState('');
   const [intSaving,setIntSaving]=useState(false);
   const [wQuote,setWQuote]=useState(false);
@@ -2840,7 +2839,6 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
     fetch('/api/ha/smart-home-status',{headers:{..._authHdr()}}).then(r=>r.json()).then(d=>{if(d.ha){if(d.ha.url)setHaUrl(d.ha.url);if(d.ha.hasToken)setHaHasToken(true);}if(d.homey){if(d.homey.url)setHomeyUrl(d.homey.url);if(d.homey.hasToken)setHomeyHasToken(true);}}).catch(()=>{});
     api.get('/api/settings/integrations').then(d=>{setHasAnthropicKey(!!d.has_anthropic);setHasBeehiivKey(!!d.has_beehiiv);setHasYoutubeKey(!!d.has_youtube);setHasEtsyKey(!!d.has_etsy);setHasTeslemetryKey(!!d.has_teslemetry);setHasAviationstackKey(!!d.has_aviationstack);setHasNextdnsKey(!!d.has_nextdns);setHasBeszel(!!d.has_beszel);if(d.beszel_url)setBeszelUrl(d.beszel_url);setHasPlexKey(!!d.has_plex);if(d.plex_url)setPlexUrl(d.plex_url);setHasLastfm(!!d.has_lastfm);if(d.lastfm_user)setLastfmUser(d.lastfm_user);setHasMoen(!!d.has_moen);setHasUnifi(!!d.has_unifi);if(d.unifi_url)setUnifiUrl(d.unifi_url);if(d.unifi_site)setUnifiSite(d.unifi_site);if(d.unifi_pull_interval)setUnifiInterval(d.unifi_pull_interval);}).catch(()=>{});
     api.get('/api/quick-actions').then(d=>{if(Array.isArray(d)) setQaList(d);}).catch(()=>{});
-    api.get('/api/wifi/qr').then(d=>{if(d&&d.dataUrl) setWifiQrData(d);}).catch(()=>{});
   },[]);
   const geocodeCity=async()=>{
     if(!weatherCity.trim()) return;
@@ -3136,7 +3134,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
             if(wifiPassword) wifiBody.wifi_password=wifiPassword;
             await fetch('/api/settings/wifi',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify(wifiBody)});
             setWifiPassword('');
-            api.get('/api/wifi/qr').then(d=>{if(d&&d.dataUrl) setWifiQrData(d);}).catch(()=>{});
+            api.get('/api/wifi/qr').then(d=>{if(d?.dataUrl) setWifiQrData(d);}).catch(()=>{});
             toastAdd('WiFi saved');
           }}>Save WiFi</Btn>
         </div>
@@ -4044,7 +4042,7 @@ function GoalsScreen({goals,setGoals,toastAdd}){
 }
 
 
-function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocery,setGrocery,meals,setMeals,icsSources,setIcsSources,inboxCount,setInboxCount,countdowns,setCountdowns,members,setMembers,photos,setPhotos,clockFormat,setClockFormat,weather,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd,setRefreshMs,parseRefreshMs,goals,setGoals,notes,setNotes,polls,setPolls,bookmarks,setBookmarks,quickActions,setQuickActions,setRotationMs}){
+function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocery,setGrocery,meals,setMeals,icsSources,setIcsSources,inboxCount,setInboxCount,countdowns,setCountdowns,members,setMembers,photos,setPhotos,clockFormat,setClockFormat,weather,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd,setRefreshMs,parseRefreshMs,goals,setGoals,notes,setNotes,polls,setPolls,bookmarks,setBookmarks,quickActions,setQuickActions,setRotationMs,setWifiQrData}){
   const isMobile=useIsMobile();
   const [screen,setScreen]=useState('dashboard');
   const {toasts,add:toastAdd}=useToast();
@@ -4084,7 +4082,7 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
     bookmarks:  <BookmarksScreen bookmarks={bookmarks} setBookmarks={setBookmarks} toastAdd={toastAdd}/>,
     polls:      <PollsScreen polls={polls} setPolls={setPolls} toastAdd={toastAdd}/>,
     inbox:      <InboxScreen toastAdd={toastAdd} events={events} setEvents={setEvents} setInboxCount={setInboxCount}/>,
-    settings:   <SettingsScreen toastAdd={toastAdd} icsSources={icsSources} setIcsSources={setIcsSources} onDisplay={onDisplay} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} setQuickActions={setQuickActions} setRotationMs={setRotationMs}/>,
+    settings:   <SettingsScreen toastAdd={toastAdd} icsSources={icsSources} setIcsSources={setIcsSources} onDisplay={onDisplay} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} setQuickActions={setQuickActions} setRotationMs={setRotationMs} setWifiQrData={setWifiQrData}/>,
   };
 
   if(isMobile){
@@ -4476,6 +4474,7 @@ function App(){
   const [refreshMs,setRefreshMs]=useState(60000);
   const [rotationMs,setRotationMs]=useState(10000);
   const [weather,setWeather]=useState(null);
+  const [wifiQrData,setWifiQrData]=useState(null);
   const [loading,setLoading]=useState(true);
   const [wizardDone,setWizardDone]=useState(null); // null=checking, false=show wizard, true=done
   const parseRefreshMs=v=>({'30s':30000,'1min':60000,'5min':300000}[v]||60000);
@@ -4564,6 +4563,7 @@ function App(){
       setLoading(false);
     });
     api.get('/api/weather').then(w=>{if(!w.error) setWeather(w);}).catch(()=>{});
+    api.get('/api/wifi/qr').then(d=>{if(d?.dataUrl) setWifiQrData(d);}).catch(()=>{});
   },[authChecked,auth,kiosk,wizardDone]);
 
   // Background poll — keeps wall display live
@@ -4616,7 +4616,7 @@ function App(){
 
   return mode==='display'
     ?<DisplayMode onManage={()=>setMode('manage')} events={events} chores={chores} setChores={setChores} meals={meals} grocery={grocery} countdowns={countdowns} clockFormat={clockFormat} weather={weather} nightModeStart={nightModeStart} nightModeEnd={nightModeEnd} goals={goals} notes={notes} polls={polls} rotationMs={rotationMs} wifiQrData={wifiQrData}/>
-    :<ManageMode onDisplay={()=>setMode('display')} onLogout={handleLogout} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources} inboxCount={inboxCount} setInboxCount={setInboxCount} countdowns={countdowns} setCountdowns={setCountdowns} members={members} setMembers={setMembers} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} weather={weather} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} goals={goals} setGoals={setGoals} notes={notes} setNotes={setNotes} polls={polls} setPolls={setPolls} bookmarks={bookmarks} setBookmarks={setBookmarks} quickActions={quickActions} setQuickActions={setQuickActions} setRotationMs={setRotationMs}/>;
+    :<ManageMode onDisplay={()=>setMode('display')} onLogout={handleLogout} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources} inboxCount={inboxCount} setInboxCount={setInboxCount} countdowns={countdowns} setCountdowns={setCountdowns} members={members} setMembers={setMembers} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} weather={weather} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} goals={goals} setGoals={setGoals} notes={notes} setNotes={setNotes} polls={polls} setPolls={setPolls} bookmarks={bookmarks} setBookmarks={setBookmarks} quickActions={quickActions} setQuickActions={setQuickActions} setRotationMs={setRotationMs} setWifiQrData={setWifiQrData}/>;
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);

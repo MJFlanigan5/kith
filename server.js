@@ -1230,15 +1230,19 @@ app.post('/api/quick-actions/trigger', requireAuth, async (req, res) => {
 
 // ── Routes: Widgets ───────────────────────────────────────────────────────────
 const _wCache = {};
+const _wErrors = {};
 async function _wFetch(key, ttlMs, fn) {
   if (_wCache[key] && Date.now() - _wCache[key].at < ttlMs) return _wCache[key].data;
   try {
     const data = await fn();
-    // Don't cache null or empty arrays — let them retry on next request
     const cacheable = data !== null && data !== undefined && !(Array.isArray(data) && data.length === 0);
-    if (cacheable) _wCache[key] = { data, at: Date.now() };
+    if (cacheable) { _wCache[key] = { data, at: Date.now() }; delete _wErrors[key]; }
     return data;
-  } catch { return _wCache[key]?.data ?? null; }
+  } catch(e) {
+    _wErrors[key] = e?.message || String(e);
+    console.error(`[widget:${key}]`, e?.message || e);
+    return _wCache[key]?.data ?? null;
+  }
 }
 const gs = k => db.prepare('SELECT value FROM settings WHERE key=?').get(k)?.value || '';
 
@@ -1559,25 +1563,66 @@ app.get('/api/widgets/data', async (req, res) => {
   const moenPass = gs('moen_pass');
   if (moenUser && moenPass)
     p.push(_wFetch('moen', 300000, async () => {
-      const authR = await fetch('https://api.meetflo.com/api/v1/users/auth', {
+      // Try new OAuth2 endpoint first (Moen migrated to api-gw in late 2024)
+      let authHeader = null, apiBase = null, userId = null;
+      const oauthR = await fetch('https://api-gw.meetflo.com/api/v1/oauth2/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: moenUser, password: moenPass }),
+        body: JSON.stringify({
+          grant_type: 'password', username: moenUser, password: moenPass,
+          client_id: '3baec26f-0e8b-4e1d-84b0-e178f05ea0a5',
+          client_secret: '3baec26f-0e8b-4e1d-84b0-e178f05ea0a5',
+        }),
         signal: AbortSignal.timeout(8000),
       });
-      if (!authR.ok) return null;
-      const authD = await authR.json();
-      const token = authD.token; if (!token) return null;
-      const locR = await fetch('https://api.meetflo.com/api/v2/locations?expand=devices', {
-        headers: { 'Authorization': token },
-        signal: AbortSignal.timeout(8000),
-      });
-      if (!locR.ok) return null;
-      const locs = await locR.json();
-      const locItems = Array.isArray(locs) ? locs : (locs?.items || []);
-      const device = locItems[0]?.devices?.[0]; if (!device) return null;
+      if (oauthR.ok) {
+        const d = await oauthR.json();
+        if (!d.access_token) return null;
+        authHeader = `Bearer ${d.access_token}`;
+        userId = d.user_id;
+        apiBase = 'https://api-gw.meetflo.com';
+      } else {
+        // Legacy endpoint — bare token, no Bearer prefix
+        const legR = await fetch('https://api.meetflo.com/api/v1/users/auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: moenUser, password: moenPass }),
+          signal: AbortSignal.timeout(8000),
+        });
+        if (!legR.ok) return null;
+        const d = await legR.json();
+        if (!d.token) return null;
+        authHeader = d.token; // legacy: bare token, no Bearer
+        apiBase = 'https://api.meetflo.com';
+      }
+
+      let device = null;
+      if (userId) {
+        // New API: user → locations → location → devices
+        const userR = await fetch(`${apiBase}/api/v2/users/${userId}?expand=locations`, {
+          headers: { Authorization: authHeader }, signal: AbortSignal.timeout(8000),
+        });
+        if (!userR.ok) return null;
+        const userData = await userR.json();
+        const loc = userData.locations?.[0];
+        if (!loc) return null;
+        const locR = await fetch(`${apiBase}/api/v2/locations/${loc.id}?expand=devices`, {
+          headers: { Authorization: authHeader }, signal: AbortSignal.timeout(8000),
+        });
+        if (!locR.ok) return null;
+        device = (await locR.json()).devices?.[0];
+      } else {
+        // Legacy API: locations returns a direct array
+        const locR = await fetch(`${apiBase}/api/v2/locations?expand=devices`, {
+          headers: { Authorization: authHeader }, signal: AbortSignal.timeout(8000),
+        });
+        if (!locR.ok) return null;
+        const locs = await locR.json();
+        device = (Array.isArray(locs) ? locs : [])[0]?.devices?.[0];
+      }
+      if (!device) return null;
       return {
-        system_mode: device.systemMode?.target || 'home',
+        system_mode: device.systemMode?.target || device.systemMode?.lastKnown || 'home',
         has_alert:   (device.notifications?.criticalCount || 0) > 0,
         flow_gpm:    +(device.telemetry?.current?.gpm ?? 0).toFixed(2),
         daily_gal:   Math.round(device.todayGallonsUsed ?? 0),
@@ -1617,23 +1662,27 @@ app.get('/api/widgets/data', async (req, res) => {
           req.end();
         });
       }
-      const base = unifiUrl.replace(/\/$/, '');
-      // Try UniFi OS path first, fall back to classic controller
-      let token = null; let cookieStr = '';
+      // Normalize URL — add https:// if no protocol given
+      let rawUrl = unifiUrl.replace(/\/$/, '');
+      if (!/^https?:\/\//i.test(rawUrl)) rawUrl = `https://${rawUrl}`;
+      const base = rawUrl;
+      // Try UniFi OS path first (UDM/UDM-Pro/Cloud Key Gen2+), fall back to classic controller
+      let csrfToken = null; let cookieStr = '';
       const loginBody = JSON.stringify({ username: unifiUser, password: unifiPass, remember: false });
-      // UniFi OS (UDM/UDM Pro)
+      // UniFi OS (port 443)
       const osAuth = await uReq(`${base}/api/auth/login`, { method: 'POST', body: loginBody }).catch(() => null);
       if (osAuth?.ok) {
         const setCookies = Array.isArray(osAuth.headers['set-cookie']) ? osAuth.headers['set-cookie'] : (osAuth.headers['set-cookie'] ? [osAuth.headers['set-cookie']] : []);
         cookieStr = setCookies.map(c => c.split(';')[0]).join('; ');
-        token = cookieStr.match(/TOKEN=([^;& ]+)/)?.[1];
-        const healthR = await uReq(`${base}/proxy/network/api/s/${unifiSite}/stat/health`, { headers: { Cookie: cookieStr, ...(token ? { 'X-Csrf-Token': token } : {}) } }).catch(() => null);
+        // CSRF token: prefer response X-Csrf-Token header, fall back to TOKEN cookie value
+        csrfToken = osAuth.headers['x-csrf-token'] || osAuth.headers['X-Csrf-Token'] || cookieStr.match(/TOKEN=([^;& ]+)/)?.[1] || null;
+        const healthR = await uReq(`${base}/proxy/network/api/s/${unifiSite}/stat/health`, { headers: { Cookie: cookieStr, ...(csrfToken ? { 'X-Csrf-Token': csrfToken } : {}) } }).catch(() => null);
         if (healthR?.ok) {
           const d = healthR.json();
           const wan = d.data?.find(s => s.subsystem === 'wan') || {};
           const wlan = d.data?.find(s => s.subsystem === 'wlan') || {};
           return {
-            clients: (wan.num_user || 0) + (wlan.num_user || 0),
+            clients: (wlan.num_user || 0) + (wan.num_user || 0),
             rx_mbps: +(Math.round((wan.rx_bytes_r || 0) / 125000 * 10) / 10).toFixed(1),
             tx_mbps: +(Math.round((wan.tx_bytes_r || 0) / 125000 * 10) / 10).toFixed(1),
             ap_count: wlan.num_ap || 0,
@@ -1641,7 +1690,7 @@ app.get('/api/widgets/data', async (req, res) => {
           };
         }
       }
-      // Classic controller fallback
+      // Classic controller fallback (port 8443 by default)
       const authR = await uReq(`${base}/api/login`, { method: 'POST', body: loginBody }).catch(() => null);
       if (!authR?.ok) return null;
       const rawCookies = Array.isArray(authR.headers['set-cookie']) ? authR.headers['set-cookie'] : [authR.headers['set-cookie'] || ''];
@@ -1652,16 +1701,29 @@ app.get('/api/widgets/data', async (req, res) => {
       const wan = d.data?.find(s => s.subsystem === 'wan') || {};
       const wlan = d.data?.find(s => s.subsystem === 'wlan') || {};
       return {
-        clients: (wan.num_user || 0) + (wlan.num_user || 0),
+        clients: (wlan.num_user || 0) + (wan.num_user || 0),
         rx_mbps: +(Math.round((wan.rx_bytes_r || 0) / 125000 * 10) / 10).toFixed(1),
         tx_mbps: +(Math.round((wan.tx_bytes_r || 0) / 125000 * 10) / 10).toFixed(1),
         ap_count: wlan.num_ap || 0,
-        status: wan.status === 'connected' ? 'up' : (wan.status || 'unknown'),
+        status: (wan.status === 'ok' || wan.status === 'connected') ? 'up' : (wan.status || 'unknown'),
       };
     }).then(d => { if (d) result.unifi = d; }));
 
   await Promise.allSettled(p);
   res.json(result);
+});
+
+// Debug: which widgets are loaded and what errors occurred
+app.get('/api/widgets/debug', requireAdmin, (req, res) => {
+  res.json({
+    cached: Object.fromEntries(Object.entries(_wCache).map(([k,v])=>[k,{age_s: Math.round((Date.now()-v.at)/1000), has_data: v.data!==null}])),
+    errors: _wErrors,
+    settings: {
+      has_moen:  !!(gs('moen_user') && gs('moen_pass')),
+      has_unifi: !!(gs('unifi_url') && gs('unifi_user') && gs('unifi_pass')),
+      unifi_url: gs('unifi_url'),
+    },
+  });
 });
 
 // ── Routes: Music (Last.fm now-playing) ──────────────────────────────────────

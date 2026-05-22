@@ -3312,7 +3312,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
               else toastAdd(r.error||'Save failed','red');
             }} disabled={haSaving}>{haSaving?'Saving…':'Save'}</Btn>
             <Btn sm variant="ghost" onClick={async()=>{
-              if(!haUrl.trim()){toastAdd('Save HA URL first','red');return;}
+              if(!haUrl.trim()&&!haHasToken){toastAdd('Save HA URL and token first','red');return;}
               setHaDiscovering(true);
               const body={};
               if(haUrl.trim()) body.ha_url=haUrl.trim();
@@ -3329,6 +3329,13 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
               toastAdd(`Found ${r.moen?.all?.length||0} Moen, ${r.unifi?.all?.length||0} UniFi entities — ${moenFound+unifiFound} auto-mapped`);
             }} disabled={haDiscovering}>{haDiscovering?'Discovering…':'Discover Entities'}</Btn>
           </div>
+          {!haDiscovered&&(haMoenSource==='ha'||haUnifiSource==='ha')&&(
+            <div style={{background:A.systemBg,borderRadius:A.r,padding:'10px 14px',marginBottom:10,fontSize:12,color:A.label3}}>
+              Entity mapping active — click Discover to review or change.
+              {haMoenMap.flow&&<div style={{color:A.label4,marginTop:4,fontFamily:'monospace',fontSize:11}}>Moen flow: {haMoenMap.flow}</div>}
+              {haUnifiMap.clients&&<div style={{color:A.label4,fontFamily:'monospace',fontSize:11}}>UniFi clients: {haUnifiMap.clients}</div>}
+            </div>
+          )}
           {haDiscovered&&(
             <div style={{background:A.systemBg,borderRadius:A.r,padding:'12px 14px',marginBottom:10}}>
               <div style={{fontSize:12,fontWeight:600,color:A.label2,marginBottom:8}}>Moen Flo Entity Mapping</div>

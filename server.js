@@ -1668,7 +1668,7 @@ app.get('/api/widgets/data', async (req, res) => {
   const moenPass = gs('moen_pass');
   const useMoenHa = !!(haBaseUrl && haAuthToken && haFlowEntity);
   if (useMoenHa || (moenUser && moenPass))
-    p.push(_wFetch('moen', 300000, async () => {
+    p.push(_wFetch(useMoenHa ? 'moen:ha' : 'moen:direct', 300000, async () => {
       if (useMoenHa) {
         const [flow, psi, daily, mode, alert] = await Promise.all([
           haGet(haFlowEntity),
@@ -1685,7 +1685,7 @@ app.get('/api/widgets/data', async (req, res) => {
           daily_gal:   Math.round(haNum(daily)),
           system_mode: mode?.state || 'home',
           has_alert:   alert?.state === 'on',
-          connected:   flow.state !== 'unavailable',
+          connected:   true,
           source:      'ha',
         };
       }

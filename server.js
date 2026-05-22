@@ -1302,20 +1302,24 @@ app.post('/api/homey/discover', requireAdmin, async (req, res) => {
   const homeyToken = req.body?.homey_token || get('homey_token');
   if (!homeyUrl || !homeyToken) return res.status(400).json({ error: 'Homey URL and token required' });
 
-  let devicesData;
+  let raw;
   try {
-    const r = await fetch(`${homeyUrl}/api/manager/devices/device`, {
+    const r = await fetch(`${homeyUrl}/api/manager/devices/device/`, {
       headers: { 'Authorization': `Bearer ${homeyToken}` },
       signal: AbortSignal.timeout(10000),
     });
     if (!r.ok) {
       const body = await r.text().catch(() => '');
-      return res.status(400).json({ error: `Homey returned ${r.status}: ${body.slice(0, 200)}` });
+      return res.status(400).json({ error: `Homey ${r.status}: ${body.slice(0, 200)}` });
     }
-    devicesData = await r.json();
+    raw = await r.json();
   } catch (e) {
-    return res.status(400).json({ error: `Could not reach Homey: ${e.message}` });
+    const detail = e.cause?.message || e.cause?.code || '';
+    return res.status(400).json({ error: `Could not reach Homey: ${e.message}${detail ? ` (${detail})` : ''}` });
   }
+
+  // Homey cloud API wraps the payload in { result: {...} }; local API returns the map directly
+  const devicesData = raw?.result ?? raw;
 
   // F6 fix: when response is a map keyed by device ID, inject the key as `id` if missing
   const devices = Array.isArray(devicesData)
@@ -1764,12 +1768,14 @@ app.get('/api/widgets/data', async (req, res) => {
   const homeyAuthToken = gs('homey_token');
   const homeyGetDevice = async (deviceId) => {
     if (!deviceId || !homeyBaseUrl || !homeyAuthToken) return null;
-    const r = await fetch(`${homeyBaseUrl}/api/manager/devices/device/${deviceId}`, {
+    const r = await fetch(`${homeyBaseUrl}/api/manager/devices/device/${deviceId}/`, {
       headers: { 'Authorization': `Bearer ${homeyAuthToken}` },
       signal: AbortSignal.timeout(6000),
     });
     if (!r.ok) throw new Error(`Homey ${r.status} for device ${deviceId}`);
-    return r.json();
+    const body = await r.json();
+    // Homey cloud API wraps in { result: {...} }
+    return body?.result ?? body;
   };
 
   const haFlowEntity = gs('ha_moen_flow');

@@ -1229,16 +1229,27 @@ app.post('/api/ha/discover', requireAdmin, async (req, res) => {
     alert:    moenFind(['alert', 'leak', 'detector']),
   };
 
-  // All sensors for manual entity mapping (capped to avoid huge payloads)
+  // All entities for manual mapping — exclude meta/internal HA domains
+  const SKIP_DOMAINS = new Set(['automation','script','scene','group','zone','input_boolean',
+    'input_select','conversation','tts','media_player','camera','weather']);
   const allSensors = states
-    .filter(s => s.entity_id.startsWith('sensor.') || s.entity_id.startsWith('binary_sensor.'))
+    .filter(s => {
+      const domain = s.entity_id.split('.')[0];
+      return !SKIP_DOMAINS.has(domain);
+    })
     .map(s => ({
       entity_id: s.entity_id,
       state: s.state,
       unit: s.attributes?.unit_of_measurement || '',
       friendly_name: s.attributes?.friendly_name || s.entity_id,
     }))
-    .sort((a, b) => a.entity_id.localeCompare(b.entity_id))
+    .sort((a, b) => {
+      // sensor.*/binary_sensor.* float to top
+      const aS = a.entity_id.startsWith('sensor.') || a.entity_id.startsWith('binary_sensor.');
+      const bS = b.entity_id.startsWith('sensor.') || b.entity_id.startsWith('binary_sensor.');
+      if (aS !== bS) return aS ? -1 : 1;
+      return a.entity_id.localeCompare(b.entity_id);
+    })
     .slice(0, 400);
 
   // Auto-detect likely UniFi entities for pre-selection

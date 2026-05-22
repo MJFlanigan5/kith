@@ -2824,7 +2824,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [haPersonIds,setHaPersonIds]=useState([]); // array of person.* entity IDs
   const [haClimateEntity,setHaClimateEntity]=useState('');
   const [homeyDiscovering,setHomeyDiscovering]=useState(false);
-  const [homeyDiscovered,setHomeyDiscovered]=useState(null); // {persons,thermostats}
+  const [homeyDiscovered,setHomeyDiscovered]=useState(null); // {users,thermostats,allDevices}
   const [homeyPersonIds,setHomeyPersonIds]=useState([]); // array of Homey device IDs
   const [homeyClimateDevice,setHomeyClimateDevice]=useState('');
 
@@ -3526,21 +3526,21 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
               if(r.error){toastAdd(r.error,'red');return;}
               setHomeyDiscovered(r);
               // F3 fix: only auto-select if user hasn't already saved a subset
-              if(r.persons?.length&&homeyPersonIds.length===0) setHomeyPersonIds(r.persons.map(p=>p.id));
+              if(r.users?.length&&homeyPersonIds.length===0) setHomeyPersonIds(r.users.map(u=>u.id));
               if(r.thermostats?.length===1&&!homeyClimateDevice) setHomeyClimateDevice(r.thermostats[0].id);
-              toastAdd(`Found ${r.persons?.length||0} presence devices, ${r.thermostats?.length||0} thermostats`);
+              toastAdd(`Found ${r.users?.length||0} users, ${r.thermostats?.length||0} thermostats, ${r.allDevices?.length||0} devices`);
             }} disabled={homeyDiscovering}>{homeyDiscovering?'Discovering…':'Discover Devices'}</Btn>
           </div>
           {homeyDiscovered&&(
             <div style={{background:A.systemBg,borderRadius:A.r,padding:'12px 14px',marginTop:10}}>
-              <div style={{fontSize:12,fontWeight:600,color:A.label2,marginBottom:8}}>Who's Home — Presence Devices</div>
-              {(homeyDiscovered.persons||[]).length===0
-                ?<div style={{fontSize:11,color:A.label5,marginBottom:4}}>No devices with presence capability found</div>
-                :(homeyDiscovered.persons||[]).map(p=>(
-                  <label key={p.id} style={{display:'flex',alignItems:'center',gap:8,marginBottom:6,cursor:'pointer'}}>
-                    <input type="checkbox" checked={homeyPersonIds.includes(p.id)} onChange={e=>setHomeyPersonIds(ids=>e.target.checked?[...ids,p.id]:ids.filter(id=>id!==p.id))}/>
-                    <span style={{fontSize:12,color:A.label2}}>{p.name}</span>
-                    <span style={{fontSize:11,color:A.label4}}>({p.present===true?'home':p.present===false?'away':'unknown'})</span>
+              <div style={{fontSize:12,fontWeight:600,color:A.label2,marginBottom:8}}>Who's Home — Homey Users</div>
+              {(homeyDiscovered.users||[]).length===0
+                ?<div style={{fontSize:11,color:A.label5,marginBottom:4}}>No Homey users found (check token has users scope)</div>
+                :(homeyDiscovered.users||[]).map(u=>(
+                  <label key={u.id} style={{display:'flex',alignItems:'center',gap:8,marginBottom:6,cursor:'pointer'}}>
+                    <input type="checkbox" checked={homeyPersonIds.includes(u.id)} onChange={e=>setHomeyPersonIds(ids=>e.target.checked?[...ids,u.id]:ids.filter(id=>id!==u.id))}/>
+                    <span style={{fontSize:12,color:A.label2}}>{u.name}</span>
+                    <span style={{fontSize:11,color:u.present===true?'#34C759':A.label4}}>({u.present===true?'home':u.present===false?'away':'unknown'})</span>
                   </label>
                 ))
               }
@@ -3554,10 +3554,23 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
                   </select>
                 </div>
               }
-              <Btn sm style={{marginTop:8}} onClick={async()=>{
+              {(homeyDiscovered.allDevices||[]).length>0&&(
+                <details style={{marginTop:12}}>
+                  <summary style={{fontSize:12,fontWeight:600,color:A.label2,cursor:'pointer',userSelect:'none'}}>All Devices ({homeyDiscovered.allDevices.length})</summary>
+                  <div style={{marginTop:8,maxHeight:200,overflowY:'auto'}}>
+                    {homeyDiscovered.allDevices.map(d=>(
+                      <div key={d.id} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',padding:'3px 0',borderBottom:`1px solid ${A.sep}`}}>
+                        <span style={{fontSize:11,color:A.label2}}>{d.name}{d.zone?<span style={{color:A.label5}}> · {d.zone}</span>:null}</span>
+                        <span style={{fontSize:10,color:A.label5,fontFamily:'monospace',marginLeft:8}}>{d.capabilities.join(', ')}</span>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
+              <Btn sm style={{marginTop:12}} onClick={async()=>{
                 const payload={homey_person_devices:homeyPersonIds.join(','),homey_climate_device:homeyClimateDevice};
                 await fetch('/api/settings/integrations',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify(payload)});
-                toastAdd('Homey device mapping saved — widgets will refresh');
+                toastAdd('Homey mapping saved — widgets will refresh');
               }}>Save Homey Mapping</Btn>
             </div>
           )}

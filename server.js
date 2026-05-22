@@ -1334,13 +1334,24 @@ app.post('/api/homey/discover', requireAdmin, async (req, res) => {
     ? devicesData
     : Object.entries(devicesData).map(([key, d]) => ({ ...d, id: d.id || key }));
 
-  const persons = devices
-    .filter(d => Array.isArray(d.capabilities) && d.capabilities.includes('presence'))
-    .map(d => ({
-      id: d.id,
-      name: d.name || d.id,
-      present: d.capabilitiesObj?.presence?.value ?? null,
-    }));
+  // Fetch Homey users — presence/who's home is tracked here, not in device capabilities
+  let users = [];
+  try {
+    const ur = await fetch(`${homeyUrl}/api/manager/users/user/`, {
+      headers: { 'Authorization': `Bearer ${homeyToken}` },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (ur.ok) {
+      const urRaw = await ur.json();
+      const usersData = (urRaw && typeof urRaw === 'object' && 'result' in urRaw) ? urRaw.result : urRaw;
+      if (usersData && typeof usersData === 'object') {
+        const usersArr = Array.isArray(usersData)
+          ? usersData
+          : Object.entries(usersData).map(([key, u]) => ({ ...u, id: u.id || key }));
+        users = usersArr.map(u => ({ id: u.id, name: u.name || u.id, present: u.present ?? null }));
+      }
+    }
+  } catch (_) { /* non-fatal — proceed without users */ }
 
   const thermostats = devices
     .filter(d => Array.isArray(d.capabilities) && d.capabilities.includes('measure_temperature'))
@@ -1351,7 +1362,14 @@ app.post('/api/homey/discover', requireAdmin, async (req, res) => {
       target_temp:  d.capabilitiesObj?.target_temperature?.value ?? null,
     }));
 
-  res.json({ ok: true, persons, thermostats });
+  const allDevices = devices.map(d => ({
+    id: d.id,
+    name: d.name || d.id,
+    zone: d.zoneName || '',
+    capabilities: (d.capabilities || []).slice(0, 8), // cap for readability
+  }));
+
+  res.json({ ok: true, users, thermostats, allDevices });
 });
 
 app.get('/api/ha/pull', async (req, res) => {
@@ -1787,6 +1805,16 @@ app.get('/api/widgets/data', async (req, res) => {
     return homeyUnwrap(await r.json());
   };
 
+  const homeyGetUser = async (userId) => {
+    if (!userId || !homeyBaseUrl || !homeyAuthToken) return null;
+    const r = await fetch(`${homeyBaseUrl}/api/manager/users/user/${userId}/`, {
+      headers: { 'Authorization': `Bearer ${homeyAuthToken}` },
+      signal: AbortSignal.timeout(6000),
+    });
+    if (!r.ok) throw new Error(`Homey ${r.status} for user ${userId}`);
+    return homeyUnwrap(await r.json());
+  };
+
   const haFlowEntity = gs('ha_moen_flow');
   const moenUser = gs('moen_user');
   const moenPass = gs('moen_pass');
@@ -2017,15 +2045,14 @@ app.get('/api/widgets/data', async (req, res) => {
       }
       if (useHomeyPersons) {
         const ids = homeyPersonDevicesStr.split(',').map(s => s.trim()).filter(Boolean);
-        const devices = await Promise.all(ids.map(id => homeyGetDevice(id).catch(() => null)));
-        // F2 fix: skip null results
-        devices.forEach((d, i) => {
-          if (!d) return;
+        // Homey presence lives in /api/manager/users/user/, not device capabilities
+        const users = await Promise.all(ids.map(id => homeyGetUser(id).catch(() => null)));
+        users.forEach((u, i) => {
+          if (!u) return;
           persons.push({
             entity_id: ids[i],
-            name:  d.name || ids[i],
-            state: d.capabilitiesObj?.presence?.value === true  ? 'home' :
-                   d.capabilitiesObj?.presence?.value === false ? 'not_home' : 'unknown',
+            name:  u.name || ids[i],
+            state: u.present === true ? 'home' : u.present === false ? 'not_home' : 'unknown',
           });
         });
       }

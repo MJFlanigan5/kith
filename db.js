@@ -238,8 +238,8 @@ const defaults = {
   unifi_pass: '',
   unifi_site: 'default',
   unifi_pull_interval: '60',
-  span_ip: '',
-  span_token: '',
+  wifi_ssid: '',
+  wifi_password: '',
 };
 const insSetting = db.prepare('INSERT OR IGNORE INTO settings (key,value) VALUES (?,?)');
 for (const [k, v] of Object.entries(defaults)) insSetting.run(k, v);

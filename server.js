@@ -684,7 +684,7 @@ app.post('/api/push/test', requireAuth, async (req, res) => {
 });
 
 // ── Routes: Settings ──────────────────────────────────────────────────────────
-const SETTINGS_SENSITIVE = new Set(['email_webhook_secret','anthropic_api_key','ai_api_key','beehiiv_api_key','youtube_api_key','etsy_api_key','teslemetry_api_key','aviationstack_api_key','lastfm_api_key','nextdns_api_key','beszel_user','beszel_pass','jwt_secret','vapid_public','vapid_private','admin_pin_hash','resend_api_key','ha_webhook_secret','smart_home_token','ha_token','homey_token','plex_token','spotify_refresh_token']);
+const SETTINGS_SENSITIVE = new Set(['email_webhook_secret','anthropic_api_key','ai_api_key','beehiiv_api_key','youtube_api_key','etsy_api_key','teslemetry_api_key','aviationstack_api_key','lastfm_api_key','nextdns_api_key','beszel_user','beszel_pass','jwt_secret','vapid_public','vapid_private','admin_pin_hash','resend_api_key','ha_webhook_secret','smart_home_token','ha_token','homey_token','plex_token','spotify_refresh_token','moen_pass','unifi_pass','wifi_password']);
 app.get('/api/settings', (req, res) => {
   const rows = db.prepare('SELECT key,value FROM settings').all();
   res.json(Object.fromEntries(rows.filter(r=>!SETTINGS_SENSITIVE.has(r.key)).map(r=>[r.key,r.value])));
@@ -740,7 +740,6 @@ app.get('/api/settings/integrations', requireAdmin, (req, res) => {
     unifi_url:         get('unifi_url'),
     unifi_site:        get('unifi_site') || 'default',
     unifi_pull_interval: get('unifi_pull_interval') || '60',
-    has_span:          !!(get('span_ip') && get('span_token')),
   });
 });
 app.put('/api/settings/integrations', requireAdmin, (req, res) => {
@@ -766,9 +765,33 @@ app.put('/api/settings/integrations', requireAdmin, (req, res) => {
   if (req.body.unifi_pass            !== undefined) upd.run('unifi_pass',            String(req.body.unifi_pass));
   if (req.body.unifi_site            !== undefined) upd.run('unifi_site',            String(req.body.unifi_site));
   if (req.body.unifi_pull_interval   !== undefined) upd.run('unifi_pull_interval',   String(req.body.unifi_pull_interval));
-  if (req.body.span_ip               !== undefined) upd.run('span_ip',               String(req.body.span_ip));
-  if (req.body.span_token            !== undefined) upd.run('span_token',            String(req.body.span_token));
   res.json({ ok: true });
+});
+
+// ── WiFi QR ───────────────────────────────────────────────────────────────────
+const QRCode = require('qrcode');
+
+app.put('/api/settings/wifi', requireAdmin, (req, res) => {
+  const { wifi_ssid, wifi_password } = req.body;
+  const upd = db.prepare('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)');
+  if (wifi_ssid    !== undefined) upd.run('wifi_ssid',    String(wifi_ssid));
+  if (wifi_password !== undefined) upd.run('wifi_password', String(wifi_password));
+  res.json({ ok: true });
+});
+
+app.get('/api/wifi/qr', requireAuth, async (req, res) => {
+  const gs = k => db.prepare('SELECT value FROM settings WHERE key=?').get(k)?.value || '';
+  const ssid = gs('wifi_ssid');
+  const password = gs('wifi_password');
+  if (!ssid) return res.status(404).json({ error: 'WiFi not configured' });
+  // Escape chars that have special meaning in the WiFi QR format
+  const esc = s => s.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/"/g, '\\"').replace(/:/g, '\\:');
+  const wifiStr = `WIFI:T:WPA;S:${esc(ssid)};P:${esc(password)};;`;
+  const dataUrl = await QRCode.toDataURL(wifiStr, {
+    width: 300, margin: 2,
+    color: { dark: '#FFFFFF', light: '#1A1B21' },
+  });
+  res.json({ dataUrl, ssid });
 });
 
 app.put('/api/settings/email', requireAdmin, (req, res) => {
@@ -1636,29 +1659,6 @@ app.get('/api/widgets/data', async (req, res) => {
         status: wan.status === 'connected' ? 'up' : (wan.status || 'unknown'),
       };
     }).then(d => { if (d) result.unifi = d; }));
-
-  // ── Span Panel ─────────────────────────────────────────────────────────────
-  const spanIp = gs('span_ip');
-  const spanToken = gs('span_token');
-  if (spanIp && spanToken)
-    p.push(_wFetch(`span:${spanIp}`, 30000, async () => {
-      const r = await fetch(`http://${spanIp}/api/v1/panel`, {
-        headers: { Authorization: `Bearer ${spanToken}` },
-        signal: AbortSignal.timeout(5000),
-      });
-      if (!r.ok) return null;
-      const d = await r.json();
-      const gridW  = d.instantGridPowerW  ?? 0;
-      const solarW = d.instantSolarPowerW ?? 0;
-      const loadW  = d.instantLoadPowerW  ?? 0;
-      return {
-        grid_kw:       +(gridW  / 1000).toFixed(2),
-        solar_kw:      +(solarW / 1000).toFixed(2),
-        home_kw:       +(loadW  / 1000).toFixed(2),
-        grid_importing: gridW > 0,
-        solar_active:   solarW > 50,
-      };
-    }).then(d => { if (d) result.span = d; }));
 
   await Promise.allSettled(p);
   res.json(result);

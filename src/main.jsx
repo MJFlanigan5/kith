@@ -411,7 +411,7 @@ function FamilyScreen({members,setMembers,toastAdd}){
 }
 
 /* ── Display Mode ────────────────────────────────────────────────────── */
-function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,weather,clockFormat='12h',nightModeStart='23:00',nightModeEnd='06:00',goals=[],notes=[],polls=[],rotationMs=10000}){
+function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,weather,clockFormat='12h',nightModeStart='23:00',nightModeEnd='06:00',goals=[],notes=[],polls=[],rotationMs=10000,wifiQrData=null}){
   const isMobile=useIsMobile();
   const now=useClock();
   const [liveGames,setLiveGames]=useState([]);
@@ -552,7 +552,6 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
     ...(widgetData.plex?['w_plex']:[]),
     ...(widgetData.moen?['w_moen']:[]),
     ...(widgetData.unifi?['w_unifi']:[]),
-    ...(widgetData.span?['w_span']:[]),
   ];
   const activePanelId=centerPanels[centerIdx%Math.max(1,centerPanels.length)];
 
@@ -577,11 +576,12 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
     t1:'#FFFFFF',t2:'rgba(255,255,255,0.65)',t3:'rgba(255,255,255,0.38)',t4:'rgba(255,255,255,0.20)',
     sep:'rgba(255,255,255,0.07)',
   };
+  const isTV=window.innerWidth>=1440;
   const Widget=({children,style:s={}})=>(
-    <div style={{background:D.card,borderRadius:16,border:`1px solid ${D.border}`,padding:'16px 18px',overflow:'hidden',...s}}>{children}</div>
+    <div style={{background:D.card,borderRadius:16,border:`1px solid ${D.border}`,padding:isTV?'18px 22px':'16px 18px',overflow:'hidden',...s}}>{children}</div>
   );
   const WLabel=({children})=>(
-    <div style={{fontSize:10,fontWeight:700,color:D.t3,textTransform:'uppercase',letterSpacing:'.10em',marginBottom:12}}>{children}</div>
+    <div style={{fontSize:isTV?12:10,fontWeight:700,color:D.t3,textTransform:'uppercase',letterSpacing:'.10em',marginBottom:isTV?14:12}}>{children}</div>
   );
 
   if(isNightMode) return(
@@ -597,18 +597,18 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
   );
 
   return(
-    <div style={{width:'100vw',height:'100vh',background:D.bg,overflow:'hidden',padding:isMobile?'16px 16px':'24px 28px',display:'flex',flexDirection:'column',gap:isMobile?10:14,position:'relative'}}>
+    <div style={{width:'100vw',height:'100vh',background:D.bg,overflow:'hidden',padding:isMobile?'16px 16px':isTV?'28px 36px':'24px 28px',display:'flex',flexDirection:'column',gap:isMobile?10:isTV?18:14,position:'relative'}}>
       <Confetti active={dmChoreConfetti} count={14}/>
 
       {/* Header — clock + date */}
       <div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-between',flexShrink:0}}>
         <div style={{display:'flex',alignItems:'baseline',gap:8}}>
-          <span style={{fontSize:isMobile?64:108,fontWeight:800,color:D.t1,lineHeight:1,letterSpacing:'-0.04em',fontVariantNumeric:'tabular-nums'}}>{h12}:{min}</span>
-          <span style={{fontSize:isMobile?18:28,color:D.t3,fontWeight:400,marginBottom:isMobile?6:10}}>{ampm}</span>
+          <span style={{fontSize:isMobile?64:isTV?140:108,fontWeight:800,color:D.t1,lineHeight:1,letterSpacing:'-0.04em',fontVariantNumeric:'tabular-nums'}}>{h12}:{min}</span>
+          <span style={{fontSize:isMobile?18:isTV?36:28,color:D.t3,fontWeight:400,marginBottom:isMobile?6:isTV?14:10}}>{ampm}</span>
         </div>
         <div style={{textAlign:'right',paddingBottom:8}}>
-          <div style={{fontSize:isMobile?14:20,color:D.t2,fontWeight:400,letterSpacing:'-.01em'}}>{dateStr}</div>
-          <div style={{fontSize:12,color:D.t4,marginTop:5,display:'flex',alignItems:'center',gap:5,justifyContent:'flex-end',fontFamily:'JetBrains Mono,monospace'}}>
+          <div style={{fontSize:isMobile?14:isTV?26:20,color:D.t2,fontWeight:400,letterSpacing:'-.01em'}}>{dateStr}</div>
+          <div style={{fontSize:isTV?14:12,color:D.t4,marginTop:5,display:'flex',alignItems:'center',gap:5,justifyContent:'flex-end',fontFamily:'JetBrains Mono,monospace'}}>
             <div style={{width:5,height:5,borderRadius:'50%',background:A.green}}/>synced
           </div>
         </div>
@@ -691,7 +691,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
         <div style={{flex:1,display:'flex',flexDirection:'column',gap:12,minHeight:0}}>
 
           {/* Main 3-col grid */}
-          <div style={{flex:1,display:'grid',gridTemplateColumns:'1fr 1.6fr 1fr',gap:12,minHeight:0}}>
+          <div style={{flex:1,display:'grid',gridTemplateColumns:'1fr 1.6fr 1fr',gap:isTV?16:12,minHeight:0,zoom:isTV?1.1:undefined}}>
 
             {/* LEFT: Upcoming events */}
             <Widget style={{display:'flex',flexDirection:'column',overflow:'hidden'}}>
@@ -1179,30 +1179,6 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         </>
                       );
                     })()}
-                    {activePanelId==='w_span'&&(()=>{
-                      const s=widgetData.span;
-                      return(
-                        <>
-                          <WLabel>Span Panel</WLabel>
-                          <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',gap:12}}>
-                            <div style={{display:'flex',gap:10}}>
-                              <div style={{flex:1,background:'rgba(255,149,0,0.10)',borderRadius:10,padding:'12px',textAlign:'center'}}>
-                                <div style={{fontSize:32,fontWeight:800,color:s.solar_active?A.amber:D.t4,letterSpacing:'-.03em',lineHeight:1}}>{s.solar_kw}</div>
-                                <div style={{fontSize:11,color:D.t4,marginTop:4}}>kW solar</div>
-                              </div>
-                              <div style={{flex:1,background:'rgba(255,255,255,0.06)',borderRadius:10,padding:'12px',textAlign:'center'}}>
-                                <div style={{fontSize:32,fontWeight:800,color:D.t1,letterSpacing:'-.03em',lineHeight:1}}>{s.home_kw}</div>
-                                <div style={{fontSize:11,color:D.t4,marginTop:4}}>kW home</div>
-                              </div>
-                            </div>
-                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                              <span style={{fontSize:13,color:D.t3}}>Grid</span>
-                              <span style={{fontSize:14,fontWeight:600,color:s.grid_importing?A.red:A.green}}>{s.grid_kw} kW {s.grid_importing?'import':'export'}</span>
-                            </div>
-                          </div>
-                        </>
-                      );
-                    })()}
                   </Widget>
                 </div>
               )}
@@ -1265,6 +1241,16 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         <span style={{fontSize:13,color:D.t2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{item.name}</span>
                       </div>
                     ))}
+                  </div>
+                </Widget>
+              )}
+              {/* WiFi QR — when configured */}
+              {wifiQrData&&(
+                <Widget style={{flexShrink:0}}>
+                  <WLabel>Guest WiFi</WLabel>
+                  <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:8}}>
+                    <img src={wifiQrData.dataUrl} alt="WiFi QR" style={{width:'100%',maxWidth:200,borderRadius:8,display:'block'}}/>
+                    <div style={{fontSize:13,fontWeight:600,color:D.t2,letterSpacing:'.02em'}}>{wifiQrData.ssid}</div>
                   </div>
                 </Widget>
               )}
@@ -2785,9 +2771,9 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [unifiPass,setUnifiPass]=useState('');
   const [unifiSite,setUnifiSite]=useState('default');
   const [unifiInterval,setUnifiInterval]=useState('60');
-  const [hasSpan,setHasSpan]=useState(false);
-  const [spanIp,setSpanIp]=useState('');
-  const [spanToken,setSpanToken]=useState('');
+  const [wifiSsid,setWifiSsid]=useState('');
+  const [wifiPassword,setWifiPassword]=useState('');
+  const [wifiQrData,setWifiQrData]=useState(null);
   const [wUptimeUrls,setWUptimeUrls]=useState('');
   const [intSaving,setIntSaving]=useState(false);
   const [wQuote,setWQuote]=useState(false);
@@ -2844,6 +2830,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
       if(st.uptime_kuma_url) setKumaUrl(st.uptime_kuma_url);
       if(st.uptime_kuma_slug) setKumaSlug(st.uptime_kuma_slug);
       if(st.custom_sport_paths) setCustomSportPath(st.custom_sport_paths);
+      if(st.wifi_ssid) setWifiSsid(st.wifi_ssid);
       if(st.sports_leagues){
         const active=st.sports_leagues.split(',').map(s=>s.trim().toLowerCase());
         setSportsLeagues({nfl:active.includes('nfl'),nba:active.includes('nba'),mlb:active.includes('mlb'),nhl:active.includes('nhl'),wnba:active.includes('wnba'),mls:active.includes('mls'),epl:active.includes('epl'),ucl:active.includes('ucl'),wc:active.includes('wc'),wwc:active.includes('wwc'),ncaaf:active.includes('ncaaf'),ncaab:active.includes('ncaab'),pga:active.includes('pga'),atp:active.includes('atp'),nascar:active.includes('nascar'),f1:active.includes('f1')});
@@ -2851,8 +2838,9 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
     }).catch(()=>{});
     api.get('/api/ha/secret').then(d=>{if(d.secret) setHaSecret(d.secret);}).catch(()=>{});
     fetch('/api/ha/smart-home-status',{headers:{..._authHdr()}}).then(r=>r.json()).then(d=>{if(d.ha){if(d.ha.url)setHaUrl(d.ha.url);if(d.ha.hasToken)setHaHasToken(true);}if(d.homey){if(d.homey.url)setHomeyUrl(d.homey.url);if(d.homey.hasToken)setHomeyHasToken(true);}}).catch(()=>{});
-    api.get('/api/settings/integrations').then(d=>{setHasAnthropicKey(!!d.has_anthropic);setHasBeehiivKey(!!d.has_beehiiv);setHasYoutubeKey(!!d.has_youtube);setHasEtsyKey(!!d.has_etsy);setHasTeslemetryKey(!!d.has_teslemetry);setHasAviationstackKey(!!d.has_aviationstack);setHasNextdnsKey(!!d.has_nextdns);setHasBeszel(!!d.has_beszel);if(d.beszel_url)setBeszelUrl(d.beszel_url);setHasPlexKey(!!d.has_plex);if(d.plex_url)setPlexUrl(d.plex_url);setHasLastfm(!!d.has_lastfm);if(d.lastfm_user)setLastfmUser(d.lastfm_user);setHasMoen(!!d.has_moen);setHasUnifi(!!d.has_unifi);if(d.unifi_url)setUnifiUrl(d.unifi_url);if(d.unifi_site)setUnifiSite(d.unifi_site);if(d.unifi_pull_interval)setUnifiInterval(d.unifi_pull_interval);setHasSpan(!!d.has_span);}).catch(()=>{});
+    api.get('/api/settings/integrations').then(d=>{setHasAnthropicKey(!!d.has_anthropic);setHasBeehiivKey(!!d.has_beehiiv);setHasYoutubeKey(!!d.has_youtube);setHasEtsyKey(!!d.has_etsy);setHasTeslemetryKey(!!d.has_teslemetry);setHasAviationstackKey(!!d.has_aviationstack);setHasNextdnsKey(!!d.has_nextdns);setHasBeszel(!!d.has_beszel);if(d.beszel_url)setBeszelUrl(d.beszel_url);setHasPlexKey(!!d.has_plex);if(d.plex_url)setPlexUrl(d.plex_url);setHasLastfm(!!d.has_lastfm);if(d.lastfm_user)setLastfmUser(d.lastfm_user);setHasMoen(!!d.has_moen);setHasUnifi(!!d.has_unifi);if(d.unifi_url)setUnifiUrl(d.unifi_url);if(d.unifi_site)setUnifiSite(d.unifi_site);if(d.unifi_pull_interval)setUnifiInterval(d.unifi_pull_interval);}).catch(()=>{});
     api.get('/api/quick-actions').then(d=>{if(Array.isArray(d)) setQaList(d);}).catch(()=>{});
+    api.get('/api/wifi/qr').then(d=>{if(d&&d.dataUrl) setWifiQrData(d);}).catch(()=>{});
   },[]);
   const geocodeCity=async()=>{
     if(!weatherCity.trim()) return;
@@ -3136,6 +3124,22 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
           <Btn sm onClick={geocodeCity}>{geoLoading?'…':'Search'}</Btn>
         </div>
         {weatherDisplay&&<div style={{padding:'0 16px 14px',fontSize:13,color:A.green}}>Current: {weatherDisplay}</div>}
+      </FormGroup>
+
+      <FormGroup label="WiFi Network" footer="Displays a scan-to-join QR code on the wall display.">
+        <div style={{padding:'14px 16px',display:'flex',flexDirection:'column',gap:8}}>
+          <Inp value={wifiSsid} onChange={e=>setWifiSsid(e.target.value)} placeholder="Network name (SSID)"/>
+          <Inp value={wifiPassword} onChange={e=>setWifiPassword(e.target.value)} type="password" placeholder="Password"/>
+          <Btn sm onClick={async()=>{
+            if(!wifiSsid.trim()){toastAdd('Network name required','red');return;}
+            const wifiBody={wifi_ssid:wifiSsid.trim()};
+            if(wifiPassword) wifiBody.wifi_password=wifiPassword;
+            await fetch('/api/settings/wifi',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify(wifiBody)});
+            setWifiPassword('');
+            api.get('/api/wifi/qr').then(d=>{if(d&&d.dataUrl) setWifiQrData(d);}).catch(()=>{});
+            toastAdd('WiFi saved');
+          }}>Save WiFi</Btn>
+        </div>
       </FormGroup>
 
       <FormGroup label="Display Photos" footer="Photos rotate every 12 seconds in the top-right panel of the wall display.">
@@ -3508,13 +3512,6 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
             </select>
           </div>
           <Btn onClick={async()=>{if(!unifiUrl.trim()||!unifiUser.trim()||!unifiPass.trim()){toastAdd('URL, username, and password required','red');return;}await fetch('/api/settings/integrations',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify({unifi_url:unifiUrl.trim(),unifi_user:unifiUser.trim(),unifi_pass:unifiPass.trim(),unifi_site:unifiSite.trim()||'default',unifi_pull_interval:unifiInterval})});setHasUnifi(true);setUnifiPass('');toastAdd('Saved');}}>Save UniFi</Btn>
-        </div>
-        <div style={{padding:'14px 16px',borderTop:`1px solid ${A.sep}`}}>
-          <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:6}}>Span Panel{hasSpan&&<span style={{marginLeft:8,fontSize:11,color:A.green,fontWeight:500}}>Connected</span>}</div>
-          <div style={{fontSize:12,color:A.label5,marginBottom:10}}>Circuit-level power monitoring. Local HTTP API — works on MAIN 32 panels (firmware ≥ r202603). MAIN 40 (Gen3) uses gRPC and is not currently supported. To get a token: press the door sensor button 3 times, then POST to http://&#123;panel-ip&#125;/api/v1/auth/register — the panel returns an accessToken.</div>
-          <input placeholder="Panel IP (e.g. 192.168.1.50)" value={spanIp} onChange={e=>setSpanIp(e.target.value)} style={{width:'100%',background:A.inputBg,border:`1px solid ${A.sep}`,borderRadius:A.r,padding:'8px 10px',fontSize:13,color:A.label1,marginBottom:8,boxSizing:'border-box'}}/>
-          <input placeholder="Access token" value={spanToken} onChange={e=>setSpanToken(e.target.value)} style={{width:'100%',background:A.inputBg,border:`1px solid ${A.sep}`,borderRadius:A.r,padding:'8px 10px',fontSize:13,color:A.label1,marginBottom:10,boxSizing:'border-box'}}/>
-          <Btn onClick={async()=>{if(!spanIp.trim()||!spanToken.trim()){toastAdd('IP and token required','red');return;}await fetch('/api/settings/integrations',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify({span_ip:spanIp.trim(),span_token:spanToken.trim()})});setHasSpan(true);setSpanToken('');toastAdd('Saved');}}>Save Span</Btn>
         </div>
       </FormGroup>
 
@@ -4618,7 +4615,7 @@ function App(){
   );
 
   return mode==='display'
-    ?<DisplayMode onManage={()=>setMode('manage')} events={events} chores={chores} setChores={setChores} meals={meals} grocery={grocery} countdowns={countdowns} clockFormat={clockFormat} weather={weather} nightModeStart={nightModeStart} nightModeEnd={nightModeEnd} goals={goals} notes={notes} polls={polls} rotationMs={rotationMs}/>
+    ?<DisplayMode onManage={()=>setMode('manage')} events={events} chores={chores} setChores={setChores} meals={meals} grocery={grocery} countdowns={countdowns} clockFormat={clockFormat} weather={weather} nightModeStart={nightModeStart} nightModeEnd={nightModeEnd} goals={goals} notes={notes} polls={polls} rotationMs={rotationMs} wifiQrData={wifiQrData}/>
     :<ManageMode onDisplay={()=>setMode('display')} onLogout={handleLogout} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources} inboxCount={inboxCount} setInboxCount={setInboxCount} countdowns={countdowns} setCountdowns={setCountdowns} members={members} setMembers={setMembers} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} weather={weather} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} goals={goals} setGoals={setGoals} notes={notes} setNotes={setNotes} polls={polls} setPolls={setPolls} bookmarks={bookmarks} setBookmarks={setBookmarks} quickActions={quickActions} setQuickActions={setQuickActions} setRotationMs={setRotationMs}/>;
 }
 

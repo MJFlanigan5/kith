@@ -1317,7 +1317,10 @@ app.post('/api/homey/discover', requireAdmin, async (req, res) => {
     return res.status(400).json({ error: `Could not reach Homey: ${e.message}` });
   }
 
-  const devices = Array.isArray(devicesData) ? devicesData : Object.values(devicesData || {});
+  // F6 fix: when response is a map keyed by device ID, inject the key as `id` if missing
+  const devices = Array.isArray(devicesData)
+    ? devicesData
+    : Object.entries(devicesData || {}).map(([key, d]) => ({ ...d, id: d.id || key }));
 
   const persons = devices
     .filter(d => Array.isArray(d.capabilities) && d.capabilities.includes('presence'))
@@ -1979,7 +1982,7 @@ app.get('/api/widgets/data', async (req, res) => {
   // ── Who's Home (HA persons + Homey presence, merged) ──────────────────────
   const personEntitiesStr = gs('ha_person_entities');
   const homeyPersonDevicesStr = gs('homey_person_devices');
-  const useHaPersons   = !!(haBaseUrl && haAuthToken && personEntitiesStr);
+  const useHaPersons    = !!(haBaseUrl && haAuthToken && personEntitiesStr);
   const useHomeyPersons = !!(homeyBaseUrl && homeyAuthToken && homeyPersonDevicesStr);
   if (useHaPersons || useHomeyPersons)
     p.push(_wFetch('who_home', 60000, async () => {
@@ -1987,21 +1990,29 @@ app.get('/api/widgets/data', async (req, res) => {
       if (useHaPersons) {
         const ids = personEntitiesStr.split(',').map(s => s.trim()).filter(Boolean);
         const results = await Promise.all(ids.map(id => haGet(id).catch(() => null)));
-        results.forEach((s, i) => persons.push({
-          entity_id: ids[i],
-          name:  s?.attributes?.friendly_name || ids[i].replace('person.', ''),
-          state: s?.state || 'unknown',
-        }));
+        // F2 fix: skip null results (failed fetches) rather than adding ghost entries
+        results.forEach((s, i) => {
+          if (!s) return;
+          persons.push({
+            entity_id: ids[i],
+            name:  s.attributes?.friendly_name || ids[i].replace('person.', ''),
+            state: s.state || 'unknown',
+          });
+        });
       }
       if (useHomeyPersons) {
         const ids = homeyPersonDevicesStr.split(',').map(s => s.trim()).filter(Boolean);
         const devices = await Promise.all(ids.map(id => homeyGetDevice(id).catch(() => null)));
-        devices.forEach((d, i) => persons.push({
-          entity_id: ids[i],
-          name:  d?.name || ids[i],
-          state: d?.capabilitiesObj?.presence?.value === true  ? 'home' :
-                 d?.capabilitiesObj?.presence?.value === false ? 'not_home' : 'unknown',
-        }));
+        // F2 fix: skip null results
+        devices.forEach((d, i) => {
+          if (!d) return;
+          persons.push({
+            entity_id: ids[i],
+            name:  d.name || ids[i],
+            state: d.capabilitiesObj?.presence?.value === true  ? 'home' :
+                   d.capabilitiesObj?.presence?.value === false ? 'not_home' : 'unknown',
+          });
+        });
       }
       if (!persons.length) return null;
       return { persons };
@@ -2015,21 +2026,27 @@ app.get('/api/widgets/data', async (req, res) => {
   if (useHaClimate || useHomeyClimate)
     p.push(_wFetch('thermostat', 60000, async () => {
       if (useHaClimate) {
-        const s = await haGet(climateEntity);
-        if (!s) throw new Error(`HA thermostat: entity ${climateEntity} returned null — check entity ID`);
-        return {
-          name:         s.attributes?.friendly_name || climateEntity.replace('climate.', ''),
-          current_temp: s.attributes?.current_temperature ?? null,
-          target_temp:  s.attributes?.temperature ?? null,
-          mode:         s.state || 'off',
-          action:       s.attributes?.hvac_action || '',
-          humidity:     s.attributes?.current_humidity ?? s.attributes?.humidity ?? null,
-          unit:         gs('temperature_unit') || 'F',
-          unavailable:  s.state === 'unavailable',
-          source:       'ha',
-        };
+        // F1 fix: catch HA failure and fall through to Homey if available
+        try {
+          const s = await haGet(climateEntity);
+          if (!s) throw new Error(`HA thermostat: entity ${climateEntity} returned null — check entity ID`);
+          return {
+            name:         s.attributes?.friendly_name || climateEntity.replace('climate.', ''),
+            current_temp: s.attributes?.current_temperature ?? null,
+            target_temp:  s.attributes?.temperature ?? null,
+            mode:         s.state || 'off',
+            action:       s.attributes?.hvac_action || '',
+            humidity:     s.attributes?.current_humidity ?? s.attributes?.humidity ?? null,
+            unit:         gs('temperature_unit') || 'F',
+            unavailable:  s.state === 'unavailable',
+            source:       'ha',
+          };
+        } catch(e) {
+          if (!useHomeyClimate) throw e; // no fallback — propagate so _wFetch logs the error
+          // else fall through to Homey below
+        }
       }
-      // Homey fallback
+      // Homey path — reached when HA not configured or HA failed with Homey as backup
       const d = await homeyGetDevice(homeyClimateDevice);
       if (!d) throw new Error(`Homey thermostat: device ${homeyClimateDevice} returned null — check device ID`);
       return {

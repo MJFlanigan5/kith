@@ -1191,7 +1191,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                       );
                     })()}
                     {activePanelId==='w_who_home'&&(()=>{
-                      const {persons}=widgetData.who_home;
+                      const {persons=[]}=widgetData.who_home;
                       const stateLabel=s=>s==='home'?'Home':s==='not_home'?'Away':s||'Unknown';
                       const stateColor=s=>s==='home'?A.green:s==='not_home'?D.t3:'#FF9500';
                       return(
@@ -3525,8 +3525,9 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
               setHomeyDiscovering(false);
               if(r.error){toastAdd(r.error,'red');return;}
               setHomeyDiscovered(r);
-              if(r.persons?.length) setHomeyPersonIds(r.persons.map(p=>p.id));
-              if(r.thermostats?.length===1) setHomeyClimateDevice(r.thermostats[0].id);
+              // F3 fix: only auto-select if user hasn't already saved a subset
+              if(r.persons?.length&&homeyPersonIds.length===0) setHomeyPersonIds(r.persons.map(p=>p.id));
+              if(r.thermostats?.length===1&&!homeyClimateDevice) setHomeyClimateDevice(r.thermostats[0].id);
               toastAdd(`Found ${r.persons?.length||0} presence devices, ${r.thermostats?.length||0} thermostats`);
             }} disabled={homeyDiscovering}>{homeyDiscovering?'Discovering…':'Discover Devices'}</Btn>
           </div>

@@ -1975,31 +1975,42 @@ app.get('/api/widgets/data', async (req, res) => {
       let rawUrl = unifiUrl.replace(/\/$/, '');
       if (!/^https?:\/\//i.test(rawUrl)) rawUrl = `https://${rawUrl}`;
       const base = rawUrl;
-      // Try UniFi OS path first (UDM/UDM-Pro/Cloud Key Gen2+), fall back to classic controller
-      let csrfToken = null; let cookieStr = '';
       const loginBody = JSON.stringify({ username: unifiUser, password: unifiPass, remember: false });
-      // UniFi OS (port 443)
-      const osAuth = await uReq(`${base}/api/auth/login`, { method: 'POST', body: loginBody }).catch(() => null);
+
+      // Helper: extract CSRF token from response headers (3.2+ uses x-updated-csrf-token)
+      const pickCsrf = h => h['x-updated-csrf-token'] || h['x-csrf-token'] || null;
+      // Helper: parse stats from /stat/health data array
+      const parseHealth = (d) => {
+        const wan  = (d?.data || []).find(s => s.subsystem === 'wan')  || {};
+        const wlan = (d?.data || []).find(s => s.subsystem === 'wlan') || {};
+        return {
+          clients:  wlan.num_user || 0,
+          // API field names use hyphens: rx_bytes-r, tx_bytes-r
+          rx_mbps:  +(Math.round((wan['rx_bytes-r'] || 0) / 125000 * 10) / 10).toFixed(1),
+          tx_mbps:  +(Math.round((wan['tx_bytes-r'] || 0) / 125000 * 10) / 10).toFixed(1),
+          ap_count: wlan.num_ap || 0,
+          status:   (wan.status === 'ok' || wan.status === 'connected') ? 'up' : (wan.status || 'unknown'),
+          source:   'direct',
+        };
+      };
+
+      // Try UniFi OS path first (UDM/UDM-Pro/Cloud Key Gen2+)
+      // Bootstrap CSRF via GET before login — required on firmware 3.2+ (HA aiounifi pattern)
+      let csrfToken = null; let cookieStr = '';
+      const bootstrap = await uReq(`${base}/`, { method: 'GET' }).catch(() => null);
+      if (bootstrap) csrfToken = pickCsrf(bootstrap.headers);
+
+      const loginHeaders = { 'Content-Type': 'application/json', ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}) };
+      const osAuth = await uReq(`${base}/api/auth/login`, { method: 'POST', body: loginBody, headers: loginHeaders }).catch(() => null);
       if (osAuth?.ok) {
         const setCookies = Array.isArray(osAuth.headers['set-cookie']) ? osAuth.headers['set-cookie'] : (osAuth.headers['set-cookie'] ? [osAuth.headers['set-cookie']] : []);
         cookieStr = setCookies.map(c => c.split(';')[0]).join('; ');
-        // CSRF token: prefer response X-Csrf-Token header, fall back to TOKEN cookie value
-        csrfToken = osAuth.headers['x-csrf-token'] || osAuth.headers['X-Csrf-Token'] || cookieStr.match(/TOKEN=([^;& ]+)/)?.[1] || null;
-        const healthR = await uReq(`${base}/proxy/network/api/s/${unifiSite}/stat/health`, { headers: { Cookie: cookieStr, ...(csrfToken ? { 'X-Csrf-Token': csrfToken } : {}) } }).catch(e => { throw new Error(`UniFi OS health check network error: ${e.message}`); });
-        if (healthR?.ok) {
-          const d = healthR.json();
-          const wan = d.data?.find(s => s.subsystem === 'wan') || {};
-          const wlan = d.data?.find(s => s.subsystem === 'wlan') || {};
-          return {
-            clients: (wlan.num_user || 0) + (wan.num_user || 0),
-            rx_mbps: +(Math.round((wan.rx_bytes_r || 0) / 125000 * 10) / 10).toFixed(1),
-            tx_mbps: +(Math.round((wan.tx_bytes_r || 0) / 125000 * 10) / 10).toFixed(1),
-            ap_count: wlan.num_ap || 0,
-            status: (wan.status === 'ok' || wan.status === 'connected') ? 'up' : (wan.status || 'unknown'),
-            source: 'direct',
-          };
-        }
-        throw new Error(`UniFi OS login ok but health check failed ${healthR?.status} — site "${unifiSite}", path: /proxy/network/api/s/${unifiSite}/stat/health`);
+        csrfToken = pickCsrf(osAuth.headers) || csrfToken;
+        const healthR = await uReq(`${base}/proxy/network/api/s/${unifiSite}/stat/health`, {
+          headers: { Cookie: cookieStr, ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}) },
+        }).catch(e => { throw new Error(`UniFi OS health check network error: ${e.message}`); });
+        if (healthR?.ok) return parseHealth(healthR.json());
+        throw new Error(`UniFi OS login ok but health check failed ${healthR?.status} — site "${unifiSite}"`);
       }
       // Classic controller fallback (port 8443 by default)
       const authR = await uReq(`${base}/api/login`, { method: 'POST', body: loginBody }).catch(e => { throw new Error(`UniFi classic login network error: ${e.message}`); });
@@ -2008,18 +2019,7 @@ app.get('/api/widgets/data', async (req, res) => {
       cookieStr = rawCookies.map(c => c.split(';')[0]).join('; ');
       const healthR = await uReq(`${base}/api/s/${unifiSite}/stat/health`, { headers: { Cookie: cookieStr } }).catch(e => { throw new Error(`UniFi health check network error: ${e.message}`); });
       if (!healthR?.ok) throw new Error(`UniFi health endpoint ${healthR?.status} for site "${unifiSite}"`);
-
-      const d = healthR.json();
-      const wan = d.data?.find(s => s.subsystem === 'wan') || {};
-      const wlan = d.data?.find(s => s.subsystem === 'wlan') || {};
-      return {
-        clients: (wlan.num_user || 0) + (wan.num_user || 0),
-        rx_mbps: +(Math.round((wan.rx_bytes_r || 0) / 125000 * 10) / 10).toFixed(1),
-        tx_mbps: +(Math.round((wan.tx_bytes_r || 0) / 125000 * 10) / 10).toFixed(1),
-        ap_count: wlan.num_ap || 0,
-        status: (wan.status === 'ok' || wan.status === 'connected') ? 'up' : (wan.status || 'unknown'),
-        source: 'direct',
-      };
+      return parseHealth(healthR.json());
     }).then(d => { if (d) result.unifi = d; }));
 
   // ── Who's Home (HA persons + Homey presence, merged) ──────────────────────

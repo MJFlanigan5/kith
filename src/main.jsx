@@ -1104,22 +1104,29 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                           </div>
                         </>
                       );
-                      const plexItem=items[plexIdx%Math.max(1,items.length)];
+                      const i0=plexIdx%Math.max(1,items.length);
+                      const pair=items.length>1?[items[i0],items[(i0+1)%items.length]]:[items[i0]].filter(Boolean);
                       return(
                         <>
-                          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
+                          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
                             <WLabel>Recently Added</WLabel>
-                            {items.length>1&&<div style={{fontSize:10,color:D.t4}}>{(plexIdx%items.length)+1}/{items.length}</div>}
+                            {items.length>1&&<div style={{fontSize:10,color:D.t4}}>{i0+1}/{items.length}</div>}
                           </div>
-                          {!plexItem?(
+                          {pair.length===0?(
                             <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center'}}>
                               <div style={{fontSize:12,color:D.t4}}>Nothing recent</div>
                             </div>
                           ):(
-                            <div style={{flex:1,display:'flex',flexDirection:'column',minHeight:0}}>
-                              {plexItem.thumb&&<img src={plexItem.thumb} alt="" style={{width:'100%',flex:1,minHeight:0,objectFit:'cover',borderRadius:9,background:'rgba(255,255,255,0.06)',display:'block'}} onError={e=>e.target.style.display='none'}/>}
-                              <div style={{fontSize:14,fontWeight:700,color:D.t1,marginTop:8,lineHeight:1.3}}>{plexItem.title}</div>
-                              {plexItem.year&&<div style={{fontSize:11,color:D.t4,marginTop:2}}>{plexItem.year}</div>}
+                            <div style={{flex:1,display:'flex',gap:8,minHeight:0,overflow:'hidden'}}>
+                              {pair.map((item,i)=>(
+                                <div key={i} style={{flex:1,display:'flex',flexDirection:'column',minWidth:0,minHeight:0}}>
+                                  <div style={{flex:1,minHeight:0,borderRadius:8,overflow:'hidden',background:'rgba(255,255,255,0.06)'}}>
+                                    {item.thumb&&<img src={item.thumb} alt="" style={{width:'100%',height:'100%',objectFit:'contain',display:'block'}} onError={e=>e.target.style.display='none'}/>}
+                                  </div>
+                                  <div style={{fontSize:11,fontWeight:600,color:D.t1,marginTop:5,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{item.title}</div>
+                                  {item.year&&<div style={{fontSize:10,color:D.t4,marginTop:1}}>{item.year}</div>}
+                                </div>
+                              ))}
                             </div>
                           )}
                         </>

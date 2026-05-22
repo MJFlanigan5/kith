@@ -490,6 +490,13 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
   },[news.length]);
   const [centerIdx,setCenterIdx]=useState(0);
   useEffect(()=>{const id=setInterval(()=>setCenterIdx(i=>i+1),rotationMs);return()=>clearInterval(id);},[rotationMs]);
+  const [plexIdx,setPlexIdx]=useState(0);
+  useEffect(()=>{
+    const items=widgetData?.plex?.items||[];
+    if(items.length<=1){setPlexIdx(0);return;}
+    const id=setInterval(()=>setPlexIdx(i=>(i+1)%items.length),6000);
+    return()=>clearInterval(id);
+  },[widgetData?.plex?.items?.length]);
   const [showControls,setShowControls]=useState(false);
   const hideTimer=useRef(null);
   useEffect(()=>{
@@ -1093,22 +1100,22 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                           </div>
                         </>
                       );
+                      const plexItem=items[plexIdx%Math.max(1,items.length)];
                       return(
                         <>
-                          <WLabel>Recently Added</WLabel>
-                          {items.length===0?(
+                          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
+                            <WLabel>Recently Added</WLabel>
+                            {items.length>1&&<div style={{fontSize:10,color:D.t4}}>{(plexIdx%items.length)+1}/{items.length}</div>}
+                          </div>
+                          {!plexItem?(
                             <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center'}}>
-                              <div style={{fontSize:12,color:D.t4}}>Nothing playing</div>
+                              <div style={{fontSize:12,color:D.t4}}>Nothing recent</div>
                             </div>
                           ):(
-                            <div style={{flex:1,display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,alignContent:'stretch'}}>
-                              {items.map((item,i)=>(
-                                <div key={i} style={{display:'flex',flexDirection:'column',minHeight:0}}>
-                                  {item.thumb&&<img src={item.thumb} alt="" style={{width:'100%',flex:1,minHeight:0,objectFit:'cover',borderRadius:7,background:'rgba(255,255,255,0.06)',display:'block'}} onError={e=>e.target.style.display='none'}/>}
-                                  <div style={{fontSize:11,fontWeight:600,color:D.t1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginTop:5}}>{item.title}</div>
-                                  {item.year&&<div style={{fontSize:10,color:D.t4}}>{item.year}</div>}
-                                </div>
-                              ))}
+                            <div style={{flex:1,display:'flex',flexDirection:'column',minHeight:0}}>
+                              {plexItem.thumb&&<img src={plexItem.thumb} alt="" style={{width:'100%',flex:1,minHeight:0,objectFit:'cover',borderRadius:9,background:'rgba(255,255,255,0.06)',display:'block'}} onError={e=>e.target.style.display='none'}/>}
+                              <div style={{fontSize:14,fontWeight:700,color:D.t1,marginTop:8,lineHeight:1.3}}>{plexItem.title}</div>
+                              {plexItem.year&&<div style={{fontSize:11,color:D.t4,marginTop:2}}>{plexItem.year}</div>}
                             </div>
                           )}
                         </>
@@ -3347,7 +3354,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
                   <div style={{fontSize:11,color:A.label4,marginBottom:2}}>{label}</div>
                   <select value={haUnifiMap[k]||''} onChange={e=>setHaUnifiMap(m=>({...m,[k]:e.target.value}))} style={{width:'100%',background:A.inputBg,border:`1px solid ${A.sep}`,borderRadius:A.rSm,padding:'5px 8px',fontSize:12,color:A.label1}}>
                     <option value="">— not mapped —</option>
-                    {(haDiscovered.unifi?.all||[]).map(s=><option key={s.entity_id} value={s.entity_id}>{s.friendly_name} ({s.state} {s.unit})</option>)}
+                    {(haDiscovered.allSensors||[]).map(s=><option key={s.entity_id} value={s.entity_id}>{s.friendly_name} ({s.state}{s.unit?' '+s.unit:''})</option>)}
                   </select>
                 </div>
               ))}

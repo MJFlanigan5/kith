@@ -1218,22 +1218,27 @@ app.post('/api/ha/discover', requireAdmin, async (req, res) => {
     alert:    moenFind(['alert', 'leak', 'detector']),
   };
 
-  // Score and filter states for UniFi
-  const unifiAll = states
-    .filter(s => s.entity_id.startsWith('sensor.') &&
-      (/unifi/i.test(s.entity_id) ||
-       (s.entity_id.endsWith('_clients') && (s.attributes?.unit_of_measurement === 'clients' || s.attributes?.unit_of_measurement === '')) ||
-       (['Mbit/s','Mbps'].includes(s.attributes?.unit_of_measurement) && /rx|tx|down|up/i.test(s.entity_id))
-      )
-    )
+  // All sensors for manual UniFi entity mapping
+  const allSensors = states
+    .filter(s => s.entity_id.startsWith('sensor.') || s.entity_id.startsWith('binary_sensor.'))
     .map(s => ({
       entity_id: s.entity_id,
       state: s.state,
       unit: s.attributes?.unit_of_measurement || '',
       friendly_name: s.attributes?.friendly_name || s.entity_id,
-    }));
+    }))
+    .sort((a, b) => a.entity_id.localeCompare(b.entity_id));
 
-  const unifiFind = (patterns) => unifiAll.find(s =>
+  // Auto-detect likely UniFi entities for pre-selection
+  const unifiLikely = allSensors.filter(s =>
+    /unifi/i.test(s.entity_id) ||
+    /unifi/i.test(s.friendly_name) ||
+    s.entity_id.endsWith('_clients') ||
+    (s.entity_id.endsWith('_rx') && ['Mbit/s','Mbps','kbps','KB/s','MB/s'].includes(s.unit)) ||
+    (s.entity_id.endsWith('_tx') && ['Mbit/s','Mbps','kbps','KB/s','MB/s'].includes(s.unit))
+  );
+
+  const unifiFind = (patterns) => unifiLikely.find(s =>
     patterns.some(p => s.entity_id.toLowerCase().includes(p))
   )?.entity_id || '';
 
@@ -1243,7 +1248,7 @@ app.post('/api/ha/discover', requireAdmin, async (req, res) => {
     tx:      unifiFind(['_tx', '_upload', '_up']),
   };
 
-  res.json({ ok: true, moen: { all: moenAll, map: moenMap }, unifi: { all: unifiAll, map: unifiMap } });
+  res.json({ ok: true, moen: { all: moenAll, map: moenMap }, unifi: { all: unifiLikely, map: unifiMap }, allSensors });
 });
 
 app.get('/api/ha/pull', async (req, res) => {
@@ -1767,28 +1772,31 @@ app.get('/api/widgets/data', async (req, res) => {
 
   // ── UniFi Network ──────────────────────────────────────────────────────────
   const haClientsEntity = gs('ha_unifi_clients');
+  const haRxEntity = gs('ha_unifi_rx');
+  const haTxEntity = gs('ha_unifi_tx');
   const unifiUrl = gs('unifi_url');
   const unifiUser = gs('unifi_user');
   const unifiPass = gs('unifi_pass');
   const unifiSite = gs('unifi_site') || 'default';
   const unifiIntervalMs = Math.max(30, parseInt(gs('unifi_pull_interval') || '60')) * 1000;
-  const useUnifiHa = !!(haBaseUrl && haAuthToken && haClientsEntity);
+  const useUnifiHa = !!(haBaseUrl && haAuthToken && (haClientsEntity || haRxEntity || haTxEntity));
   if (useUnifiHa || (unifiUrl && unifiUser && unifiPass))
     p.push(_wFetch(`unifi:${useUnifiHa ? 'ha' : unifiUrl}`, unifiIntervalMs, async () => {
       if (useUnifiHa) {
         const [clients, rx, tx] = await Promise.all([
           haGet(haClientsEntity),
-          haGet(gs('ha_unifi_rx')),
-          haGet(gs('ha_unifi_tx')),
+          haGet(haRxEntity),
+          haGet(haTxEntity),
         ]);
-        if (!clients) throw new Error('HA UniFi: clients entity returned null — check entity ID');
-        if (clients.state === 'unavailable') throw new Error(`HA UniFi: entity ${haClientsEntity} is unavailable`);
+        const anchor = clients || rx || tx;
+        if (!anchor) throw new Error('HA UniFi: no entities returned — check entity IDs and HA connection');
+        if (anchor.state === 'unavailable') throw new Error('HA UniFi: entity is unavailable — is the UniFi controller reachable from HA?');
         return {
-          clients:  Math.round(haNum(clients)),
+          clients:  clients ? Math.round(haNum(clients)) : 0,
           rx_mbps:  +haNum(rx).toFixed(1),
           tx_mbps:  +haNum(tx).toFixed(1),
           ap_count: 0,
-          status:   clients.state !== 'unavailable' ? 'up' : 'unknown',
+          status:   anchor.state !== 'unavailable' ? 'up' : 'unknown',
           source:   'ha',
         };
       }

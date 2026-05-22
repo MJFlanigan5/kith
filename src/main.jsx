@@ -2769,14 +2769,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [lastfmApiKey,setLastfmApiKey]=useState('');
   const [lastfmUser,setLastfmUser]=useState('');
   const [hasMoen,setHasMoen]=useState(false);
-  const [moenUser,setMoenUser]=useState('');
-  const [moenPass,setMoenPass]=useState('');
   const [hasUnifi,setHasUnifi]=useState(false);
-  const [unifiUrl,setUnifiUrl]=useState('');
-  const [unifiUser,setUnifiUser]=useState('');
-  const [unifiPass,setUnifiPass]=useState('');
-  const [unifiSite,setUnifiSite]=useState('default');
-  const [unifiInterval,setUnifiInterval]=useState('60');
   const [wifiSsid,setWifiSsid]=useState('');
   const [wifiPassword,setWifiPassword]=useState('');
   const [wUptimeUrls,setWUptimeUrls]=useState('');
@@ -2843,7 +2836,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
     }).catch(()=>{});
     api.get('/api/ha/secret').then(d=>{if(d.secret) setHaSecret(d.secret);}).catch(()=>{});
     fetch('/api/ha/smart-home-status',{headers:{..._authHdr()}}).then(r=>r.json()).then(d=>{if(d.ha){if(d.ha.url)setHaUrl(d.ha.url);if(d.ha.hasToken)setHaHasToken(true);}if(d.homey){if(d.homey.url)setHomeyUrl(d.homey.url);if(d.homey.hasToken)setHomeyHasToken(true);}}).catch(()=>{});
-    api.get('/api/settings/integrations').then(d=>{setHasAnthropicKey(!!d.has_anthropic);setHasBeehiivKey(!!d.has_beehiiv);setHasYoutubeKey(!!d.has_youtube);setHasEtsyKey(!!d.has_etsy);setHasTeslemetryKey(!!d.has_teslemetry);setHasAviationstackKey(!!d.has_aviationstack);setHasNextdnsKey(!!d.has_nextdns);setHasBeszel(!!d.has_beszel);if(d.beszel_url)setBeszelUrl(d.beszel_url);setHasPlexKey(!!d.has_plex);if(d.plex_url)setPlexUrl(d.plex_url);setHasLastfm(!!d.has_lastfm);if(d.lastfm_user)setLastfmUser(d.lastfm_user);setHasMoen(!!d.has_moen);setHasUnifi(!!d.has_unifi);if(d.unifi_url)setUnifiUrl(d.unifi_url);if(d.unifi_site)setUnifiSite(d.unifi_site);if(d.unifi_pull_interval)setUnifiInterval(d.unifi_pull_interval);
+    api.get('/api/settings/integrations').then(d=>{setHasAnthropicKey(!!d.has_anthropic);setHasBeehiivKey(!!d.has_beehiiv);setHasYoutubeKey(!!d.has_youtube);setHasEtsyKey(!!d.has_etsy);setHasTeslemetryKey(!!d.has_teslemetry);setHasAviationstackKey(!!d.has_aviationstack);setHasNextdnsKey(!!d.has_nextdns);setHasBeszel(!!d.has_beszel);if(d.beszel_url)setBeszelUrl(d.beszel_url);setHasPlexKey(!!d.has_plex);if(d.plex_url)setPlexUrl(d.plex_url);setHasLastfm(!!d.has_lastfm);if(d.lastfm_user)setLastfmUser(d.lastfm_user);setHasMoen(!!d.has_moen);setHasUnifi(!!d.has_unifi);
       // HA entity maps
       const mm={flow:d.ha_moen_flow||'',pressure:d.ha_moen_pressure||'',daily:d.ha_moen_daily||'',mode:d.ha_moen_mode||'',alert:d.ha_moen_alert||''};
       const um={clients:d.ha_unifi_clients||'',rx:d.ha_unifi_rx||'',tx:d.ha_unifi_tx||''};
@@ -3555,29 +3548,12 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
           <Btn onClick={async()=>{const payload={lastfm_user:lastfmUser};if(lastfmApiKey)payload.lastfm_api_key=lastfmApiKey;await fetch('/api/settings/integrations',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify(payload)});setHasLastfm(!!(lastfmUser));setLastfmApiKey('');toastAdd('Saved');}}>Save Last.fm</Btn>
         </div>
         <div style={{padding:'14px 16px',borderTop:`1px solid ${A.sep}`}}>
-          <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:6}}>Moen Flo{hasMoen&&<span style={{marginLeft:8,fontSize:11,color:A.green,fontWeight:500}}>Connected</span>}{haMoenSource==='ha'&&<span style={{marginLeft:8,fontSize:11,color:'#3B82F6',fontWeight:500}}>via Home Assistant</span>}</div>
-          <div style={{fontSize:12,color:A.label5,marginBottom:10}}>{haMoenSource==='ha'?'Data pulled from Home Assistant entities. Configure entity mapping in the Smart Home section above.':'Water monitoring — shows daily usage, flow rate, pressure, and leak alerts. Uses your Moen account credentials.'}</div>
-          <input placeholder="Moen email" value={moenUser} onChange={e=>setMoenUser(e.target.value)} style={{width:'100%',background:A.inputBg,border:`1px solid ${A.sep}`,borderRadius:A.r,padding:'8px 10px',fontSize:13,color:A.label1,marginBottom:8,boxSizing:'border-box'}}/>
-          <input placeholder="Password" type="password" value={moenPass} onChange={e=>setMoenPass(e.target.value)} style={{width:'100%',background:A.inputBg,border:`1px solid ${A.sep}`,borderRadius:A.r,padding:'8px 10px',fontSize:13,color:A.label1,marginBottom:10,boxSizing:'border-box'}}/>
-          <Btn onClick={async()=>{if(!moenUser.trim()||!moenPass.trim()){toastAdd('Email and password required','red');return;}await fetch('/api/settings/integrations',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify({moen_user:moenUser.trim(),moen_pass:moenPass.trim()})});setHasMoen(true);setMoenPass('');toastAdd('Saved');}}>Save Moen Flo</Btn>
+          <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:6}}>Moen Flo{haMoenSource==='ha'?<span style={{marginLeft:8,fontSize:11,color:'#3B82F6',fontWeight:500}}>via Home Assistant</span>:(hasMoen&&<span style={{marginLeft:8,fontSize:11,color:A.green,fontWeight:500}}>Connected</span>)}</div>
+          <div style={{fontSize:12,color:A.label5}}>Water monitoring — daily usage, flow rate, pressure, and leak alerts. Configure in Smart Home above.</div>
         </div>
         <div style={{padding:'14px 16px',borderTop:`1px solid ${A.sep}`}}>
-          <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:6}}>UniFi Network{hasUnifi&&<span style={{marginLeft:8,fontSize:11,color:A.green,fontWeight:500}}>Connected</span>}{haUnifiSource==='ha'&&<span style={{marginLeft:8,fontSize:11,color:'#3B82F6',fontWeight:500}}>via Home Assistant</span>}</div>
-          <div style={{fontSize:12,color:A.label5,marginBottom:10}}>{haUnifiSource==='ha'?'Data pulled from Home Assistant entities. Configure entity mapping in the Smart Home section above.':'UDM/UDM-Pro/Cloud Key: https://192.168.1.1 (port 443) · Network Application software: https://192.168.1.1:8443 · Must use a local UniFi account (cloud/SSO logins do not work).'}</div>
-          <input placeholder="Controller URL (e.g. https://192.168.1.1:8443)" value={unifiUrl} onChange={e=>setUnifiUrl(e.target.value)} style={{width:'100%',background:A.inputBg,border:`1px solid ${A.sep}`,borderRadius:A.r,padding:'8px 10px',fontSize:13,color:A.label1,marginBottom:8,boxSizing:'border-box'}}/>
-          <input placeholder="Username" value={unifiUser} onChange={e=>setUnifiUser(e.target.value)} style={{width:'100%',background:A.inputBg,border:`1px solid ${A.sep}`,borderRadius:A.r,padding:'8px 10px',fontSize:13,color:A.label1,marginBottom:8,boxSizing:'border-box'}}/>
-          <input placeholder="Password" type="password" value={unifiPass} onChange={e=>setUnifiPass(e.target.value)} style={{width:'100%',background:A.inputBg,border:`1px solid ${A.sep}`,borderRadius:A.r,padding:'8px 10px',fontSize:13,color:A.label1,marginBottom:8,boxSizing:'border-box'}}/>
-          <input placeholder="Site name (default)" value={unifiSite} onChange={e=>setUnifiSite(e.target.value)} style={{width:'100%',background:A.inputBg,border:`1px solid ${A.sep}`,borderRadius:A.r,padding:'8px 10px',fontSize:13,color:A.label1,marginBottom:8,boxSizing:'border-box'}}/>
-          <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
-            <span style={{fontSize:13,color:A.label2,flexShrink:0}}>Pull every</span>
-            <select value={unifiInterval} onChange={e=>setUnifiInterval(e.target.value)} style={{flex:1,background:A.inputBg,border:`1px solid ${A.sep}`,borderRadius:A.r,padding:'8px 10px',fontSize:13,color:A.label1}}>
-              <option value="30">30 seconds</option>
-              <option value="60">60 seconds</option>
-              <option value="120">2 minutes</option>
-              <option value="300">5 minutes</option>
-            </select>
-          </div>
-          <Btn onClick={async()=>{if(!unifiUrl.trim()||!unifiUser.trim()||!unifiPass.trim()){toastAdd('URL, username, and password required','red');return;}await fetch('/api/settings/integrations',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify({unifi_url:unifiUrl.trim(),unifi_user:unifiUser.trim(),unifi_pass:unifiPass.trim(),unifi_site:unifiSite.trim()||'default',unifi_pull_interval:unifiInterval})});setHasUnifi(true);setUnifiPass('');toastAdd('Saved');}}>Save UniFi</Btn>
+          <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:6}}>UniFi Network{haUnifiSource==='ha'?<span style={{marginLeft:8,fontSize:11,color:'#3B82F6',fontWeight:500}}>via Home Assistant</span>:(hasUnifi&&<span style={{marginLeft:8,fontSize:11,color:A.green,fontWeight:500}}>Connected</span>)}</div>
+          <div style={{fontSize:12,color:A.label5}}>Network stats — clients, throughput, AP count. Configure in Smart Home above.</div>
         </div>
       </FormGroup>
 

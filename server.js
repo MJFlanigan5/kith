@@ -1577,11 +1577,12 @@ app.get('/api/widgets/data', async (req, res) => {
       });
       if (oauthR.ok) {
         const d = await oauthR.json();
-        if (!d.access_token) return null;
+        if (!d.access_token) throw new Error(`Moen OAuth2 ok but no access_token in response`);
         authHeader = `Bearer ${d.access_token}`;
         userId = d.user_id;
         apiBase = 'https://api-gw.meetflo.com';
       } else {
+        const oauthBody = await oauthR.text().catch(() => '');
         // Legacy endpoint — bare token, no Bearer prefix
         const legR = await fetch('https://api.meetflo.com/api/v1/users/auth', {
           method: 'POST',
@@ -1589,10 +1590,13 @@ app.get('/api/widgets/data', async (req, res) => {
           body: JSON.stringify({ username: moenUser, password: moenPass }),
           signal: AbortSignal.timeout(8000),
         });
-        if (!legR.ok) return null;
+        if (!legR.ok) {
+          const legBody = await legR.text().catch(() => '');
+          throw new Error(`Moen auth failed — OAuth2 ${oauthR.status}: ${oauthBody.slice(0,120)} | legacy ${legR.status}: ${legBody.slice(0,120)}`);
+        }
         const d = await legR.json();
-        if (!d.token) return null;
-        authHeader = d.token; // legacy: bare token, no Bearer
+        if (!d.token) throw new Error(`Moen legacy auth ok but no token field in response`);
+        authHeader = d.token;
         apiBase = 'https://api.meetflo.com';
       }
 
@@ -1602,25 +1606,27 @@ app.get('/api/widgets/data', async (req, res) => {
         const userR = await fetch(`${apiBase}/api/v2/users/${userId}?expand=locations`, {
           headers: { Authorization: authHeader }, signal: AbortSignal.timeout(8000),
         });
-        if (!userR.ok) return null;
+        if (!userR.ok) throw new Error(`Moen users endpoint ${userR.status}`);
         const userData = await userR.json();
         const loc = userData.locations?.[0];
-        if (!loc) return null;
+        if (!loc) throw new Error(`Moen: no locations on user ${userId}`);
         const locR = await fetch(`${apiBase}/api/v2/locations/${loc.id}?expand=devices`, {
           headers: { Authorization: authHeader }, signal: AbortSignal.timeout(8000),
         });
-        if (!locR.ok) return null;
+        if (!locR.ok) throw new Error(`Moen location endpoint ${locR.status}`);
         device = (await locR.json()).devices?.[0];
       } else {
         // Legacy API: locations returns a direct array
         const locR = await fetch(`${apiBase}/api/v2/locations?expand=devices`, {
           headers: { Authorization: authHeader }, signal: AbortSignal.timeout(8000),
         });
-        if (!locR.ok) return null;
+        if (!locR.ok) throw new Error(`Moen legacy locations ${locR.status}`);
         const locs = await locR.json();
-        device = (Array.isArray(locs) ? locs : [])[0]?.devices?.[0];
+        const arr = Array.isArray(locs) ? locs : (locs?.items || []);
+        device = arr[0]?.devices?.[0];
+        if (!device) throw new Error(`Moen legacy: no device found. Response keys: ${Object.keys(locs||{}).join(',')}`);
       }
-      if (!device) return null;
+      if (!device) throw new Error('Moen: device is null after location fetch');
       return {
         system_mode: device.systemMode?.target || device.systemMode?.lastKnown || 'home',
         has_alert:   (device.notifications?.criticalCount || 0) > 0,
@@ -1676,7 +1682,7 @@ app.get('/api/widgets/data', async (req, res) => {
         cookieStr = setCookies.map(c => c.split(';')[0]).join('; ');
         // CSRF token: prefer response X-Csrf-Token header, fall back to TOKEN cookie value
         csrfToken = osAuth.headers['x-csrf-token'] || osAuth.headers['X-Csrf-Token'] || cookieStr.match(/TOKEN=([^;& ]+)/)?.[1] || null;
-        const healthR = await uReq(`${base}/proxy/network/api/s/${unifiSite}/stat/health`, { headers: { Cookie: cookieStr, ...(csrfToken ? { 'X-Csrf-Token': csrfToken } : {}) } }).catch(() => null);
+        const healthR = await uReq(`${base}/proxy/network/api/s/${unifiSite}/stat/health`, { headers: { Cookie: cookieStr, ...(csrfToken ? { 'X-Csrf-Token': csrfToken } : {}) } }).catch(e => { throw new Error(`UniFi OS health check network error: ${e.message}`); });
         if (healthR?.ok) {
           const d = healthR.json();
           const wan = d.data?.find(s => s.subsystem === 'wan') || {};
@@ -1689,14 +1695,16 @@ app.get('/api/widgets/data', async (req, res) => {
             status: (wan.status === 'ok' || wan.status === 'connected') ? 'up' : (wan.status || 'unknown'),
           };
         }
+        throw new Error(`UniFi OS login ok but health check failed ${healthR?.status} — site "${unifiSite}", path: /proxy/network/api/s/${unifiSite}/stat/health`);
       }
       // Classic controller fallback (port 8443 by default)
-      const authR = await uReq(`${base}/api/login`, { method: 'POST', body: loginBody }).catch(() => null);
-      if (!authR?.ok) return null;
+      const authR = await uReq(`${base}/api/login`, { method: 'POST', body: loginBody }).catch(e => { throw new Error(`UniFi classic login network error: ${e.message}`); });
+      if (!authR?.ok) throw new Error(`UniFi login failed — OS path: ${osAuth?.status ?? 'network err'}, classic: ${authR?.status ?? 'network err'}`);
       const rawCookies = Array.isArray(authR.headers['set-cookie']) ? authR.headers['set-cookie'] : [authR.headers['set-cookie'] || ''];
       cookieStr = rawCookies.map(c => c.split(';')[0]).join('; ');
-      const healthR = await uReq(`${base}/api/s/${unifiSite}/stat/health`, { headers: { Cookie: cookieStr } }).catch(() => null);
-      if (!healthR?.ok) return null;
+      const healthR = await uReq(`${base}/api/s/${unifiSite}/stat/health`, { headers: { Cookie: cookieStr } }).catch(e => { throw new Error(`UniFi health check network error: ${e.message}`); });
+      if (!healthR?.ok) throw new Error(`UniFi health endpoint ${healthR?.status} for site "${unifiSite}"`);
+
       const d = healthR.json();
       const wan = d.data?.find(s => s.subsystem === 'wan') || {};
       const wlan = d.data?.find(s => s.subsystem === 'wlan') || {};

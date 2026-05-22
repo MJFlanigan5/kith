@@ -250,6 +250,8 @@ const defaults = {
   ha_unifi_tx: '',
   ha_person_entities: '',
   ha_climate_entity: '',
+  homey_person_devices: '',
+  homey_climate_device: '',
 };
 const insSetting = db.prepare('INSERT OR IGNORE INTO settings (key,value) VALUES (?,?)');
 for (const [k, v] of Object.entries(defaults)) insSetting.run(k, v);

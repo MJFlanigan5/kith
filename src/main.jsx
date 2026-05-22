@@ -2823,6 +2823,10 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [haUnifiSource,setHaUnifiSource]=useState('direct');
   const [haPersonIds,setHaPersonIds]=useState([]); // array of person.* entity IDs
   const [haClimateEntity,setHaClimateEntity]=useState('');
+  const [homeyDiscovering,setHomeyDiscovering]=useState(false);
+  const [homeyDiscovered,setHomeyDiscovered]=useState(null); // {persons,thermostats}
+  const [homeyPersonIds,setHomeyPersonIds]=useState([]); // array of Homey device IDs
+  const [homeyClimateDevice,setHomeyClimateDevice]=useState('');
 
   const [homeyUrl,setHomeyUrl]=useState('');
   const [homeyToken,setHomeyToken]=useState('');
@@ -2934,6 +2938,9 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
       const personStr=d.ha_person_entities||'';
       setHaPersonIds(personStr?personStr.split(',').map(s=>s.trim()).filter(Boolean):[]);
       setHaClimateEntity(d.ha_climate_entity||'');
+      const homeyPersonStr=d.homey_person_devices||'';
+      setHomeyPersonIds(homeyPersonStr?homeyPersonStr.split(',').map(s=>s.trim()).filter(Boolean):[]);
+      setHomeyClimateDevice(d.homey_climate_device||'');
     }).catch(()=>{});
     api.get('/api/quick-actions').then(d=>{if(Array.isArray(d)) setQaList(d);}).catch(()=>{});
   },[]);
@@ -3419,11 +3426,11 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
           </div>
           {!haDiscovered&&(haMoenSource==='ha'||haUnifiSource==='ha'||haPersonIds.length>0||haClimateEntity)&&(
             <div style={{background:A.systemBg,borderRadius:A.r,padding:'10px 14px',marginBottom:10,fontSize:12,color:A.label3}}>
-              Entity mapping active — click Discover to review or change.
+              HA entity mapping active — click Discover to review or change.
               {haMoenMap.flow&&<div style={{color:A.label4,marginTop:4,fontFamily:'monospace',fontSize:11}}>Moen flow: {haMoenMap.flow}</div>}
               {haUnifiMap.clients&&<div style={{color:A.label4,fontFamily:'monospace',fontSize:11}}>UniFi clients: {haUnifiMap.clients}</div>}
-              {haPersonIds.length>0&&<div style={{color:A.label4,fontFamily:'monospace',fontSize:11}}>Who's home: {haPersonIds.length} person(s)</div>}
-              {haClimateEntity&&<div style={{color:A.label4,fontFamily:'monospace',fontSize:11}}>Thermostat: {haClimateEntity}</div>}
+              {haPersonIds.length>0&&<div style={{color:A.label4,fontFamily:'monospace',fontSize:11}}>Who's home (HA): {haPersonIds.length} person(s)</div>}
+              {haClimateEntity&&<div style={{color:A.label4,fontFamily:'monospace',fontSize:11}}>Thermostat (HA): {haClimateEntity}</div>}
             </div>
           )}
           {haDiscovered&&(
@@ -3504,6 +3511,55 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
             }} disabled={smTesting}>{smTesting?'Testing…':'Test both'}</Btn>
           </div>
           <div style={{fontSize:12,color:A.label5}}>Generate a Personal Access Token at my.homey.app → Account → Personal Access Tokens.</div>
+          {(homeyPersonIds.length>0||homeyClimateDevice)&&!homeyDiscovered&&(
+            <div style={{background:A.systemBg,borderRadius:A.r,padding:'10px 14px',marginTop:10,fontSize:12,color:A.label3}}>
+              Homey device mapping active — click Discover Devices to review.
+              {homeyPersonIds.length>0&&<div style={{color:A.label4,marginTop:4,fontFamily:'monospace',fontSize:11}}>Who's home (Homey): {homeyPersonIds.length} device(s)</div>}
+              {homeyClimateDevice&&<div style={{color:A.label4,fontFamily:'monospace',fontSize:11}}>Thermostat (Homey): {homeyClimateDevice}</div>}
+            </div>
+          )}
+          <div style={{marginTop:10}}>
+            <Btn sm variant="ghost" onClick={async()=>{
+              setHomeyDiscovering(true);
+              const r=await fetch('/api/homey/discover',{method:'POST',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify({})}).then(x=>x.json()).catch(()=>({error:'Request failed'}));
+              setHomeyDiscovering(false);
+              if(r.error){toastAdd(r.error,'red');return;}
+              setHomeyDiscovered(r);
+              if(r.persons?.length) setHomeyPersonIds(r.persons.map(p=>p.id));
+              if(r.thermostats?.length===1) setHomeyClimateDevice(r.thermostats[0].id);
+              toastAdd(`Found ${r.persons?.length||0} presence devices, ${r.thermostats?.length||0} thermostats`);
+            }} disabled={homeyDiscovering}>{homeyDiscovering?'Discovering…':'Discover Devices'}</Btn>
+          </div>
+          {homeyDiscovered&&(
+            <div style={{background:A.systemBg,borderRadius:A.r,padding:'12px 14px',marginTop:10}}>
+              <div style={{fontSize:12,fontWeight:600,color:A.label2,marginBottom:8}}>Who's Home — Presence Devices</div>
+              {(homeyDiscovered.persons||[]).length===0
+                ?<div style={{fontSize:11,color:A.label5,marginBottom:4}}>No devices with presence capability found</div>
+                :(homeyDiscovered.persons||[]).map(p=>(
+                  <label key={p.id} style={{display:'flex',alignItems:'center',gap:8,marginBottom:6,cursor:'pointer'}}>
+                    <input type="checkbox" checked={homeyPersonIds.includes(p.id)} onChange={e=>setHomeyPersonIds(ids=>e.target.checked?[...ids,p.id]:ids.filter(id=>id!==p.id))}/>
+                    <span style={{fontSize:12,color:A.label2}}>{p.name}</span>
+                    <span style={{fontSize:11,color:A.label4}}>({p.present===true?'home':p.present===false?'away':'unknown'})</span>
+                  </label>
+                ))
+              }
+              <div style={{fontSize:12,fontWeight:600,color:A.label2,marginTop:12,marginBottom:8}}>Thermostat</div>
+              {(homeyDiscovered.thermostats||[]).length===0
+                ?<div style={{fontSize:11,color:A.label5,marginBottom:4}}>No devices with temperature capability found</div>
+                :<div style={{marginBottom:6}}>
+                  <select value={homeyClimateDevice} onChange={e=>setHomeyClimateDevice(e.target.value)} style={{width:'100%',background:A.inputBg,border:`1px solid ${A.sep}`,borderRadius:A.rSm,padding:'5px 8px',fontSize:12,color:A.label1}}>
+                    <option value="">— not mapped —</option>
+                    {(homeyDiscovered.thermostats||[]).map(d=><option key={d.id} value={d.id}>{d.name}{d.current_temp!=null?` (${d.current_temp}°)`:''}</option>)}
+                  </select>
+                </div>
+              }
+              <Btn sm style={{marginTop:8}} onClick={async()=>{
+                const payload={homey_person_devices:homeyPersonIds.join(','),homey_climate_device:homeyClimateDevice};
+                await fetch('/api/settings/integrations',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify(payload)});
+                toastAdd('Homey device mapping saved — widgets will refresh');
+              }}>Save Homey Mapping</Btn>
+            </div>
+          )}
         </div>
         <div style={{padding:'14px 16px'}}>
           <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:10}}>Push events (webhook)</div>

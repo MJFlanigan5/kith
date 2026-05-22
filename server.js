@@ -748,8 +748,10 @@ app.get('/api/settings/integrations', requireAdmin, (req, res) => {
     ha_unifi_clients:  get('ha_unifi_clients'),
     ha_unifi_rx:       get('ha_unifi_rx'),
     ha_unifi_tx:       get('ha_unifi_tx'),
-    ha_person_entities: get('ha_person_entities'),
-    ha_climate_entity:  get('ha_climate_entity'),
+    ha_person_entities:  get('ha_person_entities'),
+    ha_climate_entity:   get('ha_climate_entity'),
+    homey_person_devices: get('homey_person_devices'),
+    homey_climate_device: get('homey_climate_device'),
   });
 });
 app.put('/api/settings/integrations', requireAdmin, (req, res) => {
@@ -785,8 +787,10 @@ app.put('/api/settings/integrations', requireAdmin, (req, res) => {
   if (req.body.ha_unifi_rx      !== undefined) { upd.run('ha_unifi_rx',      String(req.body.ha_unifi_rx));      clearUnifiCache = true; }
   if (req.body.ha_unifi_tx      !== undefined) { upd.run('ha_unifi_tx',      String(req.body.ha_unifi_tx));      clearUnifiCache = true; }
   let clearPersonCache = false, clearClimateCache = false;
-  if (req.body.ha_person_entities !== undefined) { upd.run('ha_person_entities', String(req.body.ha_person_entities)); clearPersonCache = true; }
-  if (req.body.ha_climate_entity  !== undefined) { upd.run('ha_climate_entity',  String(req.body.ha_climate_entity));  clearClimateCache = true; }
+  if (req.body.ha_person_entities   !== undefined) { upd.run('ha_person_entities',   String(req.body.ha_person_entities));   clearPersonCache = true; }
+  if (req.body.ha_climate_entity    !== undefined) { upd.run('ha_climate_entity',    String(req.body.ha_climate_entity));    clearClimateCache = true; }
+  if (req.body.homey_person_devices !== undefined) { upd.run('homey_person_devices', String(req.body.homey_person_devices)); clearPersonCache = true; }
+  if (req.body.homey_climate_device !== undefined) { upd.run('homey_climate_device', String(req.body.homey_climate_device)); clearClimateCache = true; }
   // Clear widget cache so next poll picks up the new entity IDs immediately
   if (clearMoenCache)   { delete _wCache['moen:ha']; delete _wCache['moen:direct']; }
   if (clearUnifiCache)  { for (const k of Object.keys(_wCache)) if (k.startsWith('unifi:')) delete _wCache[k]; }
@@ -1291,6 +1295,50 @@ app.post('/api/ha/discover', requireAdmin, async (req, res) => {
   res.json({ ok: true, moen: { all: moenAll, map: moenMap }, unifi: { all: unifiLikely, map: unifiMap }, allSensors, persons, climates });
 });
 
+// ── Homey device discovery — finds presence and thermostat devices ─────────
+app.post('/api/homey/discover', requireAdmin, async (req, res) => {
+  const get = k => db.prepare('SELECT value FROM settings WHERE key=?').get(k)?.value || '';
+  const homeyUrl = (req.body?.homey_url || get('homey_url')).replace(/\/$/, '');
+  const homeyToken = req.body?.homey_token || get('homey_token');
+  if (!homeyUrl || !homeyToken) return res.status(400).json({ error: 'Homey URL and token required' });
+
+  let devicesData;
+  try {
+    const r = await fetch(`${homeyUrl}/api/manager/devices/device`, {
+      headers: { 'Authorization': `Bearer ${homeyToken}` },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!r.ok) {
+      const body = await r.text().catch(() => '');
+      return res.status(400).json({ error: `Homey returned ${r.status}: ${body.slice(0, 200)}` });
+    }
+    devicesData = await r.json();
+  } catch (e) {
+    return res.status(400).json({ error: `Could not reach Homey: ${e.message}` });
+  }
+
+  const devices = Array.isArray(devicesData) ? devicesData : Object.values(devicesData || {});
+
+  const persons = devices
+    .filter(d => Array.isArray(d.capabilities) && d.capabilities.includes('presence'))
+    .map(d => ({
+      id: d.id,
+      name: d.name || d.id,
+      present: d.capabilitiesObj?.presence?.value ?? null,
+    }));
+
+  const thermostats = devices
+    .filter(d => Array.isArray(d.capabilities) && d.capabilities.includes('measure_temperature'))
+    .map(d => ({
+      id: d.id,
+      name: d.name || d.id,
+      current_temp: d.capabilitiesObj?.measure_temperature?.value ?? null,
+      target_temp:  d.capabilitiesObj?.target_temperature?.value ?? null,
+    }));
+
+  res.json({ ok: true, persons, thermostats });
+});
+
 app.get('/api/ha/pull', async (req, res) => {
   const get = k => db.prepare(`SELECT value FROM settings WHERE key=?`).get(k)?.value;
   const haUrl = get('ha_url'); const haToken = get('ha_token');
@@ -1708,6 +1756,19 @@ app.get('/api/widgets/data', async (req, res) => {
   };
   const haNum = (s) => { const n = parseFloat(s?.state); return isNaN(n) ? 0 : n; };
 
+  // ── Homey fetch helper ──────────────────────────────────────────────────────
+  const homeyBaseUrl = (gs('homey_url') || '').replace(/\/$/, '');
+  const homeyAuthToken = gs('homey_token');
+  const homeyGetDevice = async (deviceId) => {
+    if (!deviceId || !homeyBaseUrl || !homeyAuthToken) return null;
+    const r = await fetch(`${homeyBaseUrl}/api/manager/devices/device/${deviceId}`, {
+      headers: { 'Authorization': `Bearer ${homeyAuthToken}` },
+      signal: AbortSignal.timeout(6000),
+    });
+    if (!r.ok) throw new Error(`Homey ${r.status} for device ${deviceId}`);
+    return r.json();
+  };
+
   const haFlowEntity = gs('ha_moen_flow');
   const moenUser = gs('moen_user');
   const moenPass = gs('moen_pass');
@@ -1915,40 +1976,74 @@ app.get('/api/widgets/data', async (req, res) => {
       };
     }).then(d => { if (d) result.unifi = d; }));
 
-  // ── Who's Home ─────────────────────────────────────────────────────────────
+  // ── Who's Home (HA persons + Homey presence, merged) ──────────────────────
   const personEntitiesStr = gs('ha_person_entities');
-  if (haBaseUrl && haAuthToken && personEntitiesStr) {
-    const personIds = personEntitiesStr.split(',').map(s => s.trim()).filter(Boolean);
-    if (personIds.length)
-      p.push(_wFetch('who_home', 60000, async () => {
-        const results = await Promise.all(personIds.map(id => haGet(id).catch(() => null)));
-        const persons = results.map((s, i) => ({
-          entity_id: personIds[i],
-          name: s?.attributes?.friendly_name || personIds[i].replace('person.', ''),
+  const homeyPersonDevicesStr = gs('homey_person_devices');
+  const useHaPersons   = !!(haBaseUrl && haAuthToken && personEntitiesStr);
+  const useHomeyPersons = !!(homeyBaseUrl && homeyAuthToken && homeyPersonDevicesStr);
+  if (useHaPersons || useHomeyPersons)
+    p.push(_wFetch('who_home', 60000, async () => {
+      const persons = [];
+      if (useHaPersons) {
+        const ids = personEntitiesStr.split(',').map(s => s.trim()).filter(Boolean);
+        const results = await Promise.all(ids.map(id => haGet(id).catch(() => null)));
+        results.forEach((s, i) => persons.push({
+          entity_id: ids[i],
+          name:  s?.attributes?.friendly_name || ids[i].replace('person.', ''),
           state: s?.state || 'unknown',
         }));
-        return { persons };
-      }).then(d => { if (d) result.who_home = d; }));
-  }
+      }
+      if (useHomeyPersons) {
+        const ids = homeyPersonDevicesStr.split(',').map(s => s.trim()).filter(Boolean);
+        const devices = await Promise.all(ids.map(id => homeyGetDevice(id).catch(() => null)));
+        devices.forEach((d, i) => persons.push({
+          entity_id: ids[i],
+          name:  d?.name || ids[i],
+          state: d?.capabilitiesObj?.presence?.value === true  ? 'home' :
+                 d?.capabilitiesObj?.presence?.value === false ? 'not_home' : 'unknown',
+        }));
+      }
+      if (!persons.length) return null;
+      return { persons };
+    }).then(d => { if (d) result.who_home = d; }));
 
-  // ── Thermostat ─────────────────────────────────────────────────────────────
+  // ── Thermostat (HA climate or Homey thermostat) ────────────────────────────
   const climateEntity = gs('ha_climate_entity');
-  if (haBaseUrl && haAuthToken && climateEntity) {
+  const homeyClimateDevice = gs('homey_climate_device');
+  const useHaClimate    = !!(haBaseUrl && haAuthToken && climateEntity);
+  const useHomeyClimate = !!(homeyBaseUrl && homeyAuthToken && homeyClimateDevice);
+  if (useHaClimate || useHomeyClimate)
     p.push(_wFetch('thermostat', 60000, async () => {
-      const s = await haGet(climateEntity);
-      if (!s) throw new Error(`HA thermostat: entity ${climateEntity} returned null — check entity ID`);
+      if (useHaClimate) {
+        const s = await haGet(climateEntity);
+        if (!s) throw new Error(`HA thermostat: entity ${climateEntity} returned null — check entity ID`);
+        return {
+          name:         s.attributes?.friendly_name || climateEntity.replace('climate.', ''),
+          current_temp: s.attributes?.current_temperature ?? null,
+          target_temp:  s.attributes?.temperature ?? null,
+          mode:         s.state || 'off',
+          action:       s.attributes?.hvac_action || '',
+          humidity:     s.attributes?.current_humidity ?? s.attributes?.humidity ?? null,
+          unit:         gs('temperature_unit') || 'F',
+          unavailable:  s.state === 'unavailable',
+          source:       'ha',
+        };
+      }
+      // Homey fallback
+      const d = await homeyGetDevice(homeyClimateDevice);
+      if (!d) throw new Error(`Homey thermostat: device ${homeyClimateDevice} returned null — check device ID`);
       return {
-        name:         s.attributes?.friendly_name || climateEntity.replace('climate.', ''),
-        current_temp: s.attributes?.current_temperature ?? null,
-        target_temp:  s.attributes?.temperature ?? null,
-        mode:         s.state || 'off',
-        action:       s.attributes?.hvac_action || '',
-        humidity:     s.attributes?.current_humidity ?? s.attributes?.humidity ?? null,
+        name:         d.name || homeyClimateDevice,
+        current_temp: d.capabilitiesObj?.measure_temperature?.value ?? null,
+        target_temp:  d.capabilitiesObj?.target_temperature?.value ?? null,
+        mode:         d.capabilitiesObj?.thermostat_mode?.value || 'auto',
+        action:       '',
+        humidity:     d.capabilitiesObj?.measure_humidity?.value ?? null,
         unit:         gs('temperature_unit') || 'F',
-        unavailable:  s.state === 'unavailable',
+        unavailable:  false,
+        source:       'homey',
       };
     }).then(d => { if (d) result.thermostat = d; }));
-  }
 
   await Promise.allSettled(p);
 
@@ -1977,8 +2072,10 @@ app.get('/api/widgets/debug', requireAdmin, (req, res) => {
       ha_unifi_clients:    gs('ha_unifi_clients'),
       ha_unifi_rx:         gs('ha_unifi_rx'),
       ha_unifi_tx:         gs('ha_unifi_tx'),
-      ha_person_entities:  gs('ha_person_entities'),
-      ha_climate_entity:   gs('ha_climate_entity'),
+      ha_person_entities:   gs('ha_person_entities'),
+      ha_climate_entity:    gs('ha_climate_entity'),
+      homey_person_devices: gs('homey_person_devices'),
+      homey_climate_device: gs('homey_climate_device'),
       moen_source:         !!(gs('ha_url') && gs('ha_token') && gs('ha_moen_flow')) ? 'ha' : 'direct',
       unifi_source:        !!(gs('ha_url') && gs('ha_token') && (gs('ha_unifi_clients')||gs('ha_unifi_rx')||gs('ha_unifi_tx'))) ? 'ha' : 'direct',
     },

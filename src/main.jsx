@@ -560,6 +560,9 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
     ...(widgetData.plex?['w_plex']:[]),
     ...(widgetData.moen?['w_moen']:[]),
     ...(widgetData.unifi?['w_unifi']:[]),
+    ...(widgetData.who_home?['w_who_home']:[]),
+    ...(widgetData.thermostat?['w_thermostat']:[]),
+    ...(widgetData.ha_coming?['w_ha_coming']:[]),
   ];
   const activePanelId=centerPanels[centerIdx%Math.max(1,centerPanels.length)];
 
@@ -1187,6 +1190,81 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         </>
                       );
                     })()}
+                    {activePanelId==='w_who_home'&&(()=>{
+                      const {persons}=widgetData.who_home;
+                      const stateLabel=s=>s==='home'?'Home':s==='not_home'?'Away':s||'Unknown';
+                      const stateColor=s=>s==='home'?A.green:s==='not_home'?D.t3:'#FF9500';
+                      return(
+                        <>
+                          <WLabel>Who's Home</WLabel>
+                          <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',gap:10}}>
+                            {persons.map(p=>(
+                              <div key={p.entity_id} style={{display:'flex',alignItems:'center',gap:12}}>
+                                <div style={{width:10,height:10,borderRadius:'50%',background:stateColor(p.state),flexShrink:0}}/>
+                                <span style={{fontSize:15,fontWeight:600,color:D.t1,flex:1}}>{p.name}</span>
+                                <span style={{fontSize:13,fontWeight:500,color:stateColor(p.state),textTransform:'capitalize'}}>{stateLabel(p.state)}</span>
+                              </div>
+                            ))}
+                            {!persons.length&&<div style={{fontSize:13,color:D.t4}}>No people configured</div>}
+                          </div>
+                        </>
+                      );
+                    })()}
+                    {activePanelId==='w_thermostat'&&(()=>{
+                      const t=widgetData.thermostat;
+                      const modeColor={heat:'#FF6B35',cool:'#3B82F6',heat_cool:'#AF52DE',auto:'#AF52DE',off:D.t4,fan_only:D.t3,dry:'#FF9500'}[t.mode]||D.t3;
+                      const actionLabel={heating:'Heating',cooling:'Cooling',idle:'Idle',off:'Off',drying:'Drying',fan:'Fan'}[t.action]||t.action||'';
+                      if(t.unavailable) return(
+                        <>
+                          <WLabel>{t.name}</WLabel>
+                          <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                            <span style={{fontSize:13,color:D.t4}}>Thermostat unavailable</span>
+                          </div>
+                        </>
+                      );
+                      return(
+                        <>
+                          <WLabel>{t.name||'Thermostat'}</WLabel>
+                          <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',gap:6}}>
+                            <div style={{display:'flex',alignItems:'baseline',gap:8,marginBottom:4}}>
+                              <span style={{fontSize:52,fontWeight:800,color:D.t1,lineHeight:1,letterSpacing:'-.04em'}}>{t.current_temp!=null?Math.round(t.current_temp):'--'}</span>
+                              <span style={{fontSize:22,color:D.t3,fontWeight:400}}>°{t.unit}</span>
+                            </div>
+                            {[
+                              {label:'Set to',val:t.target_temp!=null?`${Math.round(t.target_temp)}°${t.unit}`:'--',color:D.t2},
+                              {label:'Mode',val:t.mode,color:modeColor},
+                              ...(actionLabel?[{label:'Status',val:actionLabel,color:modeColor}]:[]),
+                              ...(t.humidity!=null?[{label:'Humidity',val:`${Math.round(t.humidity)}%`,color:D.t2}]:[]),
+                            ].map(row=>(
+                              <div key={row.label} style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                                <span style={{fontSize:13,color:D.t3}}>{row.label}</span>
+                                <span style={{fontSize:14,fontWeight:600,color:row.color,textTransform:'capitalize'}}>{row.val}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      );
+                    })()}
+                    {activePanelId==='w_ha_coming'&&(
+                      <>
+                        <WLabel>Home Assistant</WLabel>
+                        <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',gap:10}}>
+                          {[
+                            {icon:'🔒',label:'Security & Alarm',note:'Door sensors, motion, alarm panel'},
+                            {icon:'⚡',label:'Energy Monitor',note:'Power consumption by circuit'},
+                            {icon:'💡',label:'Lights',note:'Brightness, color, scenes'},
+                          ].map(item=>(
+                            <div key={item.label} style={{display:'flex',alignItems:'center',gap:12,opacity:0.55}}>
+                              <span style={{fontSize:20}}>{item.icon}</span>
+                              <div>
+                                <div style={{fontSize:13,fontWeight:600,color:D.t2}}>{item.label}</div>
+                                <div style={{fontSize:11,color:D.t4}}>{item.note}</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
                   </Widget>
                 </div>
               )}
@@ -2743,6 +2821,8 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [haUnifiMap,setHaUnifiMap]=useState({clients:'',rx:'',tx:''});
   const [haMoenSource,setHaMoenSource]=useState('direct'); // 'ha' or 'direct'
   const [haUnifiSource,setHaUnifiSource]=useState('direct');
+  const [haPersonIds,setHaPersonIds]=useState([]); // array of person.* entity IDs
+  const [haClimateEntity,setHaClimateEntity]=useState('');
 
   const [homeyUrl,setHomeyUrl]=useState('');
   const [homeyToken,setHomeyToken]=useState('');
@@ -2851,6 +2931,9 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
       setHaMoenMap(mm); setHaUnifiMap(um);
       if(mm.flow) setHaMoenSource('ha');
       if(um.clients||um.rx||um.tx) setHaUnifiSource('ha');
+      const personStr=d.ha_person_entities||'';
+      setHaPersonIds(personStr?personStr.split(',').map(s=>s.trim()).filter(Boolean):[]);
+      setHaClimateEntity(d.ha_climate_entity||'');
     }).catch(()=>{});
     api.get('/api/quick-actions').then(d=>{if(Array.isArray(d)) setQaList(d);}).catch(()=>{});
   },[]);
@@ -3325,16 +3408,22 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
               // Auto-fill maps from discovered matches
               if(r.moen?.map) setHaMoenMap(m=>({...m,...Object.fromEntries(Object.entries(r.moen.map).filter(([,v])=>v))}));
               if(r.unifi?.map) setHaUnifiMap(m=>({...m,...Object.fromEntries(Object.entries(r.unifi.map).filter(([,v])=>v))}));
+              // Auto-select all discovered persons
+              if(r.persons?.length) setHaPersonIds(r.persons.map(p=>p.entity_id));
+              // Auto-select first climate entity if only one found
+              if(r.climates?.length===1) setHaClimateEntity(r.climates[0].entity_id);
               const moenFound=Object.values(r.moen?.map||{}).filter(Boolean).length;
               const unifiFound=Object.values(r.unifi?.map||{}).filter(Boolean).length;
-              toastAdd(`Found ${r.moen?.all?.length||0} Moen, ${r.unifi?.all?.length||0} UniFi entities — ${moenFound+unifiFound} auto-mapped`);
+              toastAdd(`Found ${r.moen?.all?.length||0} Moen, ${r.unifi?.all?.length||0} UniFi, ${r.persons?.length||0} persons, ${r.climates?.length||0} thermostats — ${moenFound+unifiFound} auto-mapped`);
             }} disabled={haDiscovering}>{haDiscovering?'Discovering…':'Discover Entities'}</Btn>
           </div>
-          {!haDiscovered&&(haMoenSource==='ha'||haUnifiSource==='ha')&&(
+          {!haDiscovered&&(haMoenSource==='ha'||haUnifiSource==='ha'||haPersonIds.length>0||haClimateEntity)&&(
             <div style={{background:A.systemBg,borderRadius:A.r,padding:'10px 14px',marginBottom:10,fontSize:12,color:A.label3}}>
               Entity mapping active — click Discover to review or change.
               {haMoenMap.flow&&<div style={{color:A.label4,marginTop:4,fontFamily:'monospace',fontSize:11}}>Moen flow: {haMoenMap.flow}</div>}
               {haUnifiMap.clients&&<div style={{color:A.label4,fontFamily:'monospace',fontSize:11}}>UniFi clients: {haUnifiMap.clients}</div>}
+              {haPersonIds.length>0&&<div style={{color:A.label4,fontFamily:'monospace',fontSize:11}}>Who's home: {haPersonIds.length} person(s)</div>}
+              {haClimateEntity&&<div style={{color:A.label4,fontFamily:'monospace',fontSize:11}}>Thermostat: {haClimateEntity}</div>}
             </div>
           )}
           {haDiscovered&&(
@@ -3359,8 +3448,29 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
                   </select>
                 </div>
               ))}
+              <div style={{fontSize:12,fontWeight:600,color:A.label2,marginTop:12,marginBottom:8}}>Who's Home</div>
+              {(haDiscovered.persons||[]).length===0
+                ?<div style={{fontSize:11,color:A.label5,marginBottom:4}}>No person.* entities found in HA</div>
+                :(haDiscovered.persons||[]).map(p=>(
+                  <label key={p.entity_id} style={{display:'flex',alignItems:'center',gap:8,marginBottom:6,cursor:'pointer'}}>
+                    <input type="checkbox" checked={haPersonIds.includes(p.entity_id)} onChange={e=>setHaPersonIds(ids=>e.target.checked?[...ids,p.entity_id]:ids.filter(id=>id!==p.entity_id))}/>
+                    <span style={{fontSize:12,color:A.label2}}>{p.friendly_name}</span>
+                    <span style={{fontSize:11,color:A.label4}}>({p.state})</span>
+                  </label>
+                ))
+              }
+              <div style={{fontSize:12,fontWeight:600,color:A.label2,marginTop:12,marginBottom:8}}>Thermostat</div>
+              {(haDiscovered.climates||[]).length===0
+                ?<div style={{fontSize:11,color:A.label5,marginBottom:4}}>No climate.* entities found in HA</div>
+                :<div style={{marginBottom:6}}>
+                  <select value={haClimateEntity} onChange={e=>setHaClimateEntity(e.target.value)} style={{width:'100%',background:A.inputBg,border:`1px solid ${A.sep}`,borderRadius:A.rSm,padding:'5px 8px',fontSize:12,color:A.label1}}>
+                    <option value="">— not mapped —</option>
+                    {(haDiscovered.climates||[]).map(s=><option key={s.entity_id} value={s.entity_id}>{s.friendly_name} ({s.state}{s.current_temp!=null?`, ${s.current_temp}°`:''})</option>)}
+                  </select>
+                </div>
+              }
               <Btn sm style={{marginTop:8}} onClick={async()=>{
-                const payload={ha_moen_flow:haMoenMap.flow,ha_moen_pressure:haMoenMap.pressure,ha_moen_daily:haMoenMap.daily,ha_moen_mode:haMoenMap.mode,ha_moen_alert:haMoenMap.alert,ha_unifi_clients:haUnifiMap.clients,ha_unifi_rx:haUnifiMap.rx,ha_unifi_tx:haUnifiMap.tx};
+                const payload={ha_moen_flow:haMoenMap.flow,ha_moen_pressure:haMoenMap.pressure,ha_moen_daily:haMoenMap.daily,ha_moen_mode:haMoenMap.mode,ha_moen_alert:haMoenMap.alert,ha_unifi_clients:haUnifiMap.clients,ha_unifi_rx:haUnifiMap.rx,ha_unifi_tx:haUnifiMap.tx,ha_person_entities:haPersonIds.join(','),ha_climate_entity:haClimateEntity};
                 await fetch('/api/settings/integrations',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify(payload)});
                 if(haMoenMap.flow) setHaMoenSource('ha'); else setHaMoenSource('direct');
                 if(haUnifiMap.clients||haUnifiMap.rx||haUnifiMap.tx) setHaUnifiSource('ha'); else setHaUnifiSource('direct');

@@ -748,6 +748,8 @@ app.get('/api/settings/integrations', requireAdmin, (req, res) => {
     ha_unifi_clients:  get('ha_unifi_clients'),
     ha_unifi_rx:       get('ha_unifi_rx'),
     ha_unifi_tx:       get('ha_unifi_tx'),
+    ha_person_entities: get('ha_person_entities'),
+    ha_climate_entity:  get('ha_climate_entity'),
   });
 });
 app.put('/api/settings/integrations', requireAdmin, (req, res) => {
@@ -782,9 +784,14 @@ app.put('/api/settings/integrations', requireAdmin, (req, res) => {
   if (req.body.ha_unifi_clients !== undefined) { upd.run('ha_unifi_clients', String(req.body.ha_unifi_clients)); clearUnifiCache = true; }
   if (req.body.ha_unifi_rx      !== undefined) { upd.run('ha_unifi_rx',      String(req.body.ha_unifi_rx));      clearUnifiCache = true; }
   if (req.body.ha_unifi_tx      !== undefined) { upd.run('ha_unifi_tx',      String(req.body.ha_unifi_tx));      clearUnifiCache = true; }
+  let clearPersonCache = false, clearClimateCache = false;
+  if (req.body.ha_person_entities !== undefined) { upd.run('ha_person_entities', String(req.body.ha_person_entities)); clearPersonCache = true; }
+  if (req.body.ha_climate_entity  !== undefined) { upd.run('ha_climate_entity',  String(req.body.ha_climate_entity));  clearClimateCache = true; }
   // Clear widget cache so next poll picks up the new entity IDs immediately
-  if (clearMoenCache) { delete _wCache['moen:ha']; delete _wCache['moen:direct']; }
-  if (clearUnifiCache) { for (const k of Object.keys(_wCache)) if (k.startsWith('unifi:')) delete _wCache[k]; }
+  if (clearMoenCache)   { delete _wCache['moen:ha']; delete _wCache['moen:direct']; }
+  if (clearUnifiCache)  { for (const k of Object.keys(_wCache)) if (k.startsWith('unifi:')) delete _wCache[k]; }
+  if (clearPersonCache) { delete _wCache['who_home']; }
+  if (clearClimateCache){ delete _wCache['thermostat']; }
   res.json({ ok: true });
 });
 
@@ -1253,7 +1260,24 @@ app.post('/api/ha/discover', requireAdmin, async (req, res) => {
     tx:      unifiFind(['_tx', '_upload', '_up']),
   };
 
-  res.json({ ok: true, moen: { all: moenAll, map: moenMap }, unifi: { all: unifiLikely, map: unifiMap }, allSensors });
+  const persons = states
+    .filter(s => s.entity_id.startsWith('person.'))
+    .map(s => ({
+      entity_id: s.entity_id,
+      state: s.state,
+      friendly_name: s.attributes?.friendly_name || s.entity_id.replace('person.', ''),
+    }));
+
+  const climates = states
+    .filter(s => s.entity_id.startsWith('climate.'))
+    .map(s => ({
+      entity_id: s.entity_id,
+      state: s.state,
+      current_temp: s.attributes?.current_temperature ?? null,
+      friendly_name: s.attributes?.friendly_name || s.entity_id.replace('climate.', ''),
+    }));
+
+  res.json({ ok: true, moen: { all: moenAll, map: moenMap }, unifi: { all: unifiLikely, map: unifiMap }, allSensors, persons, climates });
 });
 
 app.get('/api/ha/pull', async (req, res) => {
@@ -1880,7 +1904,46 @@ app.get('/api/widgets/data', async (req, res) => {
       };
     }).then(d => { if (d) result.unifi = d; }));
 
+  // ── Who's Home ─────────────────────────────────────────────────────────────
+  const personEntitiesStr = gs('ha_person_entities');
+  if (haBaseUrl && haAuthToken && personEntitiesStr) {
+    const personIds = personEntitiesStr.split(',').map(s => s.trim()).filter(Boolean);
+    if (personIds.length)
+      p.push(_wFetch('who_home', 60000, async () => {
+        const results = await Promise.all(personIds.map(id => haGet(id).catch(() => null)));
+        const persons = results.map((s, i) => ({
+          entity_id: personIds[i],
+          name: s?.attributes?.friendly_name || personIds[i].replace('person.', ''),
+          state: s?.state || 'unknown',
+        }));
+        return { persons };
+      }).then(d => { if (d) result.who_home = d; }));
+  }
+
+  // ── Thermostat ─────────────────────────────────────────────────────────────
+  const climateEntity = gs('ha_climate_entity');
+  if (haBaseUrl && haAuthToken && climateEntity) {
+    p.push(_wFetch('thermostat', 60000, async () => {
+      const s = await haGet(climateEntity);
+      if (!s) throw new Error(`HA thermostat: entity ${climateEntity} returned null — check entity ID`);
+      return {
+        name:         s.attributes?.friendly_name || climateEntity.replace('climate.', ''),
+        current_temp: s.attributes?.current_temperature ?? null,
+        target_temp:  s.attributes?.temperature ?? null,
+        mode:         s.state || 'off',
+        action:       s.attributes?.hvac_action || '',
+        humidity:     s.attributes?.current_humidity ?? s.attributes?.humidity ?? null,
+        unit:         gs('temperature_unit') || 'F',
+        unavailable:  s.state === 'unavailable',
+      };
+    }).then(d => { if (d) result.thermostat = d; }));
+  }
+
   await Promise.allSettled(p);
+
+  // Placeholder panel — shown whenever HA is configured, as a teaser for upcoming features
+  if (haBaseUrl && haAuthToken) result.ha_coming = { ok: true };
+
   res.json(result);
 });
 
@@ -1900,11 +1963,13 @@ app.get('/api/widgets/debug', requireAdmin, (req, res) => {
       ha_moen_daily:    gs('ha_moen_daily'),
       ha_moen_mode:     gs('ha_moen_mode'),
       ha_moen_alert:    gs('ha_moen_alert'),
-      ha_unifi_clients: gs('ha_unifi_clients'),
-      ha_unifi_rx:      gs('ha_unifi_rx'),
-      ha_unifi_tx:      gs('ha_unifi_tx'),
-      moen_source:      !!(gs('ha_url') && gs('ha_token') && gs('ha_moen_flow')) ? 'ha' : 'direct',
-      unifi_source:     !!(gs('ha_url') && gs('ha_token') && gs('ha_unifi_clients')) ? 'ha' : 'direct',
+      ha_unifi_clients:    gs('ha_unifi_clients'),
+      ha_unifi_rx:         gs('ha_unifi_rx'),
+      ha_unifi_tx:         gs('ha_unifi_tx'),
+      ha_person_entities:  gs('ha_person_entities'),
+      ha_climate_entity:   gs('ha_climate_entity'),
+      moen_source:         !!(gs('ha_url') && gs('ha_token') && gs('ha_moen_flow')) ? 'ha' : 'direct',
+      unifi_source:        !!(gs('ha_url') && gs('ha_token') && (gs('ha_unifi_clients')||gs('ha_unifi_rx')||gs('ha_unifi_tx'))) ? 'ha' : 'direct',
     },
   });
 });

@@ -248,6 +248,8 @@ const defaults = {
   ha_unifi_clients: '',
   ha_unifi_rx: '',
   ha_unifi_tx: '',
+  ha_person_entities: '',
+  ha_climate_entity: '',
 };
 const insSetting = db.prepare('INSERT OR IGNORE INTO settings (key,value) VALUES (?,?)');
 for (const [k, v] of Object.entries(defaults)) insSetting.run(k, v);

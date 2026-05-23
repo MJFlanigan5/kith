@@ -750,6 +750,7 @@ app.get('/api/settings/integrations', requireAdmin, (req, res) => {
     ha_unifi_tx:       get('ha_unifi_tx'),
     ha_person_entities:  get('ha_person_entities'),
     ha_climate_entity:   get('ha_climate_entity'),
+    ha_sensor_entities:  get('ha_sensor_entities'),
     homey_person_devices: get('homey_person_devices'),
     homey_climate_device: get('homey_climate_device'),
   });
@@ -789,6 +790,7 @@ app.put('/api/settings/integrations', requireAdmin, (req, res) => {
   let clearPersonCache = false, clearClimateCache = false;
   if (req.body.ha_person_entities   !== undefined) { upd.run('ha_person_entities',   String(req.body.ha_person_entities));   clearPersonCache = true; }
   if (req.body.ha_climate_entity    !== undefined) { upd.run('ha_climate_entity',    String(req.body.ha_climate_entity));    clearClimateCache = true; }
+  if (req.body.ha_sensor_entities   !== undefined) { upd.run('ha_sensor_entities',   String(req.body.ha_sensor_entities));   delete _wCache['ha_sensors']; }
   if (req.body.homey_person_devices !== undefined) { upd.run('homey_person_devices', String(req.body.homey_person_devices)); clearPersonCache = true; }
   if (req.body.homey_climate_device !== undefined) { upd.run('homey_climate_device', String(req.body.homey_climate_device)); clearClimateCache = true; }
   // Clear widget cache so next poll picks up the new entity IDs immediately
@@ -2123,11 +2125,29 @@ app.get('/api/widgets/data', async (req, res) => {
       };
     }).then(d => { if (d) result.thermostat = d; }));
 
+  // ── HA sensor tiles (generic entity mapping) ──────────────────────────────
+  const sensorEntitiesStr = gs('ha_sensor_entities');
+  if (haBaseUrl && haAuthToken && sensorEntitiesStr) {
+    p.push(_wFetch('ha_sensors', 30000, async () => {
+      const ids = sensorEntitiesStr.split(',').map(s => s.trim()).filter(Boolean);
+      const results = await Promise.all(ids.map(id => haGet(id).catch(() => null)));
+      const sensors = results.map((s, i) => {
+        if (!s) return null;
+        return {
+          entity_id: ids[i],
+          domain: ids[i].split('.')[0],
+          name: s.attributes?.friendly_name || ids[i].replace(/^[^.]+\./, '').replace(/_/g, ' '),
+          state: s.state,
+          unit: s.attributes?.unit_of_measurement || '',
+          device_class: s.attributes?.device_class || '',
+        };
+      }).filter(Boolean);
+      if (!sensors.length) return null;
+      return { sensors };
+    }).then(d => { if (d) result.ha_sensors = d; }));
+  }
+
   await Promise.allSettled(p);
-
-  // Placeholder panel — shown whenever HA is configured, as a teaser for upcoming features
-  if (haBaseUrl && haAuthToken) result.ha_coming = { ok: true };
-
   res.json(result);
 });
 

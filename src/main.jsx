@@ -562,7 +562,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
     ...(widgetData.unifi?['w_unifi']:[]),
     ...(widgetData.who_home?['w_who_home']:[]),
     ...(widgetData.thermostat?['w_thermostat']:[]),
-    ...(widgetData.ha_coming?['w_ha_coming']:[]),
+    ...(widgetData.ha_sensors?['w_ha_sensors']:[]),
     ...(allSmartEvents.length>0?['w_notifications']:[]),
   ];
   const activePanelId=centerPanels[centerIdx%Math.max(1,centerPanels.length)];
@@ -1248,26 +1248,33 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         </>
                       );
                     })()}
-                    {activePanelId==='w_ha_coming'&&(
-                      <>
-                        <WLabel>Home Assistant</WLabel>
-                        <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',gap:10}}>
-                          {[
-                            {icon:'🔒',label:'Security & Alarm',note:'Door sensors, motion, alarm panel'},
-                            {icon:'⚡',label:'Energy Monitor',note:'Power consumption by circuit'},
-                            {icon:'💡',label:'Lights',note:'Brightness, color, scenes'},
-                          ].map(item=>(
-                            <div key={item.label} style={{display:'flex',alignItems:'center',gap:12,opacity:0.55}}>
-                              <span style={{fontSize:20}}>{item.icon}</span>
-                              <div>
-                                <div style={{fontSize:13,fontWeight:600,color:D.t2}}>{item.label}</div>
-                                <div style={{fontSize:11,color:D.t4}}>{item.note}</div>
+                    {activePanelId==='w_ha_sensors'&&(()=>{
+                      const {sensors=[]}=widgetData.ha_sensors||{};
+                      // Color based on domain + state
+                      const stateColor=s=>{
+                        if(s==='unavailable'||s==='unknown') return D.t4;
+                        if(['on','open','unlocked','detected','motion','leak'].includes(s)) return A.red;
+                        if(['off','closed','locked','clear','no_motion','dry'].includes(s)) return A.green;
+                        return D.t2;
+                      };
+                      const domainIcon={lock:'🔒',binary_sensor:'◉',light:'💡',switch:'🔌',alarm_control_panel:'🚨',climate:'🌡',cover:'🪟',sensor:'📡',camera:'📷',motion:'🏃'};
+                      return(
+                        <>
+                          <WLabel style={{marginBottom:10}}>Home</WLabel>
+                          <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',gap:6}}>
+                            {sensors.map((s,i)=>(
+                              <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'7px 10px',background:'rgba(255,255,255,0.06)',borderRadius:9}}>
+                                <span style={{fontSize:16,flexShrink:0,opacity:0.8}}>{domainIcon[s.device_class]||domainIcon[s.domain]||'◉'}</span>
+                                <span style={{flex:1,fontSize:12,fontWeight:500,color:D.t2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',textTransform:'capitalize'}}>{s.name}</span>
+                                <span style={{fontSize:12,fontWeight:700,color:stateColor(s.state),flexShrink:0,textTransform:'capitalize'}}>
+                                  {s.unit?`${s.state} ${s.unit}`:s.state}
+                                </span>
                               </div>
-                            </div>
-                          ))}
-                        </div>
-                      </>
-                    )}
+                            ))}
+                          </div>
+                        </>
+                      );
+                    })()}
                     {activePanelId==='w_notifications'&&(()=>{
                       const recent=allSmartEvents.slice(0,3);
                       if(!recent.length) return null;
@@ -2856,6 +2863,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [haUnifiSource,setHaUnifiSource]=useState('direct');
   const [haPersonIds,setHaPersonIds]=useState([]); // array of person.* entity IDs
   const [haClimateEntity,setHaClimateEntity]=useState('');
+  const [haSensorEntities,setHaSensorEntities]=useState('');
   const [homeyDiscovering,setHomeyDiscovering]=useState(false);
   const [homeyDiscovered,setHomeyDiscovered]=useState(null); // {users,thermostats,allDevices}
   const [homeyPersonIds,setHomeyPersonIds]=useState([]); // array of Homey device IDs
@@ -2971,6 +2979,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
       const personStr=d.ha_person_entities||'';
       setHaPersonIds(personStr?personStr.split(',').map(s=>s.trim()).filter(Boolean):[]);
       setHaClimateEntity(d.ha_climate_entity||'');
+      setHaSensorEntities(d.ha_sensor_entities||'');
       const homeyPersonStr=d.homey_person_devices||'';
       setHomeyPersonIds(homeyPersonStr?homeyPersonStr.split(',').map(s=>s.trim()).filter(Boolean):[]);
       setHomeyClimateDevice(d.homey_climate_device||'');
@@ -3509,8 +3518,26 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
                   </select>
                 </div>
               }
+              <div style={{fontSize:12,fontWeight:600,color:A.label2,marginTop:12,marginBottom:6}}>Home Tile Entities</div>
+              <div style={{fontSize:11,color:A.label5,marginBottom:6}}>Pick up to 6 entities to show as live tiles (security, lights, locks, sensors…)</div>
+              <div style={{maxHeight:160,overflowY:'auto',marginBottom:6}}>
+                {(haDiscovered.allSensors||[]).map(s=>(
+                  <label key={s.entity_id} style={{display:'flex',alignItems:'center',gap:8,padding:'3px 0',cursor:'pointer'}}>
+                    <input type="checkbox"
+                      checked={haSensorEntities.split(',').map(x=>x.trim()).includes(s.entity_id)}
+                      disabled={!haSensorEntities.split(',').map(x=>x.trim()).includes(s.entity_id)&&haSensorEntities.split(',').filter(Boolean).length>=6}
+                      onChange={e=>{
+                        const cur=haSensorEntities.split(',').map(x=>x.trim()).filter(Boolean);
+                        setHaSensorEntities(e.target.checked?[...cur,s.entity_id].join(','):cur.filter(id=>id!==s.entity_id).join(','));
+                      }}
+                    />
+                    <span style={{fontSize:11,color:A.label2,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.friendly_name}</span>
+                    <span style={{fontSize:10,color:A.label5,fontFamily:'monospace'}}>{s.state}{s.unit?' '+s.unit:''}</span>
+                  </label>
+                ))}
+              </div>
               <Btn sm style={{marginTop:8}} onClick={async()=>{
-                const payload={ha_moen_flow:haMoenMap.flow,ha_moen_pressure:haMoenMap.pressure,ha_moen_daily:haMoenMap.daily,ha_moen_mode:haMoenMap.mode,ha_moen_alert:haMoenMap.alert,ha_unifi_clients:haUnifiMap.clients,ha_unifi_rx:haUnifiMap.rx,ha_unifi_tx:haUnifiMap.tx,ha_person_entities:haPersonIds.join(','),ha_climate_entity:haClimateEntity};
+                const payload={ha_moen_flow:haMoenMap.flow,ha_moen_pressure:haMoenMap.pressure,ha_moen_daily:haMoenMap.daily,ha_moen_mode:haMoenMap.mode,ha_moen_alert:haMoenMap.alert,ha_unifi_clients:haUnifiMap.clients,ha_unifi_rx:haUnifiMap.rx,ha_unifi_tx:haUnifiMap.tx,ha_person_entities:haPersonIds.join(','),ha_climate_entity:haClimateEntity,ha_sensor_entities:haSensorEntities};
                 await fetch('/api/settings/integrations',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify(payload)});
                 if(haMoenMap.flow) setHaMoenSource('ha'); else setHaMoenSource('direct');
                 if(haUnifiMap.clients||haUnifiMap.rx||haUnifiMap.tx) setHaUnifiSource('ha'); else setHaUnifiSource('direct');

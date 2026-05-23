@@ -450,18 +450,18 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
   const [haEvents,setHaEvents]=useState([]);
   const [smEvents,setSmEvents]=useState([]);
   useEffect(()=>{
-    const load=()=>api.get('/api/ha/events').then(d=>{if(Array.isArray(d))setHaEvents(d);}).catch(()=>{});
-    load();
-    const id=setInterval(load,30000);
-    return()=>clearInterval(id);
+    const loadHA=()=>api.get('/api/ha/events').then(d=>{if(Array.isArray(d))setHaEvents(d);}).catch(()=>{});
+    const loadSm=()=>fetch('/api/ha/pull').then(r=>r.json()).then(d=>{if(Array.isArray(d))setSmEvents(d);}).catch(()=>{});
+    loadHA(); loadSm();
+    // Fallback polls in case SSE drops
+    const fa=setInterval(loadHA,60000); const fb=setInterval(loadSm,60000);
+    // SSE: instant push from webhook hits or Homey poller
+    const es=new EventSource('/api/events/stream');
+    es.addEventListener('activity',e=>{try{const ev=JSON.parse(e.data);setSmEvents(p=>[ev,...p].slice(0,10));}catch{}});
+    es.addEventListener('refresh',()=>{loadHA();loadSm();});
+    return()=>{clearInterval(fa);clearInterval(fb);es.close();};
   },[]);
-  useEffect(()=>{
-    const load=()=>fetch('/api/ha/pull').then(r=>r.json()).then(d=>{if(Array.isArray(d))setSmEvents(d);}).catch(()=>{});
-    load();
-    const id=setInterval(load,20000);
-    return()=>clearInterval(id);
-  },[]);
-  const allSmartEvents=useMemo(()=>[...smEvents,...haEvents].slice(0,10),[smEvents,haEvents]);
+  const allSmartEvents=useMemo(()=>[...smEvents,...haEvents].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).slice(0,10),[smEvents,haEvents]);
   const [nowPlaying,setNowPlaying]=useState({playing:false});
   useEffect(()=>{
     const load=()=>api.get('/api/music/now-playing').then(d=>setNowPlaying(d||{playing:false})).catch(()=>{});
@@ -473,8 +473,10 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
   useEffect(()=>{
     const load=()=>api.get('/api/widgets/data').then(d=>setWidgetData(d||{})).catch(()=>{});
     load();
-    const id=setInterval(load,3*60*1000);
-    return()=>clearInterval(id);
+    const id=setInterval(load,3*60*1000); // fallback — SSE refresh handles real-time updates
+    const es=new EventSource('/api/events/stream');
+    es.addEventListener('refresh',()=>load());
+    return()=>{clearInterval(id);es.close();};
   },[]);
 
   const [newsIdx,setNewsIdx]=useState(0);
@@ -1290,7 +1292,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         if(!ts) return '';
                         let d;
                         if(typeof ts==='number') d=new Date(ts<1e10?ts*1000:ts);
-                        else d=new Date(!ts.endsWith('Z')&&!ts.includes('+')?ts+'Z':ts);
+                        else{const n=ts.replace(' ','T');d=new Date(!n.endsWith('Z')&&!n.includes('+')?n+'Z':n);}
                         if(isNaN(d.getTime())) return '';
                         const m=Math.round((Date.now()-d.getTime())/60000);
                         return m<1?'just now':m<60?`${m}m ago`:m<1440?`${Math.round(m/60)}h ago`:m<2880?'yesterday':`${Math.round(m/1440)}d ago`;
@@ -1513,21 +1515,18 @@ function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weath
     api.get('/api/chores/leaderboard').then(d=>setLeaderboard(Array.isArray(d)?d:[])).catch(()=>{});
   },[chores]);
 
-  useEffect(()=>{
-    const load=()=>api.get('/api/ha/events').then(d=>{if(Array.isArray(d))setHaEvents(d);}).catch(()=>{});
-    load();
-    const id=setInterval(load,60000);
-    return()=>clearInterval(id);
-  },[]);
-
   const [smEvents,setSmEvents]=useState([]);
   useEffect(()=>{
-    const load=()=>fetch('/api/ha/pull').then(r=>r.json()).then(d=>{if(Array.isArray(d))setSmEvents(d);}).catch(()=>{});
-    load();
-    const id=setInterval(load,20000);
-    return()=>clearInterval(id);
+    const loadHA=()=>api.get('/api/ha/events').then(d=>{if(Array.isArray(d))setHaEvents(d);}).catch(()=>{});
+    const loadSm=()=>fetch('/api/ha/pull').then(r=>r.json()).then(d=>{if(Array.isArray(d))setSmEvents(d);}).catch(()=>{});
+    loadHA(); loadSm();
+    const fa=setInterval(loadHA,60000); const fb=setInterval(loadSm,60000);
+    const es=new EventSource('/api/events/stream');
+    es.addEventListener('activity',e=>{try{const ev=JSON.parse(e.data);setSmEvents(p=>[ev,...p].slice(0,10));}catch{}});
+    es.addEventListener('refresh',()=>{loadHA();loadSm();});
+    return()=>{clearInterval(fa);clearInterval(fb);es.close();};
   },[]);
-  const allSmartEvents=useMemo(()=>[...smEvents,...haEvents].slice(0,10),[smEvents,haEvents]);
+  const allSmartEvents=useMemo(()=>[...smEvents,...haEvents].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).slice(0,10),[smEvents,haEvents]);
 
   useEffect(()=>{
     if(prevDueRef.current!==null&&prevDueRef.current>0&&dueChores.length===0){
@@ -1639,9 +1638,10 @@ function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weath
       {allSmartEvents.length>0&&(
         <Card style={{marginBottom:16,padding:0,overflow:'hidden'}}>
           {allSmartEvents.slice(0,5).map((ev,i)=>{
-            const ts=ev.created_at?new Date(ev.created_at.endsWith('Z')||ev.created_at.includes('+')?ev.created_at:ev.created_at+'Z'):new Date();
+            const n=ev.created_at?ev.created_at.replace(' ','T'):null;
+            const ts=n?new Date(n.endsWith('Z')||n.includes('+')?n:n+'Z'):new Date();
             const ago=Math.round((Date.now()-ts.getTime())/60000);
-            const agoStr=ago<1?'just now':ago<60?`${ago}m ago`:ago<1440?`${Math.round(ago/60)}h ago`:'yesterday';
+            const agoStr=ago<1?'just now':ago<60?`${ago}m ago`:ago<1440?`${Math.round(ago/60)}h ago`:ago<2880?'yesterday':`${Math.round(ago/1440)}d ago`;
             return(
               <div key={ev.id||i} style={{display:'flex',alignItems:'center',gap:12,padding:'11px 16px',borderTop:i>0?`1px solid ${A.sep}`:'none'}}>
                 <span style={{fontSize:18,flexShrink:0}}>{ev.icon||'🏠'}</span>

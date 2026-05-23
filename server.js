@@ -7,9 +7,20 @@ const webpush    = require('web-push');
 const db         = require('./db');
 const jwt        = require('jsonwebtoken');
 const bcrypt     = require('bcryptjs');
+const WebSocket  = require('ws');
 
 const app  = express();
 const PORT = process.env.PORT || 7400;
+
+// ── SSE push to all connected browser clients ─────────────────────────────────
+const _sseClients = new Set();
+function broadcastSSE(event, data) {
+  if (!_sseClients.size) return;
+  const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  for (const res of _sseClients) {
+    try { res.write(payload); } catch { _sseClients.delete(res); }
+  }
+}
 
 const PHOTOS_DIR = path.join(process.env.DATA_DIR || path.join(__dirname, 'data'), 'photos');
 fs.mkdirSync(PHOTOS_DIR, { recursive: true });
@@ -1153,6 +1164,18 @@ app.delete('/api/polls/:id', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
+// ── SSE stream endpoint ───────────────────────────────────────────────────────
+app.get('/api/events/stream', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+  _sseClients.add(res);
+  // Heartbeat every 25s to prevent proxy/browser timeout
+  const hb = setInterval(() => { try { res.write(':ping\n\n'); } catch {} }, 25000);
+  req.on('close', () => { clearInterval(hb); _sseClients.delete(res); });
+});
+
 // ── Routes: Home Assistant webhook ───────────────────────────────────────────
 app.post('/api/webhook/ha', (req, res) => {
   const secret = db.prepare("SELECT value FROM settings WHERE key='ha_webhook_secret'").get()?.value;
@@ -1163,6 +1186,11 @@ app.post('/api/webhook/ha', (req, res) => {
   // Auto-clean events older than 24h
   db.prepare("DELETE FROM ha_events WHERE created_at < datetime('now','-24 hours')").run();
   const r = db.prepare('INSERT INTO ha_events (title,message,icon) VALUES (?,?,?)').run(title.trim(), message, icon);
+  // Push to all connected browsers immediately
+  broadcastSSE('activity', {
+    id: r.lastInsertRowid, title: title.trim(), message, icon, source: 'ha',
+    created_at: new Date().toISOString(),
+  });
   res.json({ ok: true, id: r.lastInsertRowid });
 });
 
@@ -1188,6 +1216,8 @@ app.put('/api/settings/smart-home', requireAdmin, (req, res) => {
     delete _wCache['who_home'];
     delete _wCache['thermostat'];
   }
+  // Reconnect real-time clients when credentials change
+  if (ha_url !== undefined || ha_token !== undefined) haWsRestart();
   res.json({ ok: true });
 });
 
@@ -2651,5 +2681,133 @@ cron.schedule('0 18 * * 0', async () => {
 
 // ── SPA fallback ──────────────────────────────────────────────────────────────
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'dist', 'index.html')));
+
+// ── HA WebSocket — real-time entity state changes ────────────────────────────
+let _haWs = null, _haWsRetryMs = 2000, _haWsTimer = null;
+
+function _haWsCfg() {
+  const g = k => db.prepare('SELECT value FROM settings WHERE key=?').get(k)?.value || '';
+  return { url: g('ha_url').replace(/\/$/, ''), token: g('ha_token') };
+}
+function _haWsTracked() {
+  const g = k => db.prepare('SELECT value FROM settings WHERE key=?').get(k)?.value || '';
+  return new Set([
+    ...g('ha_person_entities').split(','),
+    ...g('ha_sensor_entities').split(','),
+    g('ha_climate_entity'),
+  ].map(s => s.trim()).filter(Boolean));
+}
+function haWsConnect() {
+  const { url, token } = _haWsCfg();
+  if (!url || !token) return;
+  const wsUrl = url.replace(/^https/, 'wss').replace(/^http/, 'ws') + '/api/websocket';
+  try { _haWs = new WebSocket(wsUrl, { rejectUnauthorized: false }); }
+  catch (e) { console.warn('[ha-ws] connect error:', e.message); return haWsScheduleReconnect(); }
+  let msgId = 1;
+  _haWs.on('open', () => { console.log('[ha-ws] connected'); _haWsRetryMs = 2000; });
+  _haWs.on('message', raw => {
+    let msg; try { msg = JSON.parse(raw); } catch { return; }
+    if (msg.type === 'auth_required') {
+      _haWs.send(JSON.stringify({ type: 'auth', access_token: token }));
+    } else if (msg.type === 'auth_ok') {
+      _haWs.send(JSON.stringify({ id: msgId++, type: 'subscribe_events', event_type: 'state_changed' }));
+      console.log('[ha-ws] authenticated + subscribed to state_changed');
+    } else if (msg.type === 'auth_invalid') {
+      console.error('[ha-ws] auth invalid — check HA token'); _haWsRetryMs = 60000; _haWs.close();
+    } else if (msg.type === 'event') {
+      const { entity_id } = msg.event?.data || {};
+      if (!entity_id || !_haWsTracked().has(entity_id)) return;
+      // Invalidate relevant widget cache so next fetch is fresh
+      if (entity_id.startsWith('person.')) delete _wCache['who_home'];
+      else if (entity_id.startsWith('climate.')) delete _wCache['thermostat'];
+      else delete _wCache['ha_sensors'];
+      broadcastSSE('refresh', { source: 'ha', entity: entity_id });
+    }
+  });
+  _haWs.on('close', () => { console.log('[ha-ws] disconnected'); haWsScheduleReconnect(); });
+  _haWs.on('error', e => console.warn('[ha-ws] error:', e.message));
+}
+function haWsScheduleReconnect() {
+  if (_haWsTimer) return;
+  _haWsTimer = setTimeout(() => { _haWsTimer = null; haWsConnect(); }, _haWsRetryMs);
+  _haWsRetryMs = Math.min(_haWsRetryMs * 2, 30000);
+}
+function haWsRestart() {
+  if (_haWsTimer) { clearTimeout(_haWsTimer); _haWsTimer = null; }
+  if (_haWs) { _haWs.removeAllListeners(); try { _haWs.close(); } catch {} _haWs = null; }
+  _haWsRetryMs = 2000;
+  haWsConnect();
+}
+setTimeout(haWsConnect, 3000); // wait for DB init
+
+// ── Homey background poller — real-time timeline + presence ───────────────────
+let _homeyTlKey = null;   // newest timeline entry key (to detect new ones)
+let _homeyPresence = {};  // userId → present boolean
+
+async function homeyPoll() {
+  const g = k => db.prepare('SELECT value FROM settings WHERE key=?').get(k)?.value || '';
+  const homeyUrl = g('homey_url').replace(/\/$/, '');
+  const homeyToken = g('homey_token');
+  if (!homeyUrl || !homeyToken) return;
+  const hdrs = { Authorization: `Bearer ${homeyToken}` };
+  const unwrap = r => (r && typeof r === 'object' && 'result' in r) ? r.result : r;
+
+  // Timeline — detect new flow notification entries
+  try {
+    const tlRaw = await fetch(`${homeyUrl}/api/manager/timeline/timeline/`, {
+      headers: hdrs, signal: AbortSignal.timeout(8000),
+    }).then(r => r.json()).catch(() => null);
+    const tlData = unwrap(tlRaw);
+    if (tlData && typeof tlData === 'object') {
+      // Find newest entry by dateCreated (handles both UUIDs and numeric keys)
+      const entries = Object.entries(tlData).map(([key, val]) => ({ _key: key, ...val }));
+      if (entries.length) {
+        entries.sort((a, b) => Number(b.dateCreated || 0) - Number(a.dateCreated || 0));
+        const newest = entries[0];
+        const newestKey = newest._key;
+        if (_homeyTlKey !== null && newestKey !== _homeyTlKey) {
+          let created_at = new Date().toISOString();
+          if (newest.dateCreated) {
+            const num = Number(newest.dateCreated);
+            if (!isNaN(num)) created_at = new Date(num < 1e10 ? num * 1000 : num).toISOString();
+          }
+          broadcastSSE('activity', {
+            title: newest.title || newest.excerpt || 'Homey',
+            message: newest.excerpt || '',
+            icon: '🏡', source: 'homey', created_at,
+          });
+        }
+        _homeyTlKey = newestKey;
+      }
+    }
+  } catch (_) {}
+
+  // Presence — detect changes for mapped Homey users
+  const personStr = g('homey_person_devices');
+  if (!personStr) return;
+  try {
+    const uids = personStr.split(',').map(s => s.trim()).filter(Boolean);
+    const urRaw = await fetch(`${homeyUrl}/api/manager/users/user/`, {
+      headers: hdrs, signal: AbortSignal.timeout(8000),
+    }).then(r => r.json()).catch(() => null);
+    const usersData = unwrap(urRaw);
+    if (!usersData || typeof usersData !== 'object') return;
+    const usersMap = Array.isArray(usersData)
+      ? Object.fromEntries(usersData.map(u => [u.id, u]))
+      : usersData;
+    let changed = false;
+    for (const uid of uids) {
+      const u = usersMap[uid]; if (!u) continue;
+      if (_homeyPresence[uid] !== u.present) { changed = true; _homeyPresence[uid] = u.present; }
+    }
+    if (changed) {
+      delete _wCache['who_home'];
+      broadcastSSE('refresh', { source: 'homey', widgets: ['who_home'] });
+    }
+  } catch (_) {}
+}
+
+setInterval(() => homeyPoll().catch(() => {}), 15000);
+setTimeout(() => homeyPoll().catch(() => {}), 6000); // initial run after 6s
 
 app.listen(PORT, () => console.log(`Kith running → http://localhost:${PORT}`));

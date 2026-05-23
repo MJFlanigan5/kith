@@ -1257,7 +1257,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         if(['off','closed','locked','clear','no_motion','dry'].includes(s)) return A.green;
                         return D.t2;
                       };
-                      const domainIcon={lock:'🔒',binary_sensor:'◉',light:'💡',switch:'🔌',alarm_control_panel:'🚨',climate:'🌡',cover:'🪟',sensor:'📡',camera:'📷',motion:'🏃'};
+                      const domainIcon={lock:'🔒',locked:'🔒',alarm_motion:'🏃',alarm_contact:'🚪',alarm_smoke:'🔥',alarm_co:'💨',alarm_water:'💧',binary_sensor:'◉',light:'💡',switch:'🔌',alarm_control_panel:'🚨',climate:'🌡',cover:'🪟',sensor:'📡',camera:'📷',motion:'🏃',onoff:'💡',measure_temperature:'🌡',measure_humidity:'💧',measure_power:'⚡'};
                       return(
                         <>
                           <WLabel style={{marginBottom:10}}>Home</WLabel>
@@ -1285,7 +1285,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         else d=new Date(!ts.endsWith('Z')&&!ts.includes('+')?ts+'Z':ts);
                         if(isNaN(d.getTime())) return '';
                         const m=Math.round((Date.now()-d.getTime())/60000);
-                        return m<1?'just now':m<60?`${m}m ago`:m<1440?`${Math.round(m/60)}h ago`:'yesterday';
+                        return m<1?'just now':m<60?`${m}m ago`:m<1440?`${Math.round(m/60)}h ago`:m<2880?'yesterday':`${Math.round(m/1440)}d ago`;
                       };
                       return(
                         <>

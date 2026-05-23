@@ -1401,7 +1401,7 @@ app.get('/api/ha/pull', async (req, res) => {
     // Timeline — flow execution history with notification messages
     const tlRaw = await fetch(`${base}/api/manager/timeline/timeline/`, { headers: hdrs, signal: AbortSignal.timeout(6000) }).then(r => r.json()).catch(() => null);
     const tlData = unwrap(tlRaw);
-    if (tlData) console.log('[homey/timeline] sample entry:', JSON.stringify(Object.values(tlData)[0]).slice(0, 300));
+    if (tlData && Object.keys(tlData).length) console.log('[homey/timeline] sample entry:', JSON.stringify(Object.values(tlData)[0] ?? {}).slice(0, 300));
     const timeline = tlData && typeof tlData === 'object'
       ? Object.values(tlData).map(n => {
           // dateCreated may be Unix seconds or ms — normalize to ISO string
@@ -2078,8 +2078,11 @@ app.get('/api/widgets/data', async (req, res) => {
           });
         });
       }
-      if (!persons.length) return null;
-      return { persons };
+      // Deduplicate by name — prevents double-entry when same person tracked in both HA and Homey
+      const seen = new Set();
+      const unique = persons.filter(p => { const k = p.name.toLowerCase(); return seen.has(k) ? false : seen.add(k); });
+      if (!unique.length) return null;
+      return { persons: unique };
     }).then(d => { if (d) result.who_home = d; }));
 
   // ── Thermostat (HA climate or Homey thermostat) ────────────────────────────
@@ -2164,7 +2167,10 @@ app.get('/api/widgets/data', async (req, res) => {
           if (!capKey) capKey = Object.keys(capObj).find(k => capObj[k]?.value != null);
           const capData = capKey ? capObj[capKey] : null;
           const rawVal  = capData?.value;
-          const state   = rawVal === true ? 'on' : rawVal === false ? 'off' : rawVal != null ? String(rawVal) : 'unknown';
+          // locked capability: true=locked (safe), false=unlocked (alert) — preserve as strings so stateColor works correctly
+          const state   = capKey === 'locked'
+            ? (rawVal === true ? 'locked' : rawVal === false ? 'unlocked' : 'unknown')
+            : (rawVal === true ? 'on' : rawVal === false ? 'off' : rawVal != null ? String(rawVal) : 'unknown');
           const unit    = capData?.units || '';
           sensors.push({
             entity_id: ids[i],

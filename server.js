@@ -1381,23 +1381,11 @@ app.get('/api/ha/pull', async (req, res) => {
     if (!haUrl || !haToken) return [];
     const base = haUrl.replace(/\/$/, '');
     const hdrs = { 'Authorization': `Bearer ${haToken}`, 'Content-Type': 'application/json' };
-    const sig = AbortSignal.timeout(6000);
-
-    // Persistent notifications (automations that call notify.persistent_notification)
-    const states = await fetch(`${base}/api/states`, { headers: hdrs, signal: sig }).then(r => r.json()).catch(() => []);
-    const persistent = (Array.isArray(states) ? states : [])
+    // Only pull persistent notifications — these have human-authored titles and messages
+    const states = await fetch(`${base}/api/states`, { headers: hdrs, signal: AbortSignal.timeout(6000) }).then(r => r.json()).catch(() => []);
+    return (Array.isArray(states) ? states : [])
       .filter(s => s.entity_id?.startsWith('persistent_notification.') && s.state !== 'dismissed')
       .map(s => ({ title: s.attributes?.title || s.entity_id.replace('persistent_notification.', ''), message: s.attributes?.message || '', icon: '🏠', source: 'ha', created_at: s.last_changed || new Date().toISOString() }));
-
-    // Logbook — last 6h, filter to automation domain client-side (no wildcard needed)
-    const start = new Date(Date.now() - 21600000).toISOString();
-    const logbook = await fetch(`${base}/api/logbook/${start}`, { headers: hdrs, signal: AbortSignal.timeout(8000) }).then(r => r.json()).catch(() => []);
-    const automations = (Array.isArray(logbook) ? logbook : [])
-      .filter(e => e.domain === 'automation' || e.entity_id?.startsWith('automation.'))
-      .slice(0, 10)
-      .map(e => ({ title: e.name || 'Automation', message: e.message || '', icon: '⚡', source: 'ha', created_at: e.when || new Date().toISOString() }));
-
-    return [...persistent, ...automations];
   };
 
   const fetchHomey = async () => {
@@ -1418,7 +1406,8 @@ app.get('/api/ha/pull', async (req, res) => {
 
   try {
     const [haEvents, homeyEvents] = await Promise.all([fetchHA().catch(()=>[]), fetchHomey().catch(()=>[])]);
-    const merged = [...haEvents, ...homeyEvents].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 10);
+    // Homey first — timeline entries are human-readable flow notifications
+    const merged = [...homeyEvents, ...haEvents].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 10);
     res.json(merged);
   } catch (e) {
     res.status(502).json({ error: e.message });

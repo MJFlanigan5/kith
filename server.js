@@ -1389,11 +1389,12 @@ app.get('/api/ha/pull', async (req, res) => {
       .filter(s => s.entity_id?.startsWith('persistent_notification.') && s.state !== 'dismissed')
       .map(s => ({ title: s.attributes?.title || s.entity_id.replace('persistent_notification.', ''), message: s.attributes?.message || '', icon: '🏠', source: 'ha', created_at: s.last_changed || new Date().toISOString() }));
 
-    // Logbook — last 24h of automation triggers
-    const start = new Date(Date.now() - 86400000).toISOString();
-    const logbook = await fetch(`${base}/api/logbook/${start}?entity_id=automation.*`, { headers: hdrs, signal: AbortSignal.timeout(6000) }).then(r => r.json()).catch(() => []);
+    // Logbook — last 6h, filter to automation domain client-side (no wildcard needed)
+    const start = new Date(Date.now() - 21600000).toISOString();
+    const logbook = await fetch(`${base}/api/logbook/${start}`, { headers: hdrs, signal: AbortSignal.timeout(8000) }).then(r => r.json()).catch(() => []);
     const automations = (Array.isArray(logbook) ? logbook : [])
-      .slice(0, 15)
+      .filter(e => e.domain === 'automation' || e.entity_id?.startsWith('automation.'))
+      .slice(0, 10)
       .map(e => ({ title: e.name || 'Automation', message: e.message || '', icon: '⚡', source: 'ha', created_at: e.when || new Date().toISOString() }));
 
     return [...persistent, ...automations];

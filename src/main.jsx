@@ -498,12 +498,6 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
     const id=setInterval(()=>setPlexIdx(i=>(i+1)%items.length),6000);
     return()=>clearInterval(id);
   },[widgetData?.plex?.items?.length, widgetData?.plex?.type]);
-  const [notifIdx,setNotifIdx]=useState(0);
-  useEffect(()=>{
-    if(allSmartEvents.length<2) return;
-    const id=setInterval(()=>setNotifIdx(i=>(i+1)%allSmartEvents.length),8000);
-    return()=>clearInterval(id);
-  },[allSmartEvents.length]);
   const [showControls,setShowControls]=useState(false);
   const hideTimer=useRef(null);
   useEffect(()=>{
@@ -1275,26 +1269,29 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                       </>
                     )}
                     {activePanelId==='w_notifications'&&(()=>{
-                      const ev=allSmartEvents[notifIdx%Math.max(1,allSmartEvents.length)];
-                      if(!ev) return null;
-                      const ts=new Date(ev.created_at&&(ev.created_at.endsWith('Z')||ev.created_at.includes('+'))?ev.created_at:ev.created_at+'Z');
-                      const ago=Math.round((Date.now()-ts.getTime())/60000);
-                      const agoStr=isNaN(ago)?'':ago<1?'just now':ago<60?`${ago}m ago`:ago<1440?`${Math.round(ago/60)}h ago`:'yesterday';
-                      const sourceLabel=ev.source==='homey'?'Homey':'Home Assistant';
+                      const recent=allSmartEvents.slice(0,3);
+                      if(!recent.length) return null;
+                      const fmtAgo=ts=>{
+                        if(!ts) return '';
+                        const d=new Date(typeof ts==='string'&&!ts.endsWith('Z')&&!ts.includes('+')?ts+'Z':ts);
+                        if(isNaN(d.getTime())) return '';
+                        const m=Math.round((Date.now()-d.getTime())/60000);
+                        return m<1?'just now':m<60?`${m}m ago`:m<1440?`${Math.round(m/60)}h ago`:'yesterday';
+                      };
                       return(
                         <>
-                          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
-                            <WLabel>Activity</WLabel>
-                            {allSmartEvents.length>1&&<div style={{fontSize:10,color:D.t4}}>{(notifIdx%allSmartEvents.length)+1}/{allSmartEvents.length}</div>}
-                          </div>
-                          <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',alignItems:'center',gap:10,textAlign:'center'}}>
-                            <span style={{fontSize:44,lineHeight:1}}>{ev.icon||'🏠'}</span>
-                            <div style={{fontSize:16,fontWeight:700,color:D.t1,lineHeight:1.3,maxWidth:'90%'}}>{ev.title}</div>
-                            {ev.message&&<div style={{fontSize:12,color:D.t3,lineHeight:1.4,maxWidth:'90%'}}>{ev.message}</div>}
-                            <div style={{display:'flex',gap:8,alignItems:'center',marginTop:4}}>
-                              <span style={{fontSize:10,color:D.t4,background:'rgba(255,255,255,0.08)',borderRadius:20,padding:'2px 8px'}}>{sourceLabel}</span>
-                              {agoStr&&<span style={{fontSize:10,color:D.t4}}>{agoStr}</span>}
-                            </div>
+                          <WLabel style={{marginBottom:10}}>Activity</WLabel>
+                          <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',gap:8}}>
+                            {recent.map((ev,i)=>(
+                              <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 10px',background:'rgba(255,255,255,0.06)',borderRadius:10}}>
+                                <span style={{fontSize:22,flexShrink:0}}>{ev.icon||'🏠'}</span>
+                                <div style={{flex:1,minWidth:0}}>
+                                  <div style={{fontSize:13,fontWeight:600,color:D.t1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ev.title}</div>
+                                  {ev.message&&<div style={{fontSize:11,color:D.t3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginTop:1}}>{ev.message}</div>}
+                                </div>
+                                <span style={{fontSize:10,color:D.t4,flexShrink:0,whiteSpace:'nowrap'}}>{fmtAgo(ev.created_at)}</span>
+                              </div>
+                            ))}
                           </div>
                         </>
                       );

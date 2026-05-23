@@ -1171,8 +1171,11 @@ app.get('/api/events/stream', (req, res) => {
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
   _sseClients.add(res);
-  // Heartbeat every 25s to prevent proxy/browser timeout
-  const hb = setInterval(() => { try { res.write(':ping\n\n'); } catch {} }, 25000);
+  // Heartbeat every 25s — cleans up on failed write (handles abrupt disconnects)
+  const hb = setInterval(() => {
+    try { res.write(':ping\n\n'); }
+    catch { clearInterval(hb); _sseClients.delete(res); }
+  }, 25000);
   req.on('close', () => { clearInterval(hb); _sseClients.delete(res); });
 });
 
@@ -2689,13 +2692,18 @@ function _haWsCfg() {
   const g = k => db.prepare('SELECT value FROM settings WHERE key=?').get(k)?.value || '';
   return { url: g('ha_url').replace(/\/$/, ''), token: g('ha_token') };
 }
+// Cached tracked entity set — refreshed every 60s to avoid DB reads on every HA event
+let _haWsTrackedCache = null, _haWsTrackedAt = 0;
 function _haWsTracked() {
+  if (_haWsTrackedCache && Date.now() - _haWsTrackedAt < 60000) return _haWsTrackedCache;
   const g = k => db.prepare('SELECT value FROM settings WHERE key=?').get(k)?.value || '';
-  return new Set([
+  _haWsTrackedCache = new Set([
     ...g('ha_person_entities').split(','),
     ...g('ha_sensor_entities').split(','),
     g('ha_climate_entity'),
   ].map(s => s.trim()).filter(Boolean));
+  _haWsTrackedAt = Date.now();
+  return _haWsTrackedCache;
 }
 function haWsConnect() {
   const { url, token } = _haWsCfg();
@@ -2715,8 +2723,10 @@ function haWsConnect() {
     } else if (msg.type === 'auth_invalid') {
       console.error('[ha-ws] auth invalid — check HA token'); _haWsRetryMs = 60000; _haWs.close();
     } else if (msg.type === 'event') {
-      const { entity_id } = msg.event?.data || {};
+      const { entity_id, new_state, old_state } = msg.event?.data || {};
       if (!entity_id || !_haWsTracked().has(entity_id)) return;
+      // Skip attribute-only changes (e.g. last_updated, latitude_accuracy) — only care about state value
+      if (new_state?.state === old_state?.state) return;
       // Invalidate relevant widget cache so next fetch is fresh
       if (entity_id.startsWith('person.')) delete _wCache['who_home'];
       else if (entity_id.startsWith('climate.')) delete _wCache['thermostat'];
@@ -2736,6 +2746,7 @@ function haWsRestart() {
   if (_haWsTimer) { clearTimeout(_haWsTimer); _haWsTimer = null; }
   if (_haWs) { _haWs.removeAllListeners(); try { _haWs.close(); } catch {} _haWs = null; }
   _haWsRetryMs = 2000;
+  _haWsTrackedCache = null; // force entity list refresh on next event
   haWsConnect();
 }
 setTimeout(haWsConnect, 3000); // wait for DB init

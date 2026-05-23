@@ -1397,8 +1397,22 @@ app.get('/api/ha/pull', async (req, res) => {
     // Timeline — flow execution history with notification messages
     const tlRaw = await fetch(`${base}/api/manager/timeline/timeline/`, { headers: hdrs, signal: AbortSignal.timeout(6000) }).then(r => r.json()).catch(() => null);
     const tlData = unwrap(tlRaw);
+    if (tlData) console.log('[homey/timeline] sample entry:', JSON.stringify(Object.values(tlData)[0]).slice(0, 300));
     const timeline = tlData && typeof tlData === 'object'
-      ? Object.values(tlData).map(n => ({ title: n.title || n.excerpt || 'Homey', message: n.excerpt || '', icon: '🏡', source: 'homey', created_at: n.dateCreated || new Date().toISOString() }))
+      ? Object.values(tlData).map(n => {
+          // dateCreated may be Unix seconds or ms — normalize to ISO string
+          let created_at = new Date().toISOString();
+          if (n.dateCreated) {
+            const num = Number(n.dateCreated);
+            if (!isNaN(num)) {
+              // Unix seconds if < 1e10, ms if >= 1e10
+              created_at = new Date(num < 1e10 ? num * 1000 : num).toISOString();
+            } else {
+              created_at = n.dateCreated;
+            }
+          }
+          return { title: n.title || n.excerpt || 'Homey', message: n.excerpt || '', icon: '🏡', source: 'homey', created_at };
+        })
       : [];
 
     return timeline.slice(0, 15);

@@ -1273,7 +1273,9 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                       if(!recent.length) return null;
                       const fmtAgo=ts=>{
                         if(!ts) return '';
-                        const d=new Date(typeof ts==='string'&&!ts.endsWith('Z')&&!ts.includes('+')?ts+'Z':ts);
+                        let d;
+                        if(typeof ts==='number') d=new Date(ts<1e10?ts*1000:ts);
+                        else d=new Date(!ts.endsWith('Z')&&!ts.includes('+')?ts+'Z':ts);
                         if(isNaN(d.getTime())) return '';
                         const m=Math.round((Date.now()-d.getTime())/60000);
                         return m<1?'just now':m<60?`${m}m ago`:m<1440?`${Math.round(m/60)}h ago`:'yesterday';

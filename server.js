@@ -750,6 +750,7 @@ app.get('/api/settings/integrations', requireAdmin, (req, res) => {
     ha_unifi_tx:       get('ha_unifi_tx'),
     ha_person_entities:  get('ha_person_entities'),
     ha_climate_entity:   get('ha_climate_entity'),
+    presence_source:     get('presence_source') || 'both',
     ha_sensor_entities:    get('ha_sensor_entities'),
     homey_sensor_devices:  get('homey_sensor_devices'),
     homey_person_devices: get('homey_person_devices'),
@@ -790,6 +791,7 @@ app.put('/api/settings/integrations', requireAdmin, (req, res) => {
   if (req.body.ha_unifi_tx      !== undefined) { upd.run('ha_unifi_tx',      String(req.body.ha_unifi_tx));      clearUnifiCache = true; }
   let clearPersonCache = false, clearClimateCache = false;
   if (req.body.ha_person_entities   !== undefined) { upd.run('ha_person_entities',   String(req.body.ha_person_entities));   clearPersonCache = true; }
+  if (req.body.presence_source      !== undefined) { upd.run('presence_source',      String(req.body.presence_source));      clearPersonCache = true; }
   if (req.body.ha_climate_entity    !== undefined) { upd.run('ha_climate_entity',    String(req.body.ha_climate_entity));    clearClimateCache = true; }
   if (req.body.ha_sensor_entities   !== undefined) { upd.run('ha_sensor_entities',   String(req.body.ha_sensor_entities));   delete _wCache['ha_sensors']; }
   if (req.body.homey_sensor_devices !== undefined) { upd.run('homey_sensor_devices', String(req.body.homey_sensor_devices)); delete _wCache['ha_sensors']; }
@@ -2044,30 +2046,30 @@ app.get('/api/widgets/data', async (req, res) => {
       return parseHealth(healthR.json());
     }).then(d => { if (d) result.unifi = d; }));
 
-  // ── Who's Home (HA persons + Homey presence, merged) ──────────────────────
-  const personEntitiesStr = gs('ha_person_entities');
+  // ── Who's Home ────────────────────────────────────────────────────────────
+  const personEntitiesStr    = gs('ha_person_entities');
   const homeyPersonDevicesStr = gs('homey_person_devices');
-  const useHaPersons    = !!(haBaseUrl && haAuthToken && personEntitiesStr);
-  const useHomeyPersons = !!(homeyBaseUrl && homeyAuthToken && homeyPersonDevicesStr);
+  const presenceSource       = gs('presence_source') || 'both'; // 'ha' | 'homey' | 'both'
+  const useHaPersons    = presenceSource !== 'homey' && !!(haBaseUrl && haAuthToken && personEntitiesStr);
+  const useHomeyPersons = presenceSource !== 'ha'    && !!(homeyBaseUrl && homeyAuthToken && homeyPersonDevicesStr);
   if (useHaPersons || useHomeyPersons)
     p.push(_wFetch('who_home', 60000, async () => {
       const persons = [];
       if (useHaPersons) {
         const ids = personEntitiesStr.split(',').map(s => s.trim()).filter(Boolean);
         const results = await Promise.all(ids.map(id => haGet(id).catch(() => null)));
-        // F2 fix: skip null results (failed fetches) rather than adding ghost entries
         results.forEach((s, i) => {
           if (!s) return;
           persons.push({
             entity_id: ids[i],
-            name:  s.attributes?.friendly_name || ids[i].replace('person.', ''),
+            name:  s.attributes?.friendly_name || ids[i].replace('person.', '').replace(/_/g, ' '),
             state: s.state || 'unknown',
+            source: 'ha',
           });
         });
       }
       if (useHomeyPersons) {
         const ids = homeyPersonDevicesStr.split(',').map(s => s.trim()).filter(Boolean);
-        // Homey presence lives in /api/manager/users/user/, not device capabilities
         const users = await Promise.all(ids.map(id => homeyGetUser(id).catch(() => null)));
         users.forEach((u, i) => {
           if (!u) return;
@@ -2075,12 +2077,21 @@ app.get('/api/widgets/data', async (req, res) => {
             entity_id: ids[i],
             name:  u.name || ids[i],
             state: u.present === true ? 'home' : u.present === false ? 'not_home' : 'unknown',
+            source: 'homey',
           });
         });
       }
-      // Deduplicate by name — prevents double-entry when same person tracked in both HA and Homey
-      const seen = new Set();
-      const unique = persons.filter(p => { const k = p.name.toLowerCase(); return seen.has(k) ? false : seen.add(k); });
+      // Deduplicate: exact name first, then first-name fallback (handles "Mike" vs "Mike Flanigan")
+      const seen = new Map(); // normalizedKey → index in unique[]
+      const unique = [];
+      for (const p of persons) {
+        const exact = p.name.toLowerCase();
+        const first = exact.split(' ')[0];
+        if (seen.has(exact) || seen.has(first)) continue;
+        seen.set(exact, unique.length);
+        seen.set(first, unique.length);
+        unique.push(p);
+      }
       if (!unique.length) return null;
       return { persons: unique };
     }).then(d => { if (d) result.who_home = d; }));

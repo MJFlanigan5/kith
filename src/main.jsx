@@ -1195,17 +1195,25 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                     })()}
                     {activePanelId==='w_who_home'&&(()=>{
                       const {persons=[]}=widgetData.who_home;
-                      const stateLabel=s=>s==='home'?'Home':s==='not_home'?'Away':s||'Unknown';
-                      const stateColor=s=>s==='home'?A.green:s==='not_home'?D.t3:'#FF9500';
+                      const isHome=s=>s==='home';
+                      const stateLabel=s=>s==='home'?'Home':s==='not_home'?'Away':s?s.replace(/_/g,' '):'Unknown';
+                      const stateColor=s=>isHome(s)?A.green:s==='not_home'?D.t4:'#FF9500';
+                      const initials=n=>n.trim().split(/\s+/).map(w=>w[0]||'').join('').slice(0,2).toUpperCase()||'?';
+                      const homeCount=persons.filter(p=>isHome(p.state)).length;
                       return(
                         <>
-                          <WLabel>Who's Home</WLabel>
+                          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
+                            <WLabel>Who's Home</WLabel>
+                            <span style={{fontSize:11,color:D.t4}}>{homeCount} of {persons.length} home</span>
+                          </div>
                           <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',gap:10}}>
                             {persons.map(p=>(
                               <div key={p.entity_id} style={{display:'flex',alignItems:'center',gap:12}}>
-                                <div style={{width:10,height:10,borderRadius:'50%',background:stateColor(p.state),flexShrink:0}}/>
+                                <div style={{width:34,height:34,borderRadius:'50%',background:stateColor(p.state),opacity:isHome(p.state)?1:0.35,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                                  <span style={{fontSize:13,fontWeight:700,color:'#fff'}}>{initials(p.name)}</span>
+                                </div>
                                 <span style={{fontSize:15,fontWeight:600,color:D.t1,flex:1}}>{p.name}</span>
-                                <span style={{fontSize:13,fontWeight:500,color:stateColor(p.state),textTransform:'capitalize'}}>{stateLabel(p.state)}</span>
+                                <span style={{fontSize:12,fontWeight:500,color:stateColor(p.state)}}>{stateLabel(p.state)}</span>
                               </div>
                             ))}
                             {!persons.length&&<div style={{fontSize:13,color:D.t4}}>No people configured</div>}
@@ -2861,9 +2869,10 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [haUnifiMap,setHaUnifiMap]=useState({clients:'',rx:'',tx:''});
   const [haMoenSource,setHaMoenSource]=useState('direct'); // 'ha' or 'direct'
   const [haUnifiSource,setHaUnifiSource]=useState('direct');
-  const [haPersonIds,setHaPersonIds]=useState([]); // array of person.* entity IDs
+  const [haPersonIds,setHaPersonIds]=useState([]);
   const [haClimateEntity,setHaClimateEntity]=useState('');
   const [haSensorEntities,setHaSensorEntities]=useState('');
+  const [presenceSource,setPresenceSource]=useState('both');
   const [homeyDiscovering,setHomeyDiscovering]=useState(false);
   const [homeyDiscovered,setHomeyDiscovered]=useState(null); // {users,thermostats,allDevices}
   const [homeyPersonIds,setHomeyPersonIds]=useState([]); // array of Homey device IDs
@@ -2981,6 +2990,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
       setHaPersonIds(personStr?personStr.split(',').map(s=>s.trim()).filter(Boolean):[]);
       setHaClimateEntity(d.ha_climate_entity||'');
       setHaSensorEntities(d.ha_sensor_entities||'');
+      setPresenceSource(d.presence_source||'both');
       const homeyPersonStr=d.homey_person_devices||'';
       setHomeyPersonIds(homeyPersonStr?homeyPersonStr.split(',').map(s=>s.trim()).filter(Boolean):[]);
       setHomeyClimateDevice(d.homey_climate_device||'');
@@ -3499,7 +3509,16 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
                   </select>
                 </div>
               ))}
-              <div style={{fontSize:12,fontWeight:600,color:A.label2,marginTop:12,marginBottom:8}}>Who's Home</div>
+              <div style={{fontSize:12,fontWeight:600,color:A.label2,marginTop:12,marginBottom:6}}>Who's Home — Source</div>
+              <div style={{display:'flex',gap:6,marginBottom:10,flexWrap:'wrap'}}>
+                {[['both','Both (merge)'],['ha','HA only'],['homey','Homey only']].map(([val,label])=>(
+                  <label key={val} style={{display:'flex',alignItems:'center',gap:5,cursor:'pointer',fontSize:12,color:presenceSource===val?A.blue:A.label3}}>
+                    <input type="radio" name="presence_source" value={val} checked={presenceSource===val} onChange={()=>setPresenceSource(val)}/>
+                    {label}
+                  </label>
+                ))}
+              </div>
+              <div style={{fontSize:11,color:A.label5,marginBottom:8}}>HA person entities</div>
               {(haDiscovered.persons||[]).length===0
                 ?<div style={{fontSize:11,color:A.label5,marginBottom:4}}>No person.* entities found in HA</div>
                 :(haDiscovered.persons||[]).map(p=>(
@@ -3545,7 +3564,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
                 );
               })()}
               <Btn sm style={{marginTop:8}} onClick={async()=>{
-                const payload={ha_moen_flow:haMoenMap.flow,ha_moen_pressure:haMoenMap.pressure,ha_moen_daily:haMoenMap.daily,ha_moen_mode:haMoenMap.mode,ha_moen_alert:haMoenMap.alert,ha_unifi_clients:haUnifiMap.clients,ha_unifi_rx:haUnifiMap.rx,ha_unifi_tx:haUnifiMap.tx,ha_person_entities:haPersonIds.join(','),ha_climate_entity:haClimateEntity,ha_sensor_entities:haSensorEntities};
+                const payload={ha_moen_flow:haMoenMap.flow,ha_moen_pressure:haMoenMap.pressure,ha_moen_daily:haMoenMap.daily,ha_moen_mode:haMoenMap.mode,ha_moen_alert:haMoenMap.alert,ha_unifi_clients:haUnifiMap.clients,ha_unifi_rx:haUnifiMap.rx,ha_unifi_tx:haUnifiMap.tx,ha_person_entities:haPersonIds.join(','),ha_climate_entity:haClimateEntity,ha_sensor_entities:haSensorEntities,presence_source:presenceSource};
                 await fetch('/api/settings/integrations',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify(payload)});
                 if(haMoenMap.flow) setHaMoenSource('ha'); else setHaMoenSource('direct');
                 if(haUnifiMap.clients||haUnifiMap.rx||haUnifiMap.tx) setHaUnifiSource('ha'); else setHaUnifiSource('direct');

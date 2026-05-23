@@ -498,6 +498,12 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
     const id=setInterval(()=>setPlexIdx(i=>(i+1)%items.length),6000);
     return()=>clearInterval(id);
   },[widgetData?.plex?.items?.length, widgetData?.plex?.type]);
+  const [notifIdx,setNotifIdx]=useState(0);
+  useEffect(()=>{
+    if(allSmartEvents.length<2) return;
+    const id=setInterval(()=>setNotifIdx(i=>(i+1)%allSmartEvents.length),8000);
+    return()=>clearInterval(id);
+  },[allSmartEvents.length]);
   const [showControls,setShowControls]=useState(false);
   const hideTimer=useRef(null);
   useEffect(()=>{
@@ -563,6 +569,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
     ...(widgetData.who_home?['w_who_home']:[]),
     ...(widgetData.thermostat?['w_thermostat']:[]),
     ...(widgetData.ha_coming?['w_ha_coming']:[]),
+    ...(allSmartEvents.length>0?['w_notifications']:[]),
   ];
   const activePanelId=centerPanels[centerIdx%Math.max(1,centerPanels.length)];
 
@@ -1267,6 +1274,31 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         </div>
                       </>
                     )}
+                    {activePanelId==='w_notifications'&&(()=>{
+                      const ev=allSmartEvents[notifIdx%Math.max(1,allSmartEvents.length)];
+                      if(!ev) return null;
+                      const ts=new Date(ev.created_at&&(ev.created_at.endsWith('Z')||ev.created_at.includes('+'))?ev.created_at:ev.created_at+'Z');
+                      const ago=Math.round((Date.now()-ts.getTime())/60000);
+                      const agoStr=isNaN(ago)?'':ago<1?'just now':ago<60?`${ago}m ago`:ago<1440?`${Math.round(ago/60)}h ago`:'yesterday';
+                      const sourceLabel=ev.source==='homey'?'Homey':'Home Assistant';
+                      return(
+                        <>
+                          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+                            <WLabel>Activity</WLabel>
+                            {allSmartEvents.length>1&&<div style={{fontSize:10,color:D.t4}}>{(notifIdx%allSmartEvents.length)+1}/{allSmartEvents.length}</div>}
+                          </div>
+                          <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',alignItems:'center',gap:10,textAlign:'center'}}>
+                            <span style={{fontSize:44,lineHeight:1}}>{ev.icon||'🏠'}</span>
+                            <div style={{fontSize:16,fontWeight:700,color:D.t1,lineHeight:1.3,maxWidth:'90%'}}>{ev.title}</div>
+                            {ev.message&&<div style={{fontSize:12,color:D.t3,lineHeight:1.4,maxWidth:'90%'}}>{ev.message}</div>}
+                            <div style={{display:'flex',gap:8,alignItems:'center',marginTop:4}}>
+                              <span style={{fontSize:10,color:D.t4,background:'rgba(255,255,255,0.08)',borderRadius:20,padding:'2px 8px'}}>{sourceLabel}</span>
+                              {agoStr&&<span style={{fontSize:10,color:D.t4}}>{agoStr}</span>}
+                            </div>
+                          </div>
+                        </>
+                      );
+                    })()}
                   </Widget>
                 </div>
               )}

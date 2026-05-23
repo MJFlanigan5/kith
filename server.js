@@ -1380,25 +1380,39 @@ app.get('/api/ha/pull', async (req, res) => {
   const fetchHA = async () => {
     if (!haUrl || !haToken) return [];
     const base = haUrl.replace(/\/$/, '');
-    const states = await fetch(`${base}/api/states`, {
-      headers: { 'Authorization': `Bearer ${haToken}`, 'Content-Type': 'application/json' },
-      signal: AbortSignal.timeout(6000),
-    }).then(r => r.json());
-    return (Array.isArray(states) ? states : [])
+    const hdrs = { 'Authorization': `Bearer ${haToken}`, 'Content-Type': 'application/json' };
+    const sig = AbortSignal.timeout(6000);
+
+    // Persistent notifications (automations that call notify.persistent_notification)
+    const states = await fetch(`${base}/api/states`, { headers: hdrs, signal: sig }).then(r => r.json()).catch(() => []);
+    const persistent = (Array.isArray(states) ? states : [])
       .filter(s => s.entity_id?.startsWith('persistent_notification.') && s.state !== 'dismissed')
-      .map(s => ({ title: s.attributes?.title || s.entity_id.replace('persistent_notification.', ''), message: s.attributes?.message || '', icon: '🏠', created_at: s.last_changed || new Date().toISOString() }));
+      .map(s => ({ title: s.attributes?.title || s.entity_id.replace('persistent_notification.', ''), message: s.attributes?.message || '', icon: '🏠', source: 'ha', created_at: s.last_changed || new Date().toISOString() }));
+
+    // Logbook — last 24h of automation triggers
+    const start = new Date(Date.now() - 86400000).toISOString();
+    const logbook = await fetch(`${base}/api/logbook/${start}?entity_id=automation.*`, { headers: hdrs, signal: AbortSignal.timeout(6000) }).then(r => r.json()).catch(() => []);
+    const automations = (Array.isArray(logbook) ? logbook : [])
+      .slice(0, 15)
+      .map(e => ({ title: e.name || 'Automation', message: e.message || '', icon: '⚡', source: 'ha', created_at: e.when || new Date().toISOString() }));
+
+    return [...persistent, ...automations];
   };
 
   const fetchHomey = async () => {
     if (!homeyUrl || !homeyToken) return [];
     const base = homeyUrl.replace(/\/$/, '');
-    const r = await fetch(`${base}/api/manager/notifications/notification/`, {
-      headers: { 'Authorization': `Bearer ${homeyToken}` },
-      signal: AbortSignal.timeout(6000),
-    }).then(r => r.json());
-    const items = r.result || {};
-    return Object.values(items)
-      .map(n => ({ title: n.excerpt || 'Homey notification', message: '', icon: '🏠', created_at: n.dateCreated || new Date().toISOString() }));
+    const hdrs = { 'Authorization': `Bearer ${homeyToken}` };
+    const unwrap = r => (r && typeof r === 'object' && 'result' in r) ? r.result : r;
+
+    // Timeline — flow execution history with notification messages
+    const tlRaw = await fetch(`${base}/api/manager/timeline/timeline/`, { headers: hdrs, signal: AbortSignal.timeout(6000) }).then(r => r.json()).catch(() => null);
+    const tlData = unwrap(tlRaw);
+    const timeline = tlData && typeof tlData === 'object'
+      ? Object.values(tlData).map(n => ({ title: n.title || n.excerpt || 'Homey', message: n.excerpt || '', icon: '🏡', source: 'homey', created_at: n.dateCreated || new Date().toISOString() }))
+      : [];
+
+    return timeline.slice(0, 15);
   };
 
   try {

@@ -2868,6 +2868,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [homeyDiscovered,setHomeyDiscovered]=useState(null); // {users,thermostats,allDevices}
   const [homeyPersonIds,setHomeyPersonIds]=useState([]); // array of Homey device IDs
   const [homeyClimateDevice,setHomeyClimateDevice]=useState('');
+  const [homeySensorDevices,setHomeySensorDevices]=useState('');
 
   const [homeyUrl,setHomeyUrl]=useState('');
   const [homeyToken,setHomeyToken]=useState('');
@@ -2983,6 +2984,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
       const homeyPersonStr=d.homey_person_devices||'';
       setHomeyPersonIds(homeyPersonStr?homeyPersonStr.split(',').map(s=>s.trim()).filter(Boolean):[]);
       setHomeyClimateDevice(d.homey_climate_device||'');
+      setHomeySensorDevices(d.homey_sensor_devices||'');
     }).catch(()=>{});
     api.get('/api/quick-actions').then(d=>{if(Array.isArray(d)) setQaList(d);}).catch(()=>{});
   },[]);
@@ -3520,22 +3522,28 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
               }
               <div style={{fontSize:12,fontWeight:600,color:A.label2,marginTop:12,marginBottom:6}}>Home Tile Entities</div>
               <div style={{fontSize:11,color:A.label5,marginBottom:6}}>Pick up to 6 entities to show as live tiles (security, lights, locks, sensors…)</div>
-              <div style={{maxHeight:160,overflowY:'auto',marginBottom:6}}>
-                {(haDiscovered.allSensors||[]).map(s=>(
-                  <label key={s.entity_id} style={{display:'flex',alignItems:'center',gap:8,padding:'3px 0',cursor:'pointer'}}>
-                    <input type="checkbox"
-                      checked={haSensorEntities.split(',').map(x=>x.trim()).includes(s.entity_id)}
-                      disabled={!haSensorEntities.split(',').map(x=>x.trim()).includes(s.entity_id)&&haSensorEntities.split(',').filter(Boolean).length>=6}
-                      onChange={e=>{
-                        const cur=haSensorEntities.split(',').map(x=>x.trim()).filter(Boolean);
-                        setHaSensorEntities(e.target.checked?[...cur,s.entity_id].join(','):cur.filter(id=>id!==s.entity_id).join(','));
-                      }}
-                    />
-                    <span style={{fontSize:11,color:A.label2,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.friendly_name}</span>
-                    <span style={{fontSize:10,color:A.label5,fontFamily:'monospace'}}>{s.state}{s.unit?' '+s.unit:''}</span>
-                  </label>
-                ))}
-              </div>
+              {(()=>{
+                const selSet=new Set(haSensorEntities.split(',').map(x=>x.trim()).filter(Boolean));
+                const atMax=selSet.size>=6;
+                return(
+                  <div style={{maxHeight:160,overflowY:'auto',marginBottom:6}}>
+                    {(haDiscovered.allSensors||[]).map(s=>(
+                      <label key={s.entity_id} style={{display:'flex',alignItems:'center',gap:8,padding:'3px 0',cursor:'pointer'}}>
+                        <input type="checkbox"
+                          checked={selSet.has(s.entity_id)}
+                          disabled={!selSet.has(s.entity_id)&&atMax}
+                          onChange={e=>{
+                            const cur=[...selSet];
+                            setHaSensorEntities(e.target.checked?[...cur,s.entity_id].join(','):cur.filter(id=>id!==s.entity_id).join(','));
+                          }}
+                        />
+                        <span style={{fontSize:11,color:A.label2,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.friendly_name}</span>
+                        <span style={{fontSize:10,color:A.label5,fontFamily:'monospace'}}>{s.state}{s.unit?' '+s.unit:''}</span>
+                      </label>
+                    ))}
+                  </div>
+                );
+              })()}
               <Btn sm style={{marginTop:8}} onClick={async()=>{
                 const payload={ha_moen_flow:haMoenMap.flow,ha_moen_pressure:haMoenMap.pressure,ha_moen_daily:haMoenMap.daily,ha_moen_mode:haMoenMap.mode,ha_moen_alert:haMoenMap.alert,ha_unifi_clients:haUnifiMap.clients,ha_unifi_rx:haUnifiMap.rx,ha_unifi_tx:haUnifiMap.tx,ha_person_entities:haPersonIds.join(','),ha_climate_entity:haClimateEntity,ha_sensor_entities:haSensorEntities};
                 await fetch('/api/settings/integrations',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify(payload)});
@@ -3614,21 +3622,34 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
                   </select>
                 </div>
               }
-              {(homeyDiscovered.allDevices||[]).length>0&&(
-                <details style={{marginTop:12}}>
-                  <summary style={{fontSize:12,fontWeight:600,color:A.label2,cursor:'pointer',userSelect:'none'}}>All Devices ({homeyDiscovered.allDevices.length})</summary>
-                  <div style={{marginTop:8,maxHeight:200,overflowY:'auto'}}>
-                    {homeyDiscovered.allDevices.map(d=>(
-                      <div key={d.id} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',padding:'3px 0',borderBottom:`1px solid ${A.sep}`}}>
-                        <span style={{fontSize:11,color:A.label2}}>{d.name}{d.zone?<span style={{color:A.label5}}> · {d.zone}</span>:null}</span>
-                        <span style={{fontSize:10,color:A.label5,fontFamily:'monospace',marginLeft:8}}>{d.capabilities.join(', ')}</span>
-                      </div>
-                    ))}
-                  </div>
-                </details>
-              )}
+              {(homeyDiscovered.allDevices||[]).length>0&&(()=>{
+                const sensorSet=new Set(homeySensorDevices.split(',').map(x=>x.trim()).filter(Boolean));
+                const atMax=sensorSet.size>=6;
+                return(
+                  <>
+                    <div style={{fontSize:12,fontWeight:600,color:A.label2,marginTop:12,marginBottom:6}}>Home Tile Devices</div>
+                    <div style={{fontSize:11,color:A.label5,marginBottom:6}}>Pick up to 6 Homey devices to show as live tiles</div>
+                    <div style={{maxHeight:160,overflowY:'auto',marginBottom:6}}>
+                      {homeyDiscovered.allDevices.map(d=>(
+                        <label key={d.id} style={{display:'flex',alignItems:'center',gap:8,padding:'3px 0',cursor:'pointer'}}>
+                          <input type="checkbox"
+                            checked={sensorSet.has(d.id)}
+                            disabled={!sensorSet.has(d.id)&&atMax}
+                            onChange={e=>{
+                              const cur=[...sensorSet];
+                              setHomeySensorDevices(e.target.checked?[...cur,d.id].join(','):cur.filter(id=>id!==d.id).join(','));
+                            }}
+                          />
+                          <span style={{fontSize:11,color:A.label2,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{d.name}{d.zone?<span style={{color:A.label5}}> · {d.zone}</span>:null}</span>
+                          <span style={{fontSize:10,color:A.label5,fontFamily:'monospace',marginLeft:8}}>{d.capabilities.slice(0,3).join(', ')}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </>
+                );
+              })()}
               <Btn sm style={{marginTop:12}} onClick={async()=>{
-                const payload={homey_person_devices:homeyPersonIds.join(','),homey_climate_device:homeyClimateDevice};
+                const payload={homey_person_devices:homeyPersonIds.join(','),homey_climate_device:homeyClimateDevice,homey_sensor_devices:homeySensorDevices};
                 await fetch('/api/settings/integrations',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify(payload)});
                 toastAdd('Homey mapping saved — widgets will refresh');
               }}>Save Homey Mapping</Btn>

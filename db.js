@@ -251,6 +251,7 @@ const defaults = {
   ha_person_entities: '',
   ha_climate_entity: '',
   ha_sensor_entities: '',
+  homey_sensor_devices: '',
   homey_person_devices: '',
   homey_climate_device: '',
 };

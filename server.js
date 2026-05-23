@@ -750,7 +750,8 @@ app.get('/api/settings/integrations', requireAdmin, (req, res) => {
     ha_unifi_tx:       get('ha_unifi_tx'),
     ha_person_entities:  get('ha_person_entities'),
     ha_climate_entity:   get('ha_climate_entity'),
-    ha_sensor_entities:  get('ha_sensor_entities'),
+    ha_sensor_entities:    get('ha_sensor_entities'),
+    homey_sensor_devices:  get('homey_sensor_devices'),
     homey_person_devices: get('homey_person_devices'),
     homey_climate_device: get('homey_climate_device'),
   });
@@ -791,6 +792,7 @@ app.put('/api/settings/integrations', requireAdmin, (req, res) => {
   if (req.body.ha_person_entities   !== undefined) { upd.run('ha_person_entities',   String(req.body.ha_person_entities));   clearPersonCache = true; }
   if (req.body.ha_climate_entity    !== undefined) { upd.run('ha_climate_entity',    String(req.body.ha_climate_entity));    clearClimateCache = true; }
   if (req.body.ha_sensor_entities   !== undefined) { upd.run('ha_sensor_entities',   String(req.body.ha_sensor_entities));   delete _wCache['ha_sensors']; }
+  if (req.body.homey_sensor_devices !== undefined) { upd.run('homey_sensor_devices', String(req.body.homey_sensor_devices)); delete _wCache['ha_sensors']; }
   if (req.body.homey_person_devices !== undefined) { upd.run('homey_person_devices', String(req.body.homey_person_devices)); clearPersonCache = true; }
   if (req.body.homey_climate_device !== undefined) { upd.run('homey_climate_device', String(req.body.homey_climate_device)); clearClimateCache = true; }
   // Clear widget cache so next poll picks up the new entity IDs immediately
@@ -2125,23 +2127,56 @@ app.get('/api/widgets/data', async (req, res) => {
       };
     }).then(d => { if (d) result.thermostat = d; }));
 
-  // ── HA sensor tiles (generic entity mapping) ──────────────────────────────
-  const sensorEntitiesStr = gs('ha_sensor_entities');
-  if (haBaseUrl && haAuthToken && sensorEntitiesStr) {
+  // ── Sensor tiles — HA entities + Homey devices merged ────────────────────
+  const sensorEntitiesStr  = gs('ha_sensor_entities');
+  const homeyDevicesStr    = gs('homey_sensor_devices');
+  const useHaSensors    = !!(haBaseUrl && haAuthToken && sensorEntitiesStr);
+  const useHomeySensors = !!(homeyBaseUrl && homeyAuthToken && homeyDevicesStr);
+  // Priority order for picking which Homey capability to surface
+  const HOMEY_CAP_PRIORITY = ['alarm_motion','alarm_contact','alarm_smoke','alarm_co','alarm_water','locked','onoff','measure_temperature','measure_humidity','measure_power','measure_battery'];
+  if (useHaSensors || useHomeySensors) {
     p.push(_wFetch('ha_sensors', 30000, async () => {
-      const ids = sensorEntitiesStr.split(',').map(s => s.trim()).filter(Boolean);
-      const results = await Promise.all(ids.map(id => haGet(id).catch(() => null)));
-      const sensors = results.map((s, i) => {
-        if (!s) return null;
-        return {
-          entity_id: ids[i],
-          domain: ids[i].split('.')[0],
-          name: s.attributes?.friendly_name || ids[i].replace(/^[^.]+\./, '').replace(/_/g, ' '),
-          state: s.state,
-          unit: s.attributes?.unit_of_measurement || '',
-          device_class: s.attributes?.device_class || '',
-        };
-      }).filter(Boolean);
+      const sensors = [];
+      if (useHaSensors) {
+        const ids = sensorEntitiesStr.split(',').map(s => s.trim()).filter(Boolean);
+        const results = await Promise.all(ids.map(id => haGet(id).catch(() => null)));
+        results.forEach((s, i) => {
+          if (!s) return;
+          sensors.push({
+            entity_id: ids[i],
+            domain: ids[i].split('.')[0],
+            name: s.attributes?.friendly_name || ids[i].replace(/^[^.]+\./, '').replace(/_/g, ' '),
+            state: s.state,
+            unit: s.attributes?.unit_of_measurement || '',
+            device_class: s.attributes?.device_class || '',
+            source: 'ha',
+          });
+        });
+      }
+      if (useHomeySensors) {
+        const ids = homeyDevicesStr.split(',').map(s => s.trim()).filter(Boolean);
+        const devices = await Promise.all(ids.map(id => homeyGetDevice(id).catch(() => null)));
+        devices.forEach((d, i) => {
+          if (!d) return;
+          const capObj = d.capabilitiesObj || {};
+          // Pick most relevant capability
+          let capKey = HOMEY_CAP_PRIORITY.find(k => capObj[k]?.value != null);
+          if (!capKey) capKey = Object.keys(capObj).find(k => capObj[k]?.value != null);
+          const capData = capKey ? capObj[capKey] : null;
+          const rawVal  = capData?.value;
+          const state   = rawVal === true ? 'on' : rawVal === false ? 'off' : rawVal != null ? String(rawVal) : 'unknown';
+          const unit    = capData?.units || '';
+          sensors.push({
+            entity_id: ids[i],
+            domain: 'homey',
+            name: d.name || ids[i],
+            state,
+            unit,
+            device_class: capKey || '',
+            source: 'homey',
+          });
+        });
+      }
       if (!sensors.length) return null;
       return { sensors };
     }).then(d => { if (d) result.ha_sensors = d; }));

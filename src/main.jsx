@@ -4015,11 +4015,13 @@ function NotesScreen({notes,setNotes,toastAdd}){
     if(!form.title.trim()){toastAdd('Title is required','red');return;}
     const body={title:form.title.trim(),content:form.content,color:form.color,pinned:form.pinned?1:0};
     if(editNote){
-      const updated=await api.put(`/api/notes/${editNote.id}`,body);
+      const updated=await api.put(`/api/notes/${editNote.id}`,body).catch(()=>({error:'Failed'}));
+      if(!updated?.id){toastAdd(updated?.error||'Save failed','red');return;}
       setNotes(p=>p.map(n=>n.id===editNote.id?updated:n).sort((a,b)=>b.pinned-a.pinned||b.id-a.id));
       toastAdd('Note updated');
     } else {
-      const created=await api.post('/api/notes',body);
+      const created=await api.post('/api/notes',body).catch(()=>({error:'Failed'}));
+      if(!created?.id){toastAdd(created?.error||'Save failed','red');return;}
       setNotes(p=>[created,...p].sort((a,b)=>b.pinned-a.pinned||b.id-a.id));
       toastAdd('Note added');
     }
@@ -4027,7 +4029,8 @@ function NotesScreen({notes,setNotes,toastAdd}){
   };
 
   const togglePin=async n=>{
-    const updated=await api.put(`/api/notes/${n.id}`,{pinned:n.pinned?0:1});
+    const updated=await api.put(`/api/notes/${n.id}`,{pinned:n.pinned?0:1}).catch(()=>null);
+    if(!updated?.id) return;
     setNotes(p=>p.map(x=>x.id===n.id?updated:x).sort((a,b)=>b.pinned-a.pinned||b.id-a.id));
   };
 
@@ -4111,6 +4114,7 @@ function PollsScreen({polls,setPolls,toastAdd}){
     setVoting(v=>({...v,[poll.id]:true}));
     try{
       const result=await api.post(`/api/polls/${poll.id}/vote`,{option:idx});
+      if(!result?.votes){toastAdd(result?.error||'Vote failed','red');return;}
       setPolls(p=>p.map(x=>x.id===poll.id?{...x,votes:result.votes}:x));
       toastAdd('Vote counted');
     }catch{toastAdd('Vote failed','red');}
@@ -4120,7 +4124,8 @@ function PollsScreen({polls,setPolls,toastAdd}){
   const savePoll=async()=>{
     const filtered=options.filter(o=>o.trim());
     if(!question.trim()||filtered.length<2){toastAdd('Need a question and at least 2 options','red');return;}
-    const created=await api.post('/api/polls',{question:question.trim(),options:filtered});
+    const created=await api.post('/api/polls',{question:question.trim(),options:filtered}).catch(()=>({error:'Failed'}));
+    if(!created?.id){toastAdd(created?.error||'Save failed','red');return;}
     setPolls(p=>[created,...p]);
     setDrawerOpen(false);setQuestion('');setOptions(['','']);
     toastAdd('Poll created');
@@ -4300,7 +4305,7 @@ function GoalsScreen({goals,setGoals,toastAdd}){
                     {g.description&&<div style={{fontSize:13,color:A.label4,marginTop:3,lineHeight:1.4}}>{g.description}</div>}
                   </div>
                   <div style={{display:'flex',gap:12,flexShrink:0,alignItems:'center'}}>
-                    {daysLeft!==null&&<span style={{fontSize:12,color:daysLeft<14?A.amber:A.label4,fontWeight:600}}>{daysLeft>0?`${daysLeft}d left`:'Due today'}</span>}
+                    {daysLeft!==null&&<span style={{fontSize:12,color:daysLeft<0?A.red:daysLeft<14?A.amber:A.label4,fontWeight:600}}>{daysLeft>0?`${daysLeft}d left`:daysLeft===0?'Due today':`${Math.abs(daysLeft)}d overdue`}</span>}
                     <button onClick={()=>openEdit(g)} style={{background:'none',border:'none',color:A.blue,fontSize:13,cursor:'pointer',fontWeight:500}}>Edit</button>
                     <button onClick={()=>del(g.id)} style={{background:'none',border:'none',color:A.red,fontSize:13,cursor:'pointer',fontWeight:500}}>Delete</button>
                   </div>

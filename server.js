@@ -1503,6 +1503,8 @@ app.post('/api/quick-actions/trigger', requireAuth, async (req, res) => {
 // ── Routes: Widgets ───────────────────────────────────────────────────────────
 const _wCache = {};
 const _wErrors = {};
+// Soft-invalidate: force a refetch next call while preserving stale data as fallback
+function _wInvalidate(key) { if (_wCache[key]) _wCache[key].at = 0; }
 async function _wFetch(key, ttlMs, fn) {
   if (_wCache[key] && Date.now() - _wCache[key].at < ttlMs) return _wCache[key].data;
   try {
@@ -2727,10 +2729,10 @@ function haWsConnect() {
       if (!entity_id || !_haWsTracked().has(entity_id)) return;
       // Skip attribute-only changes (e.g. last_updated, latitude_accuracy) — only care about state value
       if (new_state?.state === old_state?.state) return;
-      // Invalidate relevant widget cache so next fetch is fresh
-      if (entity_id.startsWith('person.')) delete _wCache['who_home'];
-      else if (entity_id.startsWith('climate.')) delete _wCache['thermostat'];
-      else delete _wCache['ha_sensors'];
+      // Soft-invalidate: force refetch while preserving stale data as fallback if HA is momentarily slow
+      if (entity_id.startsWith('person.')) _wInvalidate('who_home');
+      else if (entity_id.startsWith('climate.')) _wInvalidate('thermostat');
+      else _wInvalidate('ha_sensors');
       broadcastSSE('refresh', { source: 'ha', entity: entity_id });
     }
   });
@@ -2812,7 +2814,7 @@ async function homeyPoll() {
       if (_homeyPresence[uid] !== u.present) { changed = true; _homeyPresence[uid] = u.present; }
     }
     if (changed) {
-      delete _wCache['who_home'];
+      _wInvalidate('who_home');
       broadcastSSE('refresh', { source: 'homey', widgets: ['who_home'] });
     }
   } catch (_) {}

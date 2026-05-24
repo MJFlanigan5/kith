@@ -452,14 +452,17 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
   useEffect(()=>{
     const loadHA=()=>api.get('/api/ha/events').then(d=>{if(Array.isArray(d))setHaEvents(d);}).catch(()=>{});
     const loadSm=()=>fetch('/api/ha/pull').then(r=>r.json()).then(d=>{if(Array.isArray(d))setSmEvents(d);}).catch(()=>{});
-    loadHA(); loadSm();
+    const loadWidgets=()=>api.get('/api/widgets/data').then(d=>setWidgetData(d||{})).catch(()=>{});
+    loadHA(); loadSm(); loadWidgets();
     // Fallback polls in case SSE drops
-    const fa=setInterval(loadHA,60000); const fb=setInterval(loadSm,60000);
-    // SSE: instant push from webhook hits or Homey poller
+    const fa=setInterval(loadHA,60000);
+    const fb=setInterval(loadSm,60000);
+    const fc=setInterval(loadWidgets,3*60*1000);
+    // Single SSE connection handles activity push + widget/smart-home refresh
     const es=new EventSource('/api/events/stream');
     es.addEventListener('activity',e=>{try{const ev=JSON.parse(e.data);setSmEvents(p=>[ev,...p].slice(0,10));}catch{}});
-    es.addEventListener('refresh',()=>{loadHA();loadSm();});
-    return()=>{clearInterval(fa);clearInterval(fb);es.close();};
+    es.addEventListener('refresh',()=>{loadHA();loadSm();loadWidgets();});
+    return()=>{clearInterval(fa);clearInterval(fb);clearInterval(fc);es.close();};
   },[]);
   const allSmartEvents=useMemo(()=>[...smEvents,...haEvents].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).slice(0,10),[smEvents,haEvents]);
   const [nowPlaying,setNowPlaying]=useState({playing:false});
@@ -470,14 +473,6 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
     return()=>clearInterval(id);
   },[]);
   const [widgetData,setWidgetData]=useState({});
-  useEffect(()=>{
-    const load=()=>api.get('/api/widgets/data').then(d=>setWidgetData(d||{})).catch(()=>{});
-    load();
-    const id=setInterval(load,3*60*1000); // fallback — SSE refresh handles real-time updates
-    const es=new EventSource('/api/events/stream');
-    es.addEventListener('refresh',()=>load());
-    return()=>{clearInterval(id);es.close();};
-  },[]);
 
   const [newsIdx,setNewsIdx]=useState(0);
   const [newsVisible,setNewsVisible]=useState(true);
@@ -1196,7 +1191,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                       );
                     })()}
                     {activePanelId==='w_who_home'&&(()=>{
-                      const {persons=[]}=widgetData.who_home;
+                      const {persons=[]}=widgetData.who_home||{};
                       const isHome=s=>s==='home';
                       const stateLabel=s=>s==='home'?'Home':s==='not_home'?'Away':s?s.replace(/_/g,' '):'Unknown';
                       const stateColor=s=>isHome(s)?A.green:s==='not_home'?D.t4:'#FF9500';
@@ -1500,7 +1495,7 @@ function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weath
     try {
       await api.post('/api/events',{title:qaForm.title,date:qaForm.date,time:qaForm.time||'All day',calendar:qaForm.cal,color:A.green,duration:'1h',notes:'',source:'manual'});
       const updated=await api.get('/api/events');
-      setEvents(updated);
+      if(Array.isArray(updated)) setEvents(updated);
       setQaOpen(false);
       setQaForm({title:'',date:localDate(),time:'',cal:'kith'});
     } finally {
@@ -1868,7 +1863,7 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
         toastAdd('Event updated');
       } else {
         await api.post('/api/events',payload);
-        api.get('/api/events').then(setEvents);
+        api.get('/api/events').then(d=>{if(Array.isArray(d))setEvents(d);});
         toastAdd('Event saved');
       }
       setDrawerOpen(false);
@@ -2348,10 +2343,11 @@ function InboxScreen({toastAdd,events,setEvents,setInboxCount}){
 
   useEffect(()=>{
     api.get('/api/inbox').then(d=>{
+      if(!d||!Array.isArray(d.pending)) return;
       setPending(d.pending);
-      setRecent(d.recent);
+      setRecent(d.recent||[]);
       setInboxCount(d.pending.length);
-    });
+    }).catch(()=>{});
     api.get('/api/settings').then(st=>{if(st.forwarding_address) setFwdAddress(st.forwarding_address);}).catch(()=>{});
   },[]);
 
@@ -2363,7 +2359,7 @@ function InboxScreen({toastAdd,events,setEvents,setInboxCount}){
       if(result.error){toastAdd(result.error,'red');return;}
       setPending(p=>{const next=p.filter(i=>i.id!==id);setInboxCount(next.length);return next;});
       setRecent(p=>[{event_name:item.event_name,event_date:isoDate,source:'Email'},...p]);
-      api.get('/api/events').then(setEvents);
+      api.get('/api/events').then(d=>{if(Array.isArray(d))setEvents(d);});
       toastAdd('Added to Kith Calendar');
     }catch(e){toastAdd('Failed to add event','red');}
   };
@@ -2442,7 +2438,7 @@ function InboxScreen({toastAdd,events,setEvents,setInboxCount}){
         </div>
       </Card>
 
-      <UploadCard toastAdd={toastAdd} onUploaded={()=>api.get('/api/inbox').then(d=>{setPending(d.pending);setRecent(d.recent);setInboxCount(d.pending.length);})}/>
+      <UploadCard toastAdd={toastAdd} onUploaded={()=>api.get('/api/inbox').then(d=>{if(!d||!Array.isArray(d.pending))return;setPending(d.pending);setRecent(d.recent||[]);setInboxCount(d.pending.length);}).catch(()=>{})}/>
 
       <div style={{fontSize:12,fontWeight:600,color:A.label4,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:8}}>Recently Added</div>
       <Card>
@@ -3478,13 +3474,14 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
               toastAdd(`Found ${r.moen?.all?.length||0} Moen, ${r.unifi?.all?.length||0} UniFi, ${r.persons?.length||0} persons, ${r.climates?.length||0} thermostats — ${moenFound+unifiFound} auto-mapped`);
             }} disabled={haDiscovering}>{haDiscovering?'Discovering…':'Discover Entities'}</Btn>
           </div>
-          {!haDiscovered&&(haMoenSource==='ha'||haUnifiSource==='ha'||haPersonIds.length>0||haClimateEntity)&&(
+          {!haDiscovered&&(haMoenSource==='ha'||haUnifiSource==='ha'||haPersonIds.length>0||haClimateEntity||haSensorEntities)&&(
             <div style={{background:A.systemBg,borderRadius:A.r,padding:'10px 14px',marginBottom:10,fontSize:12,color:A.label3}}>
               HA entity mapping active — click Discover to review or change.
               {haMoenMap.flow&&<div style={{color:A.label4,marginTop:4,fontFamily:'monospace',fontSize:11}}>Moen flow: {haMoenMap.flow}</div>}
               {haUnifiMap.clients&&<div style={{color:A.label4,fontFamily:'monospace',fontSize:11}}>UniFi clients: {haUnifiMap.clients}</div>}
-              {haPersonIds.length>0&&<div style={{color:A.label4,fontFamily:'monospace',fontSize:11}}>Who's home (HA): {haPersonIds.length} person(s)</div>}
+              {haPersonIds.length>0&&<div style={{color:A.label4,fontFamily:'monospace',fontSize:11}}>Who's home (HA): {haPersonIds.join(', ')}</div>}
               {haClimateEntity&&<div style={{color:A.label4,fontFamily:'monospace',fontSize:11}}>Thermostat (HA): {haClimateEntity}</div>}
+              {haSensorEntities&&<div style={{color:A.label4,fontFamily:'monospace',fontSize:11}}>Home tiles: {haSensorEntities}</div>}
             </div>
           )}
           {haDiscovered&&(
@@ -3546,7 +3543,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
                 const atMax=selSet.size>=6;
                 return(
                   <div style={{maxHeight:160,overflowY:'auto',marginBottom:6}}>
-                    {(haDiscovered.allSensors||[]).map(s=>(
+                    {[...(haDiscovered.allSensors||[])].sort((a,b)=>{const sa=selSet.has(a.entity_id),sb=selSet.has(b.entity_id);return sa===sb?0:sa?-1:1;}).map(s=>(
                       <label key={s.entity_id} style={{display:'flex',alignItems:'center',gap:8,padding:'3px 0',cursor:'pointer'}}>
                         <input type="checkbox"
                           checked={selSet.has(s.entity_id)}
@@ -4556,7 +4553,7 @@ function LoginOverlay({onLogin,onKiosk}){
   const [setupNeeded,setSetupNeeded]=useState(false);
 
   useEffect(()=>{
-    fetch('/api/members').then(r=>r.json()).then(setMembers).catch(()=>{});
+    fetch('/api/members').then(r=>r.json()).then(d=>{if(Array.isArray(d))setMembers(d);}).catch(()=>{});
     fetch('/api/auth/setup-status').then(r=>r.json()).then(s=>{
       if(!s.configured) setSetupNeeded(true);
     }).catch(()=>{});
@@ -4912,14 +4909,14 @@ function App(){
         api.get('/api/members'),
         api.get('/api/photos'),
       ]).then(([ev,ch,gr,cd,inb,ml,mb,ph])=>{
-        if(ev.status==='fulfilled') setEvents(ev.value);
-        if(ch.status==='fulfilled') setChores(ch.value);
-        if(gr.status==='fulfilled') setGrocery(gr.value);
-        if(cd.status==='fulfilled') setCountdowns(cd.value);
+        if(ev.status==='fulfilled'&&Array.isArray(ev.value)) setEvents(ev.value);
+        if(ch.status==='fulfilled'&&Array.isArray(ch.value)) setChores(ch.value);
+        if(gr.status==='fulfilled'&&Array.isArray(gr.value)) setGrocery(gr.value);
+        if(cd.status==='fulfilled'&&Array.isArray(cd.value)) setCountdowns(cd.value);
         if(inb.status==='fulfilled'&&Array.isArray(inb.value?.pending)) setInboxCount(inb.value.pending.length);
-        if(ml.status==='fulfilled') setMeals(ml.value);
-        if(mb.status==='fulfilled') setMembers(mb.value);
-        if(ph.status==='fulfilled') setPhotos(ph.value);
+        if(ml.status==='fulfilled'&&Array.isArray(ml.value)) setMeals(ml.value);
+        if(mb.status==='fulfilled'&&Array.isArray(mb.value)) setMembers(mb.value);
+        if(ph.status==='fulfilled'&&Array.isArray(ph.value)) setPhotos(ph.value);
       });
       api.get('/api/weather').then(w=>{if(!w.error) setWeather(w);}).catch(()=>{});
     };

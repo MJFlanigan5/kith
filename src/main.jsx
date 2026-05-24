@@ -561,6 +561,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
     ...(widgetData.thermostat?['w_thermostat']:[]),
     ...(widgetData.ha_sensors?['w_ha_sensors']:[]),
     ...(allSmartEvents.length>0?['w_notifications']:[]),
+    ...(polls.length>0?['w_polls']:[]),
   ];
   const activePanelId=centerPanels[centerIdx%Math.max(1,centerPanels.length)];
 
@@ -1310,6 +1311,36 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         </>
                       );
                     })()}
+                    {activePanelId==='w_polls'&&(()=>{
+                      const poll=polls[0];
+                      if(!poll) return null;
+                      const votes=livePollVotes&&Object.keys(livePollVotes).length?livePollVotes:poll.votes||{};
+                      const total=Object.values(votes).reduce((a,b)=>a+b,0);
+                      return(
+                        <>
+                          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
+                            <WLabel>Poll</WLabel>
+                            <span style={{fontSize:11,color:D.t4}}>{total} vote{total!==1?'s':''}</span>
+                          </div>
+                          <div style={{fontSize:16,fontWeight:700,color:D.t1,marginBottom:14,lineHeight:1.3}}>{poll.question}</div>
+                          <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',gap:8}}>
+                            {(poll.options||[]).map((opt,idx)=>{
+                              const count=votes[idx]||0;
+                              const pct=total>0?Math.round((count/total)*100):0;
+                              return(
+                                <div key={idx} style={{position:'relative',background:'rgba(255,255,255,0.07)',borderRadius:8,padding:'10px 14px',overflow:'hidden'}}>
+                                  <div style={{position:'absolute',top:0,left:0,height:'100%',width:`${pct}%`,background:`${A.blue}25`,transition:'width .4s ease'}}/>
+                                  <div style={{position:'relative',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                                    <span style={{fontSize:14,fontWeight:500,color:D.t1}}>{opt}</span>
+                                    <span style={{fontSize:13,fontWeight:700,color:A.blue,fontVariantNumeric:'tabular-nums'}}>{pct}%</span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </>
+                      );
+                    })()}
                   </Widget>
                 </div>
               )}
@@ -1362,19 +1393,20 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                 )}
               </Widget>
               {/* Grocery — if items exist */}
-              {(grocery||[]).filter(g=>!g.checked).length>0&&(
+              {(()=>{const unchecked=(grocery||[]).filter(g=>!g.checked);return unchecked.length>0&&(
                 <Widget style={{flexShrink:0}}>
                   <WLabel>Grocery</WLabel>
                   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'2px 12px'}}>
-                    {(grocery||[]).filter(g=>!g.checked).slice(0,8).map(item=>(
+                    {unchecked.slice(0,8).map(item=>(
                       <div key={item.id} style={{display:'flex',alignItems:'center',gap:7,padding:'4px 0'}}>
                         <div style={{width:4,height:4,borderRadius:'50%',background:'rgba(255,255,255,0.35)',flexShrink:0}}/>
                         <span style={{fontSize:13,color:D.t2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{item.name}</span>
                       </div>
                     ))}
                   </div>
+                  {unchecked.length>8&&<div style={{fontSize:11,color:D.t4,marginTop:6}}>+{unchecked.length-8} more</div>}
                 </Widget>
-              )}
+              );})()}
               {/* WiFi QR — when configured */}
               {wifiQrData&&(
                 <Widget style={{flexShrink:0}}>

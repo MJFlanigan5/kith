@@ -184,6 +184,7 @@ try { db.exec('ALTER TABLE family_members ADD COLUMN monthly_goal INTEGER DEFAUL
 try { db.exec('ALTER TABLE chores ADD COLUMN outdoor INTEGER DEFAULT 0'); } catch {}
 try { db.exec('ALTER TABLE chores ADD COLUMN goal_id INTEGER'); } catch {}
 try { db.exec('ALTER TABLE chores ADD COLUMN goal_amount REAL DEFAULT 1'); } catch {}
+try { db.exec('ALTER TABLE chores ADD COLUMN member_id INTEGER'); } catch {}
 try { db.exec("ALTER TABLE family_members ADD COLUMN reward TEXT DEFAULT ''"); } catch {}
 db.prepare("UPDATE events SET calendar='kith' WHERE calendar IN ('personal','work','family','hearth')").run();
 db.prepare("UPDATE events SET time='All day' WHERE time IS NULL OR time=''").run();

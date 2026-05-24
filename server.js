@@ -439,7 +439,11 @@ app.delete('/api/events/:id', requireAuth, (req, res) => {
 // ── Routes: Chores ────────────────────────────────────────────────────────────
 app.get('/api/chores', (req, res) => {
   updateChoreStatuses();
-  res.json(db.prepare("SELECT * FROM chores ORDER BY CASE status WHEN 'overdue' THEN 0 WHEN 'due' THEN 1 ELSE 2 END, created_at").all());
+  res.json(db.prepare(`
+    SELECT c.*, fm.name as member_name, fm.color as member_color, fm.initials as member_initials
+    FROM chores c LEFT JOIN family_members fm ON fm.id = c.member_id
+    ORDER BY CASE c.status WHEN 'overdue' THEN 0 WHEN 'due' THEN 1 ELSE 2 END, c.created_at
+  `).all());
 });
 
 app.get('/api/chores/leaderboard', (req, res) => {
@@ -457,34 +461,41 @@ app.get('/api/chores/leaderboard', (req, res) => {
 });
 
 app.post('/api/chores', requireAdmin, (req, res) => {
-  const { name, recurrence, start, points, outdoor=0, goal_id=null, goal_amount=1 } = req.body;
+  const { name, recurrence, start, points, outdoor=0, goal_id=null, goal_amount=1, member_id=null } = req.body;
   if (!name?.trim() || !recurrence?.trim()) return res.status(400).json({ error: 'name and recurrence are required' });
   const today = localDate();
   const nextDue = start || today;
   const status = nextDue <= today ? 'due' : 'upcoming';
   const r = db.prepare(
-    'INSERT INTO chores (name,recurrence,next_due,status,points,outdoor,goal_id,goal_amount) VALUES (?,?,?,?,?,?,?,?)'
-  ).run(name.trim(), recurrence.trim(), nextDue, status, Number(points)||1, outdoor?1:0, goal_id||null, Number(goal_amount)||1);
-  res.json(db.prepare('SELECT * FROM chores WHERE id=?').get(r.lastInsertRowid));
+    'INSERT INTO chores (name,recurrence,next_due,status,points,outdoor,goal_id,goal_amount,member_id) VALUES (?,?,?,?,?,?,?,?,?)'
+  ).run(name.trim(), recurrence.trim(), nextDue, status, Number(points)||1, outdoor?1:0, goal_id||null, Number(goal_amount)||1, member_id||null);
+  res.json(db.prepare(`
+    SELECT c.*, fm.name as member_name, fm.color as member_color, fm.initials as member_initials
+    FROM chores c LEFT JOIN family_members fm ON fm.id = c.member_id WHERE c.id=?
+  `).get(r.lastInsertRowid));
 });
 
 app.put('/api/chores/:id', requireAdmin, (req, res) => {
   const c = db.prepare('SELECT * FROM chores WHERE id=?').get(req.params.id);
   if (!c) return res.status(404).json({ error: 'Not found' });
-  const { name, recurrence, next_due, points, outdoor, goal_id, goal_amount } = req.body;
+  const { name, recurrence, next_due, points, outdoor, goal_id, goal_amount, member_id } = req.body;
   const today = localDate();
   const nd = next_due || c.next_due;
   const status = nd < today ? 'overdue' : nd === today ? 'due' : 'upcoming';
-  db.prepare('UPDATE chores SET name=?,recurrence=?,next_due=?,status=?,points=?,outdoor=?,goal_id=?,goal_amount=? WHERE id=?')
+  db.prepare('UPDATE chores SET name=?,recurrence=?,next_due=?,status=?,points=?,outdoor=?,goal_id=?,goal_amount=?,member_id=? WHERE id=?')
     .run(
       name || c.name, recurrence || c.recurrence, nd, status,
       points != null ? Number(points) : (c.points||1),
       outdoor != null ? (outdoor?1:0) : (c.outdoor||0),
       goal_id !== undefined ? (goal_id||null) : c.goal_id,
       goal_amount != null ? Number(goal_amount) : (c.goal_amount||1),
+      member_id !== undefined ? (member_id||null) : c.member_id,
       c.id
     );
-  res.json(db.prepare('SELECT * FROM chores WHERE id=?').get(c.id));
+  res.json(db.prepare(`
+    SELECT c.*, fm.name as member_name, fm.color as member_color, fm.initials as member_initials
+    FROM chores c LEFT JOIN family_members fm ON fm.id = c.member_id WHERE c.id=?
+  `).get(c.id));
 });
 
 app.put('/api/chores/:id/done', requireAuth, (req, res) => {
@@ -1001,6 +1012,16 @@ app.post('/api/countdowns', requireAuth, (req, res) => {
   res.json({ id: r.lastInsertRowid, label: label.trim(), date, emoji });
 });
 
+app.put('/api/countdowns/:id', requireAuth, (req, res) => {
+  const c = db.prepare('SELECT * FROM countdowns WHERE id=?').get(Number(req.params.id));
+  if (!c) return res.status(404).json({ error: 'Not found' });
+  const label = req.body?.label?.trim() || c.label;
+  const date  = req.body?.date  || c.date;
+  const emoji = req.body?.emoji || c.emoji;
+  db.prepare('UPDATE countdowns SET label=?,date=?,emoji=? WHERE id=?').run(label, date, emoji, c.id);
+  res.json({ id: c.id, label, date, emoji });
+});
+
 app.delete('/api/countdowns/:id', requireAuth, (req, res) => {
   db.prepare('DELETE FROM countdowns WHERE id=?').run(Number(req.params.id));
   res.json({ ok: true });
@@ -1033,6 +1054,16 @@ app.delete('/api/members/:id', requireAdmin, (req, res) => {
   db.prepare('DELETE FROM chore_completions WHERE member_id=?').run(id);
   db.prepare('DELETE FROM family_members WHERE id=?').run(id);
   res.json({ ok: true });
+});
+
+app.put('/api/members/:id', requireAdmin, (req, res) => {
+  const m = db.prepare('SELECT * FROM family_members WHERE id=?').get(Number(req.params.id));
+  if (!m) return res.status(404).json({ error: 'Not found' });
+  const name  = req.body?.name?.trim() || m.name;
+  const color = req.body?.color || m.color;
+  const initials = name.split(/\s+/).map(w => w[0] || '').join('').toUpperCase().slice(0, 2) || m.initials;
+  db.prepare('UPDATE family_members SET name=?,color=?,initials=? WHERE id=?').run(name, color, initials, m.id);
+  res.json(db.prepare('SELECT * FROM family_members WHERE id=?').get(m.id));
 });
 
 app.put('/api/members/:id/goal', requireAdmin, (req, res) => {

@@ -251,24 +251,46 @@ function Confetti({active,count=48}){
 /* ── Countdowns ──────────────────────────────────────────────────────── */
 function CountdownsScreen({countdowns,setCountdowns,toastAdd}){
   const [form,setForm]=useState({label:'',date:'',emoji:'🎉'});
+  const [editId,setEditId]=useState(null);
+  const [editForm,setEditForm]=useState({label:'',date:'',emoji:'🎉'});
   const EMOJIS=['🎉','🎂','✈️','🏫','🏖️','🎄','🎃','💍','🏆','⭐'];
   const save=async()=>{
     if(!form.label.trim()||!form.date) return;
     const r=await api.post('/api/countdowns',form);
+    if(!r?.id){toastAdd('Failed to add','red');return;}
     setCountdowns(p=>[...p,r].sort((a,b)=>a.date.localeCompare(b.date)));
     setForm({label:'',date:'',emoji:'🎉'});
     toastAdd('Countdown added');
+  };
+  const saveEdit=async()=>{
+    if(!editForm.label.trim()||!editForm.date) return;
+    const r=await api.put(`/api/countdowns/${editId}`,editForm);
+    if(!r?.id){toastAdd('Failed to update','red');return;}
+    setCountdowns(p=>p.map(c=>c.id===editId?r:c).sort((a,b)=>a.date.localeCompare(b.date)));
+    setEditId(null);
+    toastAdd('Updated');
   };
   const del=async id=>{
     await api.del(`/api/countdowns/${id}`);
     setCountdowns(p=>p.filter(c=>c.id!==id));
     toastAdd('Deleted','blue');
   };
+  const clearPast=async()=>{
+    const past=countdowns.filter(c=>daysUntil(c.date)<0);
+    await Promise.all(past.map(c=>api.del(`/api/countdowns/${c.id}`)));
+    setCountdowns(p=>p.filter(c=>daysUntil(c.date)>=0));
+    toastAdd(`Cleared ${past.length}`,'blue');
+  };
   return(
     <div style={{maxWidth:640}}>
-      <div style={{marginBottom:24}}>
-        <h1 style={{fontSize:28,fontWeight:800,letterSpacing:'-.04em'}}>Countdowns</h1>
-        <p style={{color:A.label4,fontSize:15,marginTop:4}}>Track days until special events</p>
+      <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:24}}>
+        <div>
+          <h1 style={{fontSize:28,fontWeight:800,letterSpacing:'-.04em'}}>Countdowns</h1>
+          <p style={{color:A.label4,fontSize:15,marginTop:4}}>Track days until special events</p>
+        </div>
+        {countdowns.some(c=>daysUntil(c.date)<0)&&(
+          <button onClick={clearPast} style={{background:'none',border:'none',color:A.label4,fontSize:14,cursor:'pointer',marginTop:4}}>Clear past</button>
+        )}
       </div>
       <FormGroup label="Add Countdown">
         <div style={{padding:'14px 16px'}}>
@@ -294,19 +316,41 @@ function CountdownsScreen({countdowns,setCountdowns,toastAdd}){
       <div style={{display:'flex',flexDirection:'column',gap:10}}>
         {countdowns.map(c=>{
           const days=daysUntil(c.date);
+          const isEditing=editId===c.id;
           return(
-            <Card key={c.id} style={{padding:'18px 20px',display:'flex',alignItems:'center',gap:16}}>
-              <span style={{fontSize:32}}>{c.emoji}</span>
-              <div style={{flex:1}}>
-                <div style={{fontSize:16,fontWeight:600,color:A.label1}}>{c.label}</div>
-                <div style={{fontSize:13,color:A.label4,marginTop:2}}>{c.date}</div>
-              </div>
-              <div style={{textAlign:'right',flexShrink:0,minWidth:60}}>
-                {days===0&&<div style={{fontSize:18,fontWeight:800,color:A.green}}>Today!</div>}
-                {days>0&&<><div style={{fontSize:28,fontWeight:800,color:A.blue,lineHeight:1}}>{days}</div><div style={{fontSize:12,color:A.label4}}>days</div></>}
-                {days<0&&<div style={{fontSize:13,color:A.label5,fontStyle:'normal'}}>{Math.abs(days)}d ago</div>}
-              </div>
-              <button onClick={()=>del(c.id)} style={{background:'none',border:'none',color:A.label5,cursor:'pointer',fontSize:20,padding:'4px',lineHeight:1}}>×</button>
+            <Card key={c.id} style={{padding:'18px 20px'}}>
+              {isEditing?(
+                <div>
+                  <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:10}}>
+                    {EMOJIS.map(e=>(
+                      <button key={e} onClick={()=>setEditForm(p=>({...p,emoji:e}))} style={{width:34,height:34,borderRadius:A.rXs,border:`2px solid ${editForm.emoji===e?A.blue:'transparent'}`,background:editForm.emoji===e?A.blueFill:'transparent',cursor:'pointer',fontSize:20}}>{e}</button>
+                    ))}
+                  </div>
+                  <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                    <Inp value={editForm.label} onChange={e=>setEditForm(p=>({...p,label:e.target.value}))} placeholder="Label"/>
+                    <Inp type="date" value={editForm.date} onChange={e=>setEditForm(p=>({...p,date:e.target.value}))}/>
+                    <div style={{display:'flex',gap:8}}>
+                      <Btn onClick={saveEdit} full>Save</Btn>
+                      <Btn variant="ghost" onClick={()=>setEditId(null)} full>Cancel</Btn>
+                    </div>
+                  </div>
+                </div>
+              ):(
+                <div style={{display:'flex',alignItems:'center',gap:16}}>
+                  <span style={{fontSize:32}}>{c.emoji}</span>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:16,fontWeight:600,color:A.label1}}>{c.label}</div>
+                    <div style={{fontSize:13,color:A.label4,marginTop:2}}>{c.date}</div>
+                  </div>
+                  <div style={{textAlign:'right',flexShrink:0,minWidth:60}}>
+                    {days===0&&<div style={{fontSize:18,fontWeight:800,color:A.green}}>Today!</div>}
+                    {days>0&&<><div style={{fontSize:28,fontWeight:800,color:A.blue,lineHeight:1}}>{days}</div><div style={{fontSize:12,color:A.label4}}>days</div></>}
+                    {days<0&&<div style={{fontSize:13,color:A.label5,fontStyle:'normal'}}>{Math.abs(days)}d ago</div>}
+                  </div>
+                  <button onClick={()=>{setEditId(c.id);setEditForm({label:c.label,date:c.date,emoji:c.emoji});}} style={{background:'none',border:'none',color:A.blue,cursor:'pointer',fontSize:13,fontWeight:500,padding:'4px'}}>Edit</button>
+                  <button onClick={()=>del(c.id)} style={{background:'none',border:'none',color:A.label5,cursor:'pointer',fontSize:20,padding:'4px',lineHeight:1}}>×</button>
+                </div>
+              )}
             </Card>
           );
         })}
@@ -322,13 +366,24 @@ function FamilyScreen({members,setMembers,toastAdd}){
   const [pinInput,setPinInput]=useState('');
   const [goalId,setGoalId]=useState(null);
   const [goalForm,setGoalForm]=useState({monthly_goal:'',reward:''});
+  const [editId,setEditId]=useState(null);
+  const [editForm,setEditForm]=useState({name:'',color:'#007AFF'});
   const COLORS=['#007AFF','#34C759','#FF3B30','#FF9500','#5856D6','#32ADE6','#AF52DE','#FF2D55','#FF6B35','#30D158'];
   const save=async()=>{
     if(!form.name.trim()) return;
     const r=await api.post('/api/members',form);
+    if(!r?.id){toastAdd('Failed to add','red');return;}
     setMembers(p=>[...p,r]);
     setForm({name:'',color:'#007AFF'});
     toastAdd('Member added');
+  };
+  const saveEdit=async()=>{
+    if(!editForm.name.trim()) return;
+    const r=await api.put(`/api/members/${editId}`,editForm);
+    if(!r?.id){toastAdd('Failed to update','red');return;}
+    setMembers(p=>p.map(m=>m.id===editId?r:m));
+    setEditId(null);
+    toastAdd('Updated');
   };
   const del=async id=>{
     await api.del(`/api/members/${id}`);
@@ -382,12 +437,28 @@ function FamilyScreen({members,setMembers,toastAdd}){
                   <div style={{fontSize:15,fontWeight:500,color:A.label1}}>{m.name}</div>
                   {m.monthly_goal>0&&<div style={{fontSize:12,color:A.label4,marginTop:2}}>{m.monthly_goal} pt goal{m.reward?` · ${m.reward}`:''}</div>}
                 </div>
+                <button onClick={()=>{setEditId(editId===m.id?null:m.id);setEditForm({name:m.name,color:m.color});}} style={{background:'none',border:'none',color:A.blue,fontSize:13,cursor:'pointer',fontWeight:500}}>
+                  {editId===m.id?'Cancel':'Edit'}
+                </button>
                 <button onClick={()=>{setGoalId(goalId===m.id?null:m.id);setGoalForm({monthly_goal:m.monthly_goal||'',reward:m.reward||''});}} style={{background:'none',border:'none',color:A.blue,fontSize:13,cursor:'pointer',fontWeight:500}}>
                   {goalId===m.id?'Cancel':'Set Goal'}
                 </button>
                 <button onClick={()=>{setPinModal(m.id);setPinInput('');}} style={{background:'none',border:'none',color:A.blue,fontSize:13,cursor:'pointer',fontWeight:500}}>PIN</button>
                 <button onClick={()=>del(m.id)} style={{background:'none',border:'none',color:A.label4,fontSize:13,cursor:'pointer',fontWeight:500}}>Remove</button>
               </div>
+              {editId===m.id&&(
+                <div style={{padding:'0 16px 14px'}}>
+                  <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:10}}>
+                    {COLORS.map(c=>(
+                      <button key={c} onClick={()=>setEditForm(p=>({...p,color:c}))} style={{width:26,height:26,borderRadius:'50%',border:`3px solid ${editForm.color===c?'#1C1C1E':'transparent'}`,background:c,cursor:'pointer'}}/>
+                    ))}
+                  </div>
+                  <div style={{display:'flex',gap:8}}>
+                    <Inp value={editForm.name} onChange={e=>setEditForm(p=>({...p,name:e.target.value}))} placeholder="Name"/>
+                    <Btn sm onClick={saveEdit}>Save</Btn>
+                  </div>
+                </div>
+              )}
               {goalId===m.id&&(
                 <div style={{padding:'0 16px 14px',display:'flex',gap:8,alignItems:'center'}}>
                   <Inp type="number" min="0" value={goalForm.monthly_goal} onChange={e=>setGoalForm(p=>({...p,monthly_goal:e.target.value}))} placeholder="Monthly pts goal" style={{width:160}}/>
@@ -411,7 +482,7 @@ function FamilyScreen({members,setMembers,toastAdd}){
 }
 
 /* ── Display Mode ────────────────────────────────────────────────────── */
-function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,weather,clockFormat='12h',nightModeStart='23:00',nightModeEnd='06:00',goals=[],notes=[],polls=[],rotationMs=10000,wifiQrData=null}){
+function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,weather,clockFormat='12h',nightModeStart='23:00',nightModeEnd='06:00',goals=[],notes=[],polls=[],rotationMs=10000,wifiQrData=null,quickActions=[]}){
   const isMobile=useIsMobile();
   const now=useClock();
   const [liveGames,setLiveGames]=useState([]);
@@ -466,6 +537,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
   },[]);
   const allSmartEvents=useMemo(()=>[...smEvents,...haEvents].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).slice(0,10),[smEvents,haEvents]);
   const [nowPlaying,setNowPlaying]=useState({playing:false});
+  const [qaState,setQaState]=useState({});
   useEffect(()=>{
     const load=()=>api.get('/api/music/now-playing').then(d=>setNowPlaying(d||{playing:false})).catch(()=>{});
     load();
@@ -1483,6 +1555,22 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
             </>
           )}
         </div>
+        {quickActions.length>0&&quickActions.map(action=>{
+          const st=qaState[action.id]||'idle';
+          return(
+            <button key={action.id} disabled={st==='loading'} onClick={async()=>{
+              setQaState(s=>({...s,[action.id]:'loading'}));
+              try{
+                const r=await api.post('/api/quick-actions/trigger',{id:action.id});
+                setQaState(s=>({...s,[action.id]:r.ok===false?'error':'done'}));
+              }catch{setQaState(s=>({...s,[action.id]:'error'}));}
+              setTimeout(()=>setQaState(s=>({...s,[action.id]:'idle'})),2000);
+            }} style={{flexShrink:0,display:'flex',alignItems:'center',gap:6,background:st==='done'?'rgba(52,199,89,0.18)':st==='error'?'rgba(255,59,48,0.18)':'rgba(255,255,255,0.08)',color:st==='done'?'#30D158':st==='error'?'#FF453A':D.t2,border:'1px solid rgba(255,255,255,0.12)',borderRadius:A.rPill,padding:'9px 16px',fontSize:13,fontWeight:500,cursor:st==='loading'?'wait':'pointer',transition:'background .2s',opacity:showControls?1:0,pointerEvents:showControls?'auto':'none'}}>
+              <span style={{fontSize:16,lineHeight:1}}>{action.icon||'⚡'}</span>
+              <span>{st==='loading'?'…':st==='done'?'Done':st==='error'?'Failed':action.label}</span>
+            </button>
+          );
+        })}
         <button onClick={onManage} style={{flexShrink:0,background:'rgba(255,255,255,0.08)',color:D.t2,border:'1px solid rgba(255,255,255,0.12)',borderRadius:A.rPill,padding:'9px 20px',fontSize:13,fontWeight:500,cursor:'pointer',transition:'background .15s,opacity .4s',opacity:showControls?1:0,pointerEvents:showControls?'auto':'none'}}
           onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.13)'}
           onMouseLeave={e=>e.currentTarget.style.background='rgba(255,255,255,0.08)'}
@@ -2492,16 +2580,16 @@ function InboxScreen({toastAdd,events,setEvents,setInboxCount}){
 }
 
 /* ── Chores ──────────────────────────────────────────────────────────── */
-function ChoresScreen({chores,setChores,goals=[],toastAdd}){
+function ChoresScreen({chores,setChores,goals=[],members=[],toastAdd}){
   const isMobile=useIsMobile();
   const [drawerOpen,setDrawerOpen]=useState(false);
   const [editChore,setEditChore]=useState(null);
-  const [form,setForm]=useState({name:'',recur:'Weekly',day:'Monday',start:'',points:1,outdoor:false,goal_id:'',goal_amount:1});
+  const [form,setForm]=useState({name:'',recur:'Weekly',day:'Monday',start:'',points:1,outdoor:false,goal_id:'',goal_amount:1,member_id:''});
   const [choreConfetti,setChoreConfetti]=useState(false);
 
   const openNew=()=>{
     setEditChore(null);
-    setForm({name:'',recur:'Weekly',day:'Monday',start:'',points:1,outdoor:false,goal_id:'',goal_amount:1});
+    setForm({name:'',recur:'Weekly',day:'Monday',start:'',points:1,outdoor:false,goal_id:'',goal_amount:1,member_id:''});
     setDrawerOpen(true);
   };
 
@@ -2516,14 +2604,14 @@ function ChoresScreen({chores,setChores,goals=[],toastAdd}){
       if(m) day=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'].find(d=>d.startsWith(m[1]))||'Monday';
     } else recur='Custom';
     setEditChore(c);
-    setForm({name:c.name,recur,day,start:c.next_due||'',points:c.points||1,outdoor:!!c.outdoor,goal_id:c.goal_id||'',goal_amount:c.goal_amount||1});
+    setForm({name:c.name,recur,day,start:c.next_due||'',points:c.points||1,outdoor:!!c.outdoor,goal_id:c.goal_id||'',goal_amount:c.goal_amount||1,member_id:c.member_id||''});
     setDrawerOpen(true);
   };
 
   const saveChore=async()=>{
     if(!form.name.trim()) return;
     const recurrence=form.recur==='Weekly'?`Weekly (${form.day.slice(0,3)})`:form.recur;
-    const body={name:form.name,recurrence,next_due:form.start,points:form.points,outdoor:form.outdoor?1:0,goal_id:form.goal_id||null,goal_amount:Number(form.goal_amount)||1};
+    const body={name:form.name,recurrence,next_due:form.start,points:form.points,outdoor:form.outdoor?1:0,goal_id:form.goal_id||null,goal_amount:Number(form.goal_amount)||1,member_id:form.member_id||null};
     if(editChore){
       const updated=await api.put(`/api/chores/${editChore.id}`,body);
       setChores(p=>p.map(c=>c.id===editChore.id?updated:c));
@@ -2535,7 +2623,7 @@ function ChoresScreen({chores,setChores,goals=[],toastAdd}){
     }
     setDrawerOpen(false);
     setEditChore(null);
-    setForm({name:'',recur:'Weekly',day:'Monday',start:'',points:1,outdoor:false,goal_id:'',goal_amount:1});
+    setForm({name:'',recur:'Weekly',day:'Monday',start:'',points:1,outdoor:false,goal_id:'',goal_amount:1,member_id:''});
   };
 
   const deleteChore=async id=>{
@@ -2591,8 +2679,9 @@ function ChoresScreen({chores,setChores,goals=[],toastAdd}){
                     <span style={{fontSize:15,fontWeight:600,textDecoration:c.done?'line-through':'none',color:c.done?A.label4:A.label1}}>{c.name}</span>
                     <Badge color={p.color} bg={p.bg}>{p.label}</Badge>
                   </div>
-                  <div style={{fontSize:13,color:A.label4,marginBottom:10}}>{c.recurrence} · Next: {c.next_due||'—'}</div>
+                  <div style={{fontSize:13,color:A.label4,marginBottom:10}}>{c.recurrence} · Next: {c.next_due||'—'}{c.member_name&&<span style={{marginLeft:8}}>· {c.member_name}</span>}</div>
                   <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                    {c.member_color&&<div style={{width:22,height:22,borderRadius:'50%',background:c.member_color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700,color:'#fff',flexShrink:0}}>{c.member_initials}</div>}
                     <button onClick={()=>toggleDone(c)} style={{flex:1,padding:'9px 0',borderRadius:A.rXs,border:'none',background:c.done?A.inputBg:A.green,color:c.done?A.label3:'#fff',fontSize:14,fontWeight:700,cursor:'pointer'}}>
                       {c.done?'Undo':'Mark Done'}
                     </button>
@@ -2614,7 +2703,10 @@ function ChoresScreen({chores,setChores,goals=[],toastAdd}){
               const p=statePill(c.status);
               return(
                 <div key={c.id} className="irow" style={{display:'grid',gridTemplateColumns:'2fr 56px 1.2fr 1fr 1fr 120px 120px',padding:'13px 16px',borderTop:`1px solid ${A.sep}`,borderLeft:`3px solid ${c.status==='due'?A.amber:c.status==='overdue'?A.red:'transparent'}`,background:c.done?A.greenFill:c.status==='due'?`${A.amber}06`:c.status==='overdue'?`${A.red}06`:'transparent',alignItems:'center',opacity:c.done?.65:1,transition:'opacity .3s'}}>
-                  <div style={{fontSize:15,fontWeight:500,textDecoration:c.done?'line-through':'none',color:c.done?A.label4:A.label1}}>{c.name}</div>
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    {c.member_color&&<div title={c.member_name||''} style={{width:22,height:22,borderRadius:'50%',background:c.member_color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700,color:'#fff',flexShrink:0}}>{c.member_initials}</div>}
+                    <span style={{fontSize:15,fontWeight:500,textDecoration:c.done?'line-through':'none',color:c.done?A.label4:A.label1}}>{c.name}</span>
+                  </div>
                   <div style={{fontSize:13,color:A.amber,fontWeight:700}}>{'⭐'.repeat(c.points||1)}</div>
                   <div style={{fontSize:13,color:A.label4}}>{c.recurrence}</div>
                   <div style={{fontSize:13,color:A.label4}}>{c.last_done||'Never'}</div>
@@ -2668,6 +2760,17 @@ function ChoresScreen({chores,setChores,goals=[],toastAdd}){
             </button>
           </div>
         </FormGroup>
+        {members.length>0&&(
+          <FormGroup label="Assign to (optional)">
+            <div style={{padding:'12px 16px'}}>
+              <select value={form.member_id} onChange={e=>setForm(p=>({...p,member_id:e.target.value}))}
+                style={{width:'100%',padding:'10px 12px',borderRadius:A.rXs,border:`1px solid ${A.sep}`,background:A.inputBg,fontSize:15,color:A.label1}}>
+                <option value="">Anyone</option>
+                {members.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+            </div>
+          </FormGroup>
+        )}
         {goals.length>0&&(
           <FormGroup label="Link to goal (optional)">
             <div style={{padding:'12px 16px'}}>
@@ -2698,13 +2801,16 @@ function ChoresScreen({chores,setChores,goals=[],toastAdd}){
 function GroceryScreen({grocery,setGrocery,meals,setMeals,toastAdd}){
   const isMobile=useIsMobile();
   const [input,setInput]=useState('');
+  const [catInput,setCatInput]=useState('');
   const [editingDay,setEditingDay]=useState(null);
   const [mealInput,setMealInput]=useState('');
   const inputRef=useRef();
 
   const addItem=async()=>{
     if(!input.trim()) return;
-    const newItem=await api.post('/api/grocery',{name:input.trim()});
+    const body={name:input.trim()};
+    if(catInput.trim()) body.category=catInput.trim();
+    const newItem=await api.post('/api/grocery',body);
     setGrocery(p=>[...p,newItem]);
     setInput('');
     inputRef.current?.focus();
@@ -2737,9 +2843,12 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,toastAdd}){
           </div>
           {checked.length>0&&<button onClick={clearChecked} style={{background:'none',border:'none',color:A.label4,fontSize:14,cursor:'pointer'}}>Clear checked</button>}
         </div>
-        <div style={{display:'flex',gap:10,marginBottom:16}}>
+        <div style={{display:'flex',gap:10,marginBottom:8}}>
           <Inp value={input} onChange={e=>setInput(e.target.value)} placeholder="Add item..." onKeyDown={e=>e.key==='Enter'&&addItem()} inputRef={inputRef}/>
           <Btn onClick={addItem} style={{flexShrink:0}}>Add</Btn>
+        </div>
+        <div style={{marginBottom:16}}>
+          <Inp value={catInput} onChange={e=>setCatInput(e.target.value)} placeholder="Category (optional, e.g. Produce)" onKeyDown={e=>e.key==='Enter'&&addItem()}/>
         </div>
         {unchecked.length===0&&checked.length===0&&(
           <div style={{padding:'52px 24px',textAlign:'center',marginBottom:12}}>
@@ -4439,7 +4548,7 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
   const screens={
     dashboard:  <DashboardScreen events={events} setEvents={setEvents} chores={chores} grocery={grocery} meals={meals} countdowns={countdowns} weather={weather} clockFormat={clockFormat} quickActions={quickActions}/>,
     calendar:   <CalendarScreen events={events} setEvents={setEvents} icsSources={icsSources} toastAdd={toastAdd} members={members} clockFormat={clockFormat}/>,
-    chores:     <ChoresScreen chores={chores} setChores={setChores} goals={goals} toastAdd={toastAdd}/>,
+    chores:     <ChoresScreen chores={chores} setChores={setChores} goals={goals} members={members} toastAdd={toastAdd}/>,
     grocery:    <GroceryScreen grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} toastAdd={toastAdd}/>,
     countdowns: <CountdownsScreen countdowns={countdowns} setCountdowns={setCountdowns} toastAdd={toastAdd}/>,
     family:     <FamilyScreen members={members} setMembers={setMembers} toastAdd={toastAdd}/>,
@@ -4981,7 +5090,7 @@ function App(){
   );
 
   return mode==='display'
-    ?<DisplayMode onManage={()=>setMode('manage')} events={events} chores={chores} setChores={setChores} meals={meals} grocery={grocery} countdowns={countdowns} clockFormat={clockFormat} weather={weather} nightModeStart={nightModeStart} nightModeEnd={nightModeEnd} goals={goals} notes={notes} polls={polls} rotationMs={rotationMs} wifiQrData={wifiQrData}/>
+    ?<DisplayMode onManage={()=>setMode('manage')} events={events} chores={chores} setChores={setChores} meals={meals} grocery={grocery} countdowns={countdowns} clockFormat={clockFormat} weather={weather} nightModeStart={nightModeStart} nightModeEnd={nightModeEnd} goals={goals} notes={notes} polls={polls} rotationMs={rotationMs} wifiQrData={wifiQrData} quickActions={quickActions}/>
     :<ManageMode onDisplay={()=>setMode('display')} onLogout={handleLogout} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources} inboxCount={inboxCount} setInboxCount={setInboxCount} countdowns={countdowns} setCountdowns={setCountdowns} members={members} setMembers={setMembers} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} weather={weather} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} goals={goals} setGoals={setGoals} notes={notes} setNotes={setNotes} polls={polls} setPolls={setPolls} bookmarks={bookmarks} setBookmarks={setBookmarks} quickActions={quickActions} setQuickActions={setQuickActions} setRotationMs={setRotationMs} setWifiQrData={setWifiQrData}/>;
 }
 

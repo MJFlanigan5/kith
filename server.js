@@ -1827,6 +1827,7 @@ app.get('/api/widgets/data', async (req, res) => {
 
   const plexUrl = gs('plex_url');
   const plexToken = gs('plex_token');
+  const _plexThumb = p => p ? `/api/plex/thumb?path=${encodeURIComponent(p)}` : null;
   if (plexUrl && plexToken)
     p.push(_wFetch('plex', 30000, async () => {
       const base = plexUrl.replace(/\/$/, '');
@@ -1841,7 +1842,7 @@ app.get('/api/widgets/data', async (req, res) => {
           items: sessions.map(s => ({
             title: s.grandparentTitle ? `${s.grandparentTitle} — ${s.title}` : s.title,
             user: s.User?.title || '',
-            thumb: s.thumb ? `${base}${s.thumb}?X-Plex-Token=${plexToken}` : null,
+            thumb: _plexThumb(s.grandparentThumb || s.parentThumb || s.thumb),
             pct: s.viewOffset && s.duration ? Math.round((s.viewOffset / s.duration) * 100) : null,
             state: s.Player?.state || 'playing',
           })),
@@ -1858,7 +1859,7 @@ app.get('/api/widgets/data', async (req, res) => {
         items: recent.map(r => ({
           title: r.grandparentTitle ? `${r.grandparentTitle} — ${r.title}` : r.title,
           year: r.year || '',
-          thumb: r.thumb ? `${base}${r.thumb}?X-Plex-Token=${plexToken}` : null,
+          thumb: _plexThumb(r.grandparentThumb || r.parentThumb || r.thumb),
         })),
       };
     }).then(d => { if (d) result.plex = d; }));
@@ -2300,6 +2301,23 @@ app.get('/api/widgets/debug', requireAdmin, (req, res) => {
 
 // ── Routes: Music (Last.fm now-playing) ──────────────────────────────────────
 let _lastfmCache = null; let _lastfmCacheAt = 0;
+
+app.get('/api/plex/thumb', async (req, res) => {
+  const plexUrl = gs('plex_url');
+  const plexToken = gs('plex_token');
+  if (!plexUrl || !plexToken) return res.status(404).end();
+  const thumbPath = req.query.path;
+  if (!thumbPath || !thumbPath.startsWith('/library/')) return res.status(400).end();
+  try {
+    const base = plexUrl.replace(/\/$/, '');
+    const r = await fetch(`${base}${thumbPath}?X-Plex-Token=${plexToken}`, { signal: AbortSignal.timeout(8000) });
+    if (!r.ok) return res.status(r.status).end();
+    const buf = await r.arrayBuffer();
+    res.set('Content-Type', r.headers.get('content-type') || 'image/jpeg');
+    res.set('Cache-Control', 'public, max-age=3600');
+    res.send(Buffer.from(buf));
+  } catch { res.status(502).end(); }
+});
 
 app.get('/api/music/now-playing', requireAdmin, async (req, res) => {
   try {

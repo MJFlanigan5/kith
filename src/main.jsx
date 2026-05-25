@@ -520,6 +520,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
   },[]);
   const [haEvents,setHaEvents]=useState([]);
   const [smEvents,setSmEvents]=useState([]);
+  const [widgetData,setWidgetData]=useState({});
   useEffect(()=>{
     const loadHA=()=>api.get('/api/ha/events').then(d=>{if(Array.isArray(d))setHaEvents(d);}).catch(()=>{});
     const loadSm=()=>fetch('/api/ha/pull').then(r=>r.json()).then(d=>{if(Array.isArray(d))setSmEvents(d);}).catch(()=>{});
@@ -544,7 +545,6 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
     const id=setInterval(load,12000);
     return()=>clearInterval(id);
   },[]);
-  const [widgetData,setWidgetData]=useState({});
 
   const [newsIdx,setNewsIdx]=useState(0);
   const [newsVisible,setNewsVisible]=useState(true);

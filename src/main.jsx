@@ -560,7 +560,15 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
     return()=>{clearInterval(id);clearTimeout(newsFadeTimer.current);};
   },[news.length]);
   const [centerIdx,setCenterIdx]=useState(0);
-  useEffect(()=>{const id=setInterval(()=>setCenterIdx(i=>i+1),rotationMs);return()=>clearInterval(id);},[rotationMs]);
+  useEffect(()=>{
+    let id;
+    const start=()=>{id=setInterval(()=>setCenterIdx(i=>i+1),rotationMs);};
+    const stop=()=>clearInterval(id);
+    const onVis=()=>document.visibilityState==='hidden'?stop():start();
+    start();
+    document.addEventListener('visibilitychange',onVis);
+    return()=>{stop();document.removeEventListener('visibilitychange',onVis);};
+  },[rotationMs]);
   const [plexIdx,setPlexIdx]=useState(0);
   useEffect(()=>{
     setPlexIdx(0);
@@ -665,6 +673,15 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
     ...(polls.length>0?['w_polls']:[]),
   ];
   const activePanelId=centerPanels[centerIdx%Math.max(1,centerPanels.length)];
+  const [visiblePanelId,setVisiblePanelId]=useState(centerPanels[0]||'dinner');
+  const [panelOpacity,setPanelOpacity]=useState(1);
+  const panelFirstRender=useRef(true);
+  useEffect(()=>{
+    if(panelFirstRender.current){panelFirstRender.current=false;setVisiblePanelId(activePanelId);return;}
+    setPanelOpacity(0);
+    const t=setTimeout(()=>{setVisiblePanelId(activePanelId);setPanelOpacity(1);},350);
+    return()=>clearTimeout(t);
+  },[activePanelId]);
 
   const [dmChoreConfetti,setDmChoreConfetti]=useState(false);
   const toggleChore=async id=>{
@@ -804,11 +821,19 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
           {/* Main 3-col grid */}
           <div style={{flex:1,display:'grid',gridTemplateColumns:'1fr 1.6fr 1fr',gap:isTV?16:12,minHeight:0,zoom:isTV?1.1:undefined}}>
 
-            {/* LEFT: scrollable events + QR always pinned at bottom */}
+            {/* LEFT: scrollable events + QR */}
             <Widget style={{display:'flex',flexDirection:'column',overflow:'hidden'}}>
-              {hasUpcomingEvents&&(
+              {hasUpcomingEvents?(
                 <>
-                  <WLabel>Upcoming</WLabel>
+                  <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:isTV?14:12,flexShrink:0}}>
+                    <div style={{fontSize:isTV?12:10,fontWeight:700,color:D.t3,textTransform:'uppercase',letterSpacing:'.10em'}}>Upcoming</div>
+                    {wifiQrData&&(
+                      <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:3,marginTop:-2}}>
+                        <img src={wifiQrData.dataUrl} alt="WiFi QR" style={{width:isTV?64:52,height:isTV?64:52,objectFit:'contain',borderRadius:7,display:'block'}}/>
+                        <div style={{fontSize:8,fontWeight:600,color:D.t3,maxWidth:isTV?64:52,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',textAlign:'center'}}>{wifiQrData.ssid}</div>
+                      </div>
+                    )}
+                  </div>
                   <div ref={calScrollRef} style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:14,WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
                     {agendaDays.filter(({date})=>(events||[]).some(e=>e.date===date)).map(({label,date})=>{
                       const evs=(events||[]).filter(e=>e.date===date);
@@ -826,35 +851,37 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                     })}
                   </div>
                 </>
-              )}
-              {wifiQrData?(
-                <div style={{flexShrink:0,display:'flex',flexDirection:'column',alignItems:'center',gap:8,paddingTop:hasUpcomingEvents?12:0,...(!hasUpcomingEvents&&{flex:1}),justifyContent:'center',borderTop:hasUpcomingEvents?`1px solid ${D.sep}`:'none',marginTop:hasUpcomingEvents?8:0}}>
-                  {!hasUpcomingEvents&&<WLabel>Guest WiFi</WLabel>}
-                  <img src={wifiQrData.dataUrl} alt="WiFi QR" style={{width:hasUpcomingEvents?(isTV?100:80):(isTV?160:130),height:hasUpcomingEvents?(isTV?100:80):(isTV?160:130),objectFit:'contain',borderRadius:10,display:'block'}}/>
-                  <div style={{fontSize:hasUpcomingEvents?11:14,fontWeight:600,color:D.t2,letterSpacing:'.02em'}}>{wifiQrData.ssid}</div>
-                  {!hasUpcomingEvents&&<div style={{fontSize:11,color:D.t4}}>Scan to connect</div>}
-                </div>
-              ):!hasUpcomingEvents&&(
-                <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center'}}>
-                  <div style={{fontSize:13,color:D.t4,textAlign:'center'}}>Nothing scheduled</div>
-                </div>
+              ):(
+                wifiQrData?(
+                  <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:8}}>
+                    <WLabel>Guest WiFi</WLabel>
+                    <img src={wifiQrData.dataUrl} alt="WiFi QR" style={{width:isTV?160:130,height:isTV?160:130,objectFit:'contain',borderRadius:10,display:'block'}}/>
+                    <div style={{fontSize:14,fontWeight:600,color:D.t2,letterSpacing:'.02em'}}>{wifiQrData.ssid}</div>
+                    <div style={{fontSize:11,color:D.t4}}>Scan to connect</div>
+                  </div>
+                ):(
+                  <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                    <div style={{fontSize:13,color:D.t4,textAlign:'center'}}>Nothing scheduled</div>
+                  </div>
+                )
               )}
             </Widget>
 
             {/* CENTER: rotating panel + dinner */}
             <div style={{display:'flex',flexDirection:'column',gap:12,minHeight:0}}>
               {centerPanels.length>0&&(
-                <div key={activePanelId} className='screen' style={{flex:1,display:'flex',flexDirection:'column',minHeight:0}}>
+                <div style={{flex:1,display:'flex',flexDirection:'column',minHeight:0}}>
                   <Widget style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
                     {centerPanels.length>1&&(
-                      <div style={{display:'flex',gap:3,marginBottom:10}}>
+                      <div style={{display:'flex',gap:5,marginBottom:12,justifyContent:'center',alignItems:'center'}}>
                         {centerPanels.map((p,i)=>{
                           const active=i===centerIdx%centerPanels.length;
-                          return <div key={p} style={{height:2,borderRadius:1,flex:active?2:1,background:active?D.t2:D.t4,transition:'all .4s ease'}}/>;
+                          return <div key={p} style={{width:active?7:5,height:active?7:5,borderRadius:'50%',background:active?D.t2:D.t4,transition:'all .3s ease',flexShrink:0}}/>;
                         })}
                       </div>
                     )}
-                    {activePanelId==='chores'&&(
+                    <div style={{flex:1,display:'flex',flexDirection:'column',minHeight:0,opacity:panelOpacity,transition:'opacity 0.35s ease'}}>
+                    {visiblePanelId==='chores'&&(
                       <>
                         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
                           <WLabel>Chores</WLabel>
@@ -871,7 +898,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         </div>
                       </>
                     )}
-                    {activePanelId==='countdowns'&&(
+                    {visiblePanelId==='countdowns'&&(
                       <>
                         <WLabel>Countdowns</WLabel>
                         <div style={{flex:1,overflowY:'auto',marginTop:2}}>
@@ -888,7 +915,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         </div>
                       </>
                     )}
-                    {activePanelId==='goals'&&(
+                    {visiblePanelId==='goals'&&(
                       <>
                         <WLabel>Goals</WLabel>
                         <div style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:16,marginTop:2}}>
@@ -912,7 +939,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         </div>
                       </>
                     )}
-                    {activePanelId==='members'&&(
+                    {visiblePanelId==='members'&&(
                       <>
                         <WLabel>Family Progress</WLabel>
                         <div style={{flex:1,display:'flex',flexDirection:'column',gap:14,justifyContent:'center',overflowY:'auto',marginTop:2}}>
@@ -937,7 +964,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         </div>
                       </>
                     )}
-                    {activePanelId==='w_quote'&&(
+                    {visiblePanelId==='w_quote'&&(
                       <>
                         <WLabel>Quote</WLabel>
                         <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center'}}>
@@ -946,7 +973,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         </div>
                       </>
                     )}
-                    {activePanelId==='w_stocks'&&(
+                    {visiblePanelId==='w_stocks'&&(
                       <>
                         <WLabel>Markets</WLabel>
                         <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',gap:10,marginTop:4}}>
@@ -965,7 +992,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         </div>
                       </>
                     )}
-                    {activePanelId==='w_producthunt'&&(
+                    {visiblePanelId==='w_producthunt'&&(
                       <>
                         <WLabel>Product Hunt today</WLabel>
                         <div style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:8,marginTop:4}}>
@@ -981,7 +1008,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         </div>
                       </>
                     )}
-                    {activePanelId==='w_github'&&(
+                    {visiblePanelId==='w_github'&&(
                       <>
                         <WLabel>GitHub — {widgetData.github?.username}</WLabel>
                         <div style={{fontSize:12,color:D.t3,marginBottom:8}}>{widgetData.github?.total} contributions · last 30 days</div>
@@ -992,7 +1019,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         </div>
                       </>
                     )}
-                    {activePanelId==='w_reddit'&&(
+                    {visiblePanelId==='w_reddit'&&(
                       <>
                         <WLabel>Reddit — {widgetData.reddit?.sub}</WLabel>
                         <div style={{flex:1,overflowY:'auto',marginTop:2}}>
@@ -1005,7 +1032,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         </div>
                       </>
                     )}
-                    {activePanelId==='w_beehiiv'&&(
+                    {visiblePanelId==='w_beehiiv'&&(
                       <>
                         <WLabel>Newsletter</WLabel>
                         <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',alignItems:'center',textAlign:'center'}}>
@@ -1015,7 +1042,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         </div>
                       </>
                     )}
-                    {activePanelId==='w_youtube'&&(
+                    {visiblePanelId==='w_youtube'&&(
                       <>
                         <WLabel>YouTube — {widgetData.youtube?.name}</WLabel>
                         <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',gap:16,marginTop:4}}>
@@ -1032,7 +1059,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         </div>
                       </>
                     )}
-                    {activePanelId==='w_etsy'&&(
+                    {visiblePanelId==='w_etsy'&&(
                       <>
                         <WLabel>Etsy — {widgetData.etsy?.name}</WLabel>
                         <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',gap:16,marginTop:4}}>
@@ -1049,7 +1076,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         </div>
                       </>
                     )}
-                    {activePanelId==='w_powerwall'&&(()=>{
+                    {visiblePanelId==='w_powerwall'&&(()=>{
                       const pw=widgetData.powerwall;
                       const gridExport=pw.grid_kw<0;
                       const batCharging=pw.battery_kw<0;
@@ -1078,7 +1105,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         </>
                       );
                     })()}
-                    {activePanelId==='w_flight'&&(()=>{
+                    {visiblePanelId==='w_flight'&&(()=>{
                       const f=widgetData.flight;
                       const statusColor={active:A.green,landed:A.green,scheduled:D.t3,cancelled:A.red,incident:A.red,diverted:A.amber}[f.status]||D.t3;
                       return(
@@ -1113,7 +1140,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         </>
                       );
                     })()}
-                    {activePanelId==='w_uptime'&&(
+                    {visiblePanelId==='w_uptime'&&(
                       <>
                         <WLabel>Services</WLabel>
                         <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',gap:8}}>
@@ -1130,7 +1157,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         </div>
                       </>
                     )}
-                    {activePanelId==='w_nextdns'&&(()=>{
+                    {visiblePanelId==='w_nextdns'&&(()=>{
                       const nd=widgetData.nextdns;
                       return(
                         <>
@@ -1154,7 +1181,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         </>
                       );
                     })()}
-                    {activePanelId==='w_beszel'&&(
+                    {visiblePanelId==='w_beszel'&&(
                       <>
                         <WLabel>Servers</WLabel>
                         <div style={{flex:1,display:'flex',flexWrap:'wrap',gap:8,alignContent:'flex-start'}}>
@@ -1192,7 +1219,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         </div>
                       </>
                     )}
-                    {activePanelId==='w_plex'&&(()=>{
+                    {visiblePanelId==='w_plex'&&(()=>{
                       const px=widgetData.plex;
                       const isPlaying=px?.type==='playing';
                       const items=px?.items||[];
@@ -1243,7 +1270,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         </>
                       );
                     })()}
-                    {activePanelId==='w_moen'&&(()=>{
+                    {visiblePanelId==='w_moen'&&(()=>{
                       const m=widgetData.moen;
                       const modeColor={home:A.green,away:A.amber,sleep:A.indigo}[m.system_mode]||D.t3;
                       return(
@@ -1277,7 +1304,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         </>
                       );
                     })()}
-                    {activePanelId==='w_unifi'&&(()=>{
+                    {visiblePanelId==='w_unifi'&&(()=>{
                       const u=widgetData.unifi;
                       const upColor=u.status==='up'?A.green:A.red;
                       return(
@@ -1308,7 +1335,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         </>
                       );
                     })()}
-                    {activePanelId==='w_who_home'&&(()=>{
+                    {visiblePanelId==='w_who_home'&&(()=>{
                       const {persons=[]}=widgetData.who_home||{};
                       const isHome=s=>s==='home';
                       const stateLabel=s=>s==='home'?'Home':s==='not_home'?'Away':s?s.replace(/_/g,' '):'Unknown';
@@ -1336,7 +1363,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         </>
                       );
                     })()}
-                    {activePanelId==='w_thermostat'&&(()=>{
+                    {visiblePanelId==='w_thermostat'&&(()=>{
                       const t=widgetData.thermostat;
                       const modeColor={heat:'#FF6B35',cool:'#3B82F6',heat_cool:'#AF52DE',auto:'#AF52DE',off:D.t4,fan_only:D.t3,dry:'#FF9500'}[t.mode]||D.t3;
                       const actionLabel={heating:'Heating',cooling:'Cooling',idle:'Idle',off:'Off',drying:'Drying',fan:'Fan'}[t.action]||t.action||'';
@@ -1371,7 +1398,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         </>
                       );
                     })()}
-                    {activePanelId==='w_ha_sensors'&&(()=>{
+                    {visiblePanelId==='w_ha_sensors'&&(()=>{
                       const {sensors=[]}=widgetData.ha_sensors||{};
                       // Color based on domain + state
                       const stateColor=s=>{
@@ -1398,7 +1425,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         </>
                       );
                     })()}
-                    {activePanelId==='w_notifications'&&(()=>{
+                    {visiblePanelId==='w_notifications'&&(()=>{
                       const recent=allSmartEvents.slice(0,3);
                       if(!recent.length) return null;
                       const fmtAgo=ts=>{
@@ -1428,7 +1455,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         </>
                       );
                     })()}
-                    {activePanelId==='w_polls'&&(()=>{
+                    {visiblePanelId==='w_polls'&&(()=>{
                       const poll=polls[0];
                       if(!poll) return null;
                       const votes=livePollVotes&&Object.keys(livePollVotes).length?livePollVotes:poll.votes||{};
@@ -1458,7 +1485,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         </>
                       );
                     })()}
-                    {activePanelId==='dinner'&&(()=>{const td=todayDinner()||'—';return(
+                    {visiblePanelId==='dinner'&&(()=>{const td=todayDinner()||'—';return(
                       <>
                         <WLabel>Dinner tonight</WLabel>
                         <div style={{flex:1,display:'flex',flexDirection:'column',gap:12,minHeight:0}}>
@@ -1481,6 +1508,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         </div>
                       </>
                     );})()}
+                    </div>
                   </Widget>
                 </div>
               )}

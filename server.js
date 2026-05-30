@@ -2304,8 +2304,8 @@ app.get('/api/widgets/data', async (req, res) => {
     }).then(d => { if (d) result.ha_sensors = d; }));
   }
 
-  // Word of the day — fully self-contained, no external API
-  {
+  // Word of the day — API-first with bundled fallback so it always shows
+  p.push(_wFetch(`wotd:${new Date().toISOString().slice(0,10)}`, 86400000, async () => {
     const WOTD = [
       {word:'serendipity',pos:'noun',def:'The occurrence of pleasant discoveries by accident or good fortune.',ex:'Finding that old photo was pure serendipity.'},
       {word:'ephemeral',pos:'adjective',def:'Lasting for a very short time; transitory.',ex:'The ephemeral beauty of cherry blossoms is part of their appeal.'},
@@ -2416,9 +2416,21 @@ app.get('/api/widgets/data', async (req, res) => {
       {word:'diaphanous',pos:'adjective',def:'Light, delicate, and translucent.',ex:'The diaphanous curtains drifted in the summer breeze.'},
     ];
     const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(),0,0)) / 86400000);
-    const w = WOTD[dayOfYear % WOTD.length];
-    result.wotd = { word: w.word, partOfSpeech: w.pos, definition: w.def, example: w.ex || '' };
-  }
+    const fallback = WOTD[dayOfYear % WOTD.length];
+    try {
+      const r = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${fallback.word}`, { signal: AbortSignal.timeout(6000) });
+      if (r.ok) {
+        const d = await r.json();
+        const entry = d[0];
+        const meaning = entry?.meanings?.[0];
+        const def = meaning?.definitions?.[0];
+        if (entry?.word && def?.definition) {
+          return { word: entry.word, partOfSpeech: meaning.partOfSpeech || '', definition: def.definition, example: def.example || '' };
+        }
+      }
+    } catch {}
+    return { word: fallback.word, partOfSpeech: fallback.pos, definition: fallback.def, example: fallback.ex || '' };
+  }).then(d => { if (d) result.wotd = d; }));
 
   await Promise.allSettled(p);
   res.json(result);

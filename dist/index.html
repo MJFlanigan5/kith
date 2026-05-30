@@ -8,17 +8,35 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 <style>
+:root{
+  --k-sysBg:#F5F3EF;--k-cardBg:#fff;--k-inputBg:rgba(0,0,0,0.04);
+  --k-l1:#1A1A1A;--k-l2:#3A3A3A;--k-l3:#6B6B6B;--k-l4:rgba(0,0,0,0.42);--k-l5:rgba(0,0,0,0.22);
+  --k-blueFill:rgba(0,122,255,0.08);--k-greenFill:rgba(52,199,89,0.08);--k-amberFill:rgba(255,149,0,0.08);--k-redFill:rgba(255,59,48,0.08);
+  --k-sep:rgba(0,0,0,0.07);--k-sepO:#D8D8D8;--k-chrome:#EEECEA;
+  --k-sh1:0 1px 2px rgba(0,0,0,0.04),0 2px 8px rgba(0,0,0,0.06);
+  --k-sh2:0 2px 8px rgba(0,0,0,0.06),0 8px 24px rgba(0,0,0,0.08);
+  --k-sh3:0 4px 16px rgba(0,0,0,0.10),0 16px 48px rgba(0,0,0,0.12);
+}
+[data-dark]{
+  --k-sysBg:#000;--k-cardBg:#1C1C1E;--k-inputBg:rgba(255,255,255,0.08);
+  --k-l1:#F5F5F7;--k-l2:#EBEBF0;--k-l3:#8E8E93;--k-l4:rgba(255,255,255,0.42);--k-l5:rgba(255,255,255,0.22);
+  --k-blueFill:rgba(0,122,255,0.18);--k-greenFill:rgba(52,199,89,0.18);--k-amberFill:rgba(255,149,0,0.18);--k-redFill:rgba(255,59,48,0.18);
+  --k-sep:rgba(255,255,255,0.10);--k-sepO:#3A3A3C;--k-chrome:#111;
+  --k-sh1:0 1px 2px rgba(0,0,0,0.4),0 2px 8px rgba(0,0,0,0.5);
+  --k-sh2:0 2px 8px rgba(0,0,0,0.4),0 8px 24px rgba(0,0,0,0.6);
+  --k-sh3:0 4px 16px rgba(0,0,0,0.5),0 16px 48px rgba(0,0,0,0.7);
+}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body,#root{height:100%}
-body{font-family:'DM Sans',-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;background:#F5F3EF;color:#1A1A1A;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+body{font-family:'DM Sans',-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;background:var(--k-sysBg);color:var(--k-l1);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;transition:background .2s,color .2s}
 .fade-scroll{-webkit-mask-image:linear-gradient(to bottom,transparent 0px,black 10px,black calc(100% - 10px),transparent 100%);mask-image:linear-gradient(to bottom,transparent 0px,black 10px,black calc(100% - 10px),transparent 100%)}
 input,select,textarea,button{font-family:inherit}
 button{cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none}
 a{cursor:pointer;user-select:none}
 ::-webkit-scrollbar{width:5px;height:5px}
 ::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:rgba(0,0,0,.12);border-radius:10px}
-::-webkit-scrollbar-thumb:hover{background:rgba(0,0,0,.2)}
+::-webkit-scrollbar-thumb{background:var(--k-sep);border-radius:10px}
+::-webkit-scrollbar-thumb:hover{background:var(--k-l5)}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 @keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 @keyframes checkPop{0%{transform:scale(.7)}55%{transform:scale(1.18)}100%{transform:scale(1)}}
@@ -29,14 +47,14 @@ a{cursor:pointer;user-select:none}
 @keyframes springIn{0%{opacity:0;transform:translateY(10px)}100%{opacity:1;transform:translateY(0)}}
 .screen{animation:springIn .4s cubic-bezier(.25,.46,.45,.94) both}
 .irow{transition:background .12s ease}
-.irow:hover{background:rgba(0,0,0,0.025)!important}
-.irow:active{background:rgba(0,0,0,0.045)!important}
+.irow:hover{background:var(--k-inputBg)!important}
+.irow:active{background:var(--k-sep)!important}
 .tap{cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .08s ease,opacity .08s ease;}
 .tap:active{transform:scale(.97);opacity:.82;}
 .noise-layer{background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");background-size:256px 256px;opacity:.038;}
 .hdr{transition:background .25s ease,box-shadow .25s ease,backdrop-filter .25s ease;}
 </style>
-  <script type="module" crossorigin src="/assets/index-DY8hgDYt.js"></script>
+  <script type="module" crossorigin src="/assets/index-CNTxMxno.js"></script>
 </head>
 <body>
 <div id="root"></div>

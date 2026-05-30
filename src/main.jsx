@@ -2,21 +2,19 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import ReactDOM from 'react-dom/client'
 
 
-/* ── Design tokens ───────────────────────────────────────────────────── */
+/* ── Design tokens — neutral values reference CSS vars, accents stay hardcoded ── */
 const A={
-  systemBg:'#F5F3EF',
-  cardBg:'#fff',
-  inputBg:'rgba(0,0,0,0.04)',
-  label1:'#1A1A1A',label2:'#3A3A3A',label3:'#6B6B6B',label4:'rgba(0,0,0,0.42)',label5:'rgba(0,0,0,0.22)',
+  systemBg:'var(--k-sysBg)',
+  cardBg:'var(--k-cardBg)',
+  inputBg:'var(--k-inputBg)',
+  label1:'var(--k-l1)',label2:'var(--k-l2)',label3:'var(--k-l3)',label4:'var(--k-l4)',label5:'var(--k-l5)',
   blue:'#007AFF',green:'#34C759',amber:'#FF9500',red:'#FF3B30',indigo:'#5856D6',teal:'#32ADE6',purple:'#AF52DE',
-  blueFill:'rgba(0,122,255,0.08)',greenFill:'rgba(52,199,89,0.08)',amberFill:'rgba(255,149,0,0.08)',redFill:'rgba(255,59,48,0.08)',
-  sep:'rgba(0,0,0,0.07)',sepOpaque:'#D8D8D8',
-  shadowSm:'0 1px 2px rgba(0,0,0,0.04),0 2px 8px rgba(0,0,0,0.06)',
-  shadowMd:'0 2px 8px rgba(0,0,0,0.06),0 8px 24px rgba(0,0,0,0.08)',
-  shadowLg:'0 4px 16px rgba(0,0,0,0.10),0 16px 48px rgba(0,0,0,0.12)',
+  blueFill:'var(--k-blueFill)',greenFill:'var(--k-greenFill)',amberFill:'var(--k-amberFill)',redFill:'var(--k-redFill)',
+  sep:'var(--k-sep)',sepOpaque:'var(--k-sepO)',
+  shadowSm:'var(--k-sh1)',shadowMd:'var(--k-sh2)',shadowLg:'var(--k-sh3)',
   r:'14px',rSm:'10px',rXs:'7px',rPill:'999px',
-  glass:'#fff',
-  glassFilter:'none',
+  glass:'var(--k-cardBg)',glassFilter:'none',
+  chrome:'var(--k-chrome)',
 };
 
 const DAYS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -2640,7 +2638,7 @@ function ChoresScreen({chores,setChores,goals=[],members=[],toastAdd}){
     try{
       const result=await api.put(`/api/chores/${c.id}/done`);
       if(result.error){toastAdd(result.error,'red');return;}
-      setChores(p=>p.map(x=>x.id===c.id?{...x,done:result.done,next_due:result.next_due,status:result.status}:x));
+      setChores(p=>p.map(x=>x.id===c.id?{...x,done:result.done,next_due:result.next_due,status:result.status,streak:result.streak??x.streak}:x));
       if(result.done){
         toastAdd(`${c.name} done!`);
         setChoreConfetti(true);
@@ -2680,7 +2678,10 @@ function ChoresScreen({chores,setChores,goals=[],members=[],toastAdd}){
               return(
                 <div key={c.id} style={{padding:'14px 16px',borderTop:`1px solid ${A.sep}`,borderLeft:`3px solid ${c.status==='due'?A.amber:c.status==='overdue'?A.red:'transparent'}`,background:c.done?A.greenFill:c.status==='due'?`${A.amber}06`:c.status==='overdue'?`${A.red}06`:'transparent',opacity:c.done?.6:1,transition:'opacity .3s'}}>
                   <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
-                    <span style={{fontSize:15,fontWeight:600,textDecoration:c.done?'line-through':'none',color:c.done?A.label4:A.label1}}>{c.name}</span>
+                    <div style={{display:'flex',alignItems:'center',gap:8,minWidth:0}}>
+                      <span style={{fontSize:15,fontWeight:600,textDecoration:c.done?'line-through':'none',color:c.done?A.label4:A.label1}}>{c.name}</span>
+                      {(c.streak||0)>=2&&!c.done&&<span style={{fontSize:11,fontWeight:700,color:A.amber,background:A.amberFill,padding:'2px 7px',borderRadius:A.rPill,flexShrink:0}}>{c.streak}×</span>}
+                    </div>
                     <Badge color={p.color} bg={p.bg}>{p.label}</Badge>
                   </div>
                   <div style={{fontSize:13,color:A.label4,marginBottom:10}}>{c.recurrence} · Next: {c.next_due||'—'}{c.member_name&&<span style={{marginLeft:8}}>· {c.member_name}</span>}</div>
@@ -2710,6 +2711,7 @@ function ChoresScreen({chores,setChores,goals=[],members=[],toastAdd}){
                   <div style={{display:'flex',alignItems:'center',gap:8}}>
                     {c.member_color&&<div title={c.member_name||''} style={{width:22,height:22,borderRadius:'50%',background:c.member_color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700,color:'#fff',flexShrink:0}}>{c.member_initials}</div>}
                     <span style={{fontSize:15,fontWeight:500,textDecoration:c.done?'line-through':'none',color:c.done?A.label4:A.label1}}>{c.name}</span>
+                    {(c.streak||0)>=2&&!c.done&&<span style={{fontSize:11,fontWeight:700,color:A.amber,background:A.amberFill,padding:'2px 6px',borderRadius:A.rPill}}>{c.streak}×</span>}
                   </div>
                   <div style={{fontSize:13,color:A.amber,fontWeight:700}}>{'⭐'.repeat(c.points||1)}</div>
                   <div style={{fontSize:13,color:A.label4}}>{c.recurrence}</div>
@@ -2809,10 +2811,18 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,toastAdd}){
   const [editingDay,setEditingDay]=useState(null);
   const [mealInput,setMealInput]=useState('');
   const [removing,setRemoving]=useState(new Set());
+  const [history,setHistory]=useState([]);
   const inputRef=useRef();
   const removeTimers=useRef({});
 
   useEffect(()=>()=>{Object.values(removeTimers.current).forEach(clearTimeout)},[]);
+  useEffect(()=>{api.get('/api/grocery/history').then(r=>Array.isArray(r)&&setHistory(r)).catch(()=>{})},[]);
+
+  const addFromHistory=async name=>{
+    const newItem=await api.post('/api/grocery',{name});
+    setGrocery(p=>[...p,newItem]);
+    toastAdd(`${name} added`);
+  };
 
   const addItem=async()=>{
     if(!input.trim()) return;
@@ -2867,9 +2877,19 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,toastAdd}){
           <Inp value={input} onChange={e=>setInput(e.target.value)} placeholder="Add item..." onKeyDown={e=>e.key==='Enter'&&addItem()} inputRef={inputRef}/>
           <Btn onClick={addItem} style={{flexShrink:0}}>Add</Btn>
         </div>
-        <div style={{marginBottom:16}}>
+        <div style={{marginBottom:8}}>
           <Inp value={catInput} onChange={e=>setCatInput(e.target.value)} placeholder="Category (optional, e.g. Produce)" onKeyDown={e=>e.key==='Enter'&&addItem()}/>
         </div>
+        {history.filter(h=>!unchecked.some(i=>i.name.toLowerCase()===h.name.toLowerCase())).slice(0,6).length>0&&(
+          <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:14}}>
+            {history.filter(h=>!unchecked.some(i=>i.name.toLowerCase()===h.name.toLowerCase())).slice(0,6).map(h=>(
+              <button key={h.name} onClick={()=>addFromHistory(h.name)}
+                style={{fontSize:13,padding:'5px 11px',borderRadius:A.rPill,border:`1px solid ${A.sep}`,background:A.cardBg,color:A.label2,cursor:'pointer',fontWeight:500}}>
+                {h.name}
+              </button>
+            ))}
+          </div>
+        )}
         {unchecked.length===0&&checked.length===0&&(
           <div style={{padding:'52px 24px',textAlign:'center',marginBottom:12}}>
             <div style={{fontSize:15,fontWeight:600,color:A.label3,marginBottom:4}}>List is empty</div>
@@ -2995,7 +3015,7 @@ function WebhookSecretPanel({toastAdd}){
 }
 
 /* ── Settings ────────────────────────────────────────────────────────── */
-function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setPhotos,clockFormat,setClockFormat,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd,setRefreshMs,parseRefreshMs,setQuickActions,setRotationMs,setWifiQrData}){
+function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setPhotos,clockFormat,setClockFormat,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd,setRefreshMs,parseRefreshMs,setQuickActions,setRotationMs,setWifiQrData,darkMode,onDarkMode}){
   const isMobile=useIsMobile();
   const [weatherCity,setWeatherCity]=useState('');
   const [weatherLat,setWeatherLat]=useState('33.749');
@@ -3237,6 +3257,13 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   return(
     <div style={{maxWidth:620}}>
       <h1 style={{fontSize:28,fontWeight:800,letterSpacing:'-.03em',marginBottom:24}}>Settings</h1>
+
+      <FormGroup label="Appearance">
+        <div style={{padding:'14px 16px',display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
+          <div style={{fontSize:14,color:A.label3}}>Follow your device or choose a fixed theme.</div>
+          <SegControl value={darkMode||'System'} onChange={onDarkMode} options={['System','Light','Dark']}/>
+        </div>
+      </FormGroup>
 
       <FormGroup label="Google Calendar">
         <div style={{padding:'14px 16px'}}>
@@ -4578,14 +4605,14 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
     bookmarks:  <BookmarksScreen bookmarks={bookmarks} setBookmarks={setBookmarks} toastAdd={toastAdd}/>,
     polls:      <PollsScreen polls={polls} setPolls={setPolls} toastAdd={toastAdd}/>,
     inbox:      <InboxScreen toastAdd={toastAdd} events={events} setEvents={setEvents} setInboxCount={setInboxCount}/>,
-    settings:   <SettingsScreen toastAdd={toastAdd} icsSources={icsSources} setIcsSources={setIcsSources} onDisplay={onDisplay} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} setQuickActions={setQuickActions} setRotationMs={setRotationMs} setWifiQrData={setWifiQrData}/>,
+    settings:   <SettingsScreen toastAdd={toastAdd} icsSources={icsSources} setIcsSources={setIcsSources} onDisplay={onDisplay} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} setQuickActions={setQuickActions} setRotationMs={setRotationMs} setWifiQrData={setWifiQrData} darkMode={darkMode} onDarkMode={handleDarkMode}/>,
   };
 
   if(isMobile){
     return(
       <div style={{display:'flex',flexDirection:'column',height:'100vh',overflow:'hidden',background:A.systemBg}}>
         {/* Mobile top bar */}
-        <div className="hdr" style={{paddingTop:'max(12px, env(safe-area-inset-top))',background:'#fff',borderBottom:'1px solid rgba(0,0,0,0.07)',boxShadow:scrolled?'0 1px 12px rgba(0,0,0,0.06)':'none',display:'flex',alignItems:'center',justifyContent:'space-between',padding:`max(12px, env(safe-area-inset-top)) 16px 12px`,flexShrink:0}}>
+        <div className="hdr" style={{paddingTop:'max(12px, env(safe-area-inset-top))',background:A.cardBg,borderBottom:`1px solid ${A.sep}`,boxShadow:scrolled?A.shadowSm:'none',display:'flex',alignItems:'center',justifyContent:'space-between',padding:`max(12px, env(safe-area-inset-top)) 16px 12px`,flexShrink:0}}>
           <span style={{fontSize:17,fontWeight:700,letterSpacing:'-.03em',color:A.label1}}>{nav.find(n=>n.id===screen)?.label}</span>
           <button onClick={()=>setScreen('settings')} style={{width:30,height:30,borderRadius:'50%',background:A.inputBg,border:'none',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',color:A.label3}}>
             <svg width="15" height="15" viewBox="0 0 17 17" fill="none"><circle cx="8.5" cy="8.5" r="2.5" stroke="currentColor" strokeWidth="1.5"/><path d="M8.5 1v2M8.5 14v2M1 8.5h2M14 8.5h2M3.05 3.05l1.42 1.42M12.53 12.53l1.42 1.42M12.53 3.05l-1.42 1.42M4.47 12.53l-1.42 1.42" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
@@ -4596,7 +4623,7 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
           {screens[screen]}
         </div>
         {/* Bottom tab bar */}
-        <div style={{position:'fixed',bottom:'max(12px, env(safe-area-inset-bottom))',left:'50%',transform:'translateX(-50%)',width:'calc(100% - 32px)',maxWidth:560,background:'#fff',border:'1px solid rgba(0,0,0,0.07)',borderRadius:28,boxShadow:'0 2px 20px rgba(0,0,0,0.10)',display:'flex',padding:'0 2px',zIndex:50,height:58,alignItems:'center'}}>
+        <div style={{position:'fixed',bottom:'max(12px, env(safe-area-inset-bottom))',left:'50%',transform:'translateX(-50%)',width:'calc(100% - 32px)',maxWidth:560,background:A.cardBg,border:`1px solid ${A.sep}`,borderRadius:28,boxShadow:A.shadowMd,display:'flex',padding:'0 2px',zIndex:50,height:58,alignItems:'center'}}>
           {nav.map(item=>{
             const active=screen===item.id;
             return(
@@ -4609,6 +4636,7 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
             );
           })}
         </div>
+        <QuickAddFAB screen={screen} setGrocery={setGrocery} setChores={setChores} toastAdd={toastAdd}/>
         <ToastStack toasts={toasts}/>
       </div>
     );
@@ -4616,7 +4644,7 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
 
   return(
     <div style={{display:'flex',height:'100vh',overflow:'hidden',background:A.systemBg}}>
-      <div style={{width:220,flexShrink:0,background:'#EEECEA',borderRight:'1px solid rgba(0,0,0,0.07)',display:'flex',flexDirection:'column'}}>
+      <div style={{width:220,flexShrink:0,background:A.chrome,borderRight:`1px solid ${A.sep}`,display:'flex',flexDirection:'column'}}>
         <div style={{padding:'22px 18px 14px'}}>
           <div style={{fontSize:22,fontWeight:800,letterSpacing:'-.05em',color:A.label1}}>Kith</div>
           <div style={{fontSize:12,color:A.label5,marginTop:1,letterSpacing:'-.01em'}}>Family Dashboard</div>
@@ -4626,7 +4654,7 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
             const active=screen===item.id;
             return(
               <button key={item.id} onClick={()=>setScreen(item.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',borderRadius:A.rSm,border:'none',cursor:'pointer',width:'100%',background:active?'#1A1A1A':'transparent',color:active?'#fff':A.label3,fontSize:14,fontWeight:active?600:400,textAlign:'left',marginBottom:1,transition:'background .12s,color .12s'}}
-                onMouseEnter={e=>{if(!active)e.currentTarget.style.background='rgba(0,0,0,0.05)';}}
+                onMouseEnter={e=>{if(!active)e.currentTarget.style.background=A.inputBg;}}
                 onMouseLeave={e=>{if(!active)e.currentTarget.style.background='transparent';}}
                 onMouseDown={e=>{e.currentTarget.style.transform='scale(.99)';}}
                 onMouseUp={e=>{e.currentTarget.style.transform='scale(1)';}}
@@ -4944,11 +4972,90 @@ function SetupWizard({onComplete}){
   );
 }
 
+/* ── Quick Add FAB (mobile-only floating action button) ─────────────── */
+function QuickAddFAB({screen,setGrocery,setChores,toastAdd}){
+  const [open,setOpen]=useState(false);
+  const [type,setType]=useState(null);
+  const [input,setInput]=useState('');
+  const fabRef=useRef();
+
+  const defaultType=screen==='grocery'?'grocery':screen==='chores'?'chore':null;
+  const activeType=type||defaultType;
+
+  const close=()=>{setOpen(false);setType(null);setInput('');};
+
+  const submit=async()=>{
+    if(!input.trim()||!activeType) return;
+    try{
+      if(activeType==='grocery'){
+        const item=await api.post('/api/grocery',{name:input.trim()});
+        setGrocery(p=>[...p,item]);
+        toastAdd(`${input.trim()} added`);
+      } else {
+        const item=await api.post('/api/chores',{name:input.trim(),recurrence:'Weekly',start:localDate(),points:1});
+        if(item.id) setChores(p=>[...p,item]);
+        toastAdd(`${input.trim()} added`);
+      }
+      close();
+    }catch{toastAdd('Failed to add','red');}
+  };
+
+  return(
+    <>
+      <button onClick={()=>setOpen(true)}
+        style={{position:'fixed',bottom:'calc(80px + max(12px, env(safe-area-inset-bottom)))',right:20,width:50,height:50,borderRadius:'50%',background:A.blue,color:'#fff',border:'none',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:`0 4px 16px rgba(0,122,255,0.40)`,zIndex:49,transition:'transform .12s,box-shadow .12s'}}
+        onMouseDown={e=>e.currentTarget.style.transform='scale(.94)'}
+        onMouseUp={e=>e.currentTarget.style.transform='scale(1)'}
+      >
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 4v12M4 10h12" stroke="white" strokeWidth="2.5" strokeLinecap="round"/></svg>
+      </button>
+      {open&&(
+        <>
+          <div onClick={close} style={{position:'fixed',inset:0,zIndex:200,background:'rgba(0,0,0,0.18)',animation:'fadeIn .15s'}}/>
+          <div style={{position:'fixed',bottom:0,left:0,right:0,zIndex:201,background:A.cardBg,borderRadius:'20px 20px 0 0',padding:'16px 20px',paddingBottom:`calc(20px + max(16px, env(safe-area-inset-bottom)))`,boxShadow:`0 -4px 24px rgba(0,0,0,0.14)`}}>
+            <div style={{width:36,height:4,borderRadius:2,background:A.sep,margin:'0 auto 16px'}}/>
+            <div style={{fontSize:17,fontWeight:700,marginBottom:14,color:A.label1}}>Quick Add</div>
+            {!activeType&&(
+              <div style={{display:'flex',gap:10,marginBottom:4}}>
+                <button onClick={()=>setType('grocery')} style={{flex:1,padding:'13px',borderRadius:A.r,background:A.greenFill,color:A.green,fontWeight:600,border:'none',cursor:'pointer',fontSize:14}}>Grocery Item</button>
+                <button onClick={()=>setType('chore')} style={{flex:1,padding:'13px',borderRadius:A.r,background:A.amberFill,color:A.amber,fontWeight:600,border:'none',cursor:'pointer',fontSize:14}}>Chore</button>
+              </div>
+            )}
+            {activeType&&(
+              <div style={{display:'flex',gap:8}}>
+                <Inp value={input} onChange={e=>setInput(e.target.value)}
+                  placeholder={activeType==='grocery'?'Item name…':'Chore name…'}
+                  onKeyDown={e=>e.key==='Enter'&&submit()}
+                  autoFocus/>
+                <Btn onClick={submit}>Add</Btn>
+              </div>
+            )}
+            {activeType&&type&&<button onClick={()=>setType(null)} style={{marginTop:10,fontSize:13,color:A.label4,background:'none',border:'none',cursor:'pointer'}}>Back</button>}
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
 function App(){
   const [auth,setAuth]=useState('');
   const [kiosk,setKiosk]=useState(false);
   const [authChecked,setAuthChecked]=useState(false);
   const [currentMember,setCurrentMember]=useState(null);
+  const [darkMode,setDarkMode]=useState(()=>localStorage.getItem('kith_dark')||'System');
+  useEffect(()=>{
+    const apply=()=>{
+      const sysDark=window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const isDark=darkMode==='Dark'||(darkMode==='System'&&sysDark);
+      document.documentElement.dataset.dark=isDark?'true':'';
+    };
+    apply();
+    const mq=window.matchMedia('(prefers-color-scheme: dark)');
+    mq.addEventListener('change',apply);
+    return ()=>mq.removeEventListener('change',apply);
+  },[darkMode]);
+  const handleDarkMode=v=>{setDarkMode(v);localStorage.setItem('kith_dark',v);};
   const [mode,setMode]=useState('manage');
   const [events,setEvents]=useState([]);
   const [chores,setChores]=useState([]);

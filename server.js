@@ -187,6 +187,8 @@ function updateChoreStatuses() {
   const today = localDate();
   // Reset done flag when the next recurrence date has arrived (skip one-time chores)
   db.prepare("UPDATE chores SET done=0 WHERE done=1 AND next_due <= ? AND recurrence != 'One-time'").run(today);
+  // Reset streak for chores that went overdue without being completed
+  db.prepare("UPDATE chores SET streak=0 WHERE next_due < ? AND done=0 AND streak > 0 AND recurrence != 'One-time'").run(today);
   db.prepare("UPDATE chores SET status='overdue'  WHERE next_due < ? AND done=0").run(today);
   db.prepare("UPDATE chores SET status='due'      WHERE next_due = ? AND done=0").run(today);
   db.prepare("UPDATE chores SET status='upcoming' WHERE next_due > ?").run(today);
@@ -509,7 +511,8 @@ app.put('/api/chores/:id/done', requireAuth, (req, res) => {
   const todayDisplay = new Date().toLocaleDateString('en-US', { month:'short', day:'numeric' });
   const nextDue = done ? computeNextDue(c.recurrence) : todayISO;
   const lastDone = done ? todayDisplay : c.last_done;
-  db.prepare('UPDATE chores SET done=?,last_done=?,next_due=? WHERE id=?').run(done, lastDone, nextDue, c.id);
+  const newStreak = done ? (c.streak || 0) + 1 : Math.max(0, (c.streak || 0) - 1);
+  db.prepare('UPDATE chores SET done=?,last_done=?,next_due=?,streak=? WHERE id=?').run(done, lastDone, nextDue, newStreak, c.id);
   if (done && req.user.role !== 'admin') {
     const member = db.prepare('SELECT * FROM family_members WHERE id=?').get(Number(req.user.sub));
     if (member) {
@@ -526,7 +529,7 @@ app.put('/api/chores/:id/done', requireAuth, (req, res) => {
   }
   updateChoreStatuses();
   const newStatus = db.prepare('SELECT status FROM chores WHERE id=?').get(c.id)?.status || 'upcoming';
-  res.json({ done, next_due: nextDue, status: newStatus, points_earned: done ? (c.points || 1) : 0 });
+  res.json({ done, next_due: nextDue, status: newStatus, points_earned: done ? (c.points || 1) : 0, streak: newStreak });
 });
 
 app.delete('/api/chores/:id', requireAdmin, (req, res) => {
@@ -539,11 +542,17 @@ app.get('/api/grocery', (req, res) => {
   res.json(db.prepare('SELECT * FROM grocery ORDER BY checked, category, created_at').all());
 });
 
+app.get('/api/grocery/history', requireAuth, (req, res) => {
+  res.json(db.prepare('SELECT name, count FROM grocery_history ORDER BY count DESC LIMIT 8').all());
+});
+
 app.post('/api/grocery', requireAuth, (req, res) => {
   const { name, category } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'name is required' });
   const r = db.prepare('INSERT INTO grocery (name,category) VALUES (?,?)').run(name.trim(), category||'Other');
-  res.json({ id: r.lastInsertRowid, name, category: category||'Other', checked: 0 });
+  db.prepare('INSERT INTO grocery_history (name,count,last_used) VALUES (?,1,?) ON CONFLICT(name) DO UPDATE SET count=count+1, last_used=?')
+    .run(name.trim(), localDate(), localDate());
+  res.json({ id: r.lastInsertRowid, name: name.trim(), category: category||'Other', checked: 0 });
 });
 
 app.put('/api/grocery/:id/toggle', requireAuth, (req, res) => {
@@ -981,6 +990,18 @@ cron.schedule('0 8 * * *', async () => {
     title: 'Kith — Chores Due',
     body: `${due.length} chore${due.length > 1 ? 's' : ''} need attention: ${due.map(c => c.name).join(', ')}`,
     tag: 'chores',
+  });
+});
+
+// Evening nudge at 6pm for anything still uncompleted
+cron.schedule('0 18 * * *', async () => {
+  updateChoreStatuses();
+  const due = db.prepare("SELECT * FROM chores WHERE status IN ('due','overdue') AND done=0").all();
+  if (!due.length) return;
+  await sendPushToAll({
+    title: 'Kith — Still Pending',
+    body: `${due.length} chore${due.length > 1 ? 's' : ''} still need attention: ${due.map(c => c.name).join(', ')}`,
+    tag: 'chores-pm',
   });
 });
 

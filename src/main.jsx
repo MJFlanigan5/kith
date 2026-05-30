@@ -120,15 +120,19 @@ function ToastStack({toasts}){
 }
 
 function Drawer({open,onClose,title,children,width=440}){
+  const isMobile=useIsMobile();
+  const effectiveWidth=isMobile?'100%':width;
+  const translateOut=isMobile?'translateY(100%)':`translateX(${width+20}px)`;
   return(
     <>
       {open&&<div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.18)',zIndex:100,animation:'fadeIn .15s'}}/>}
-      <div style={{position:'fixed',top:0,right:0,height:'100%',width,background:'#fff',zIndex:101,transform:open?'translateX(0)':`translateX(${width+20}px)`,transition:'transform .3s cubic-bezier(.4,0,.2,1)',display:'flex',flexDirection:'column',boxShadow:open?'-1px 0 0 rgba(0,0,0,0.07),-4px 0 40px rgba(0,0,0,0.10)':'none'}}>
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'20px 24px 16px',borderBottom:`1px solid ${A.sep}`}}>
+      <div style={{position:'fixed',top:isMobile?'auto':0,bottom:isMobile?0:'auto',right:0,height:isMobile?'92%':'100%',width:effectiveWidth,background:'#fff',zIndex:101,borderRadius:isMobile?'20px 20px 0 0':'0',transform:open?'translate(0,0)':translateOut,transition:'transform .32s cubic-bezier(.4,0,.2,1)',display:'flex',flexDirection:'column',boxShadow:open?'0 -2px 40px rgba(0,0,0,0.12)':'none'}}>
+        {isMobile&&<div style={{width:36,height:4,borderRadius:2,background:A.sep,margin:'12px auto 0',flexShrink:0}}/>}
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:isMobile?'14px 20px 12px':'20px 24px 16px',borderBottom:`1px solid ${A.sep}`}}>
           <span style={{fontSize:17,fontWeight:600,letterSpacing:'-.01em'}}>{title}</span>
           <button onClick={onClose} style={{width:28,height:28,borderRadius:'50%',background:A.inputBg,border:'none',cursor:'pointer',fontSize:16,color:A.label3,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
         </div>
-        <div style={{flex:1,overflowY:'auto',padding:'20px 24px'}}>{children}</div>
+        <div style={{flex:1,overflowY:'auto',padding:isMobile?'16px 20px':'20px 24px',paddingBottom:`calc(${isMobile?'24px':'20px'} + env(safe-area-inset-bottom))`}}>{children}</div>
       </div>
     </>
   );
@@ -2682,11 +2686,11 @@ function ChoresScreen({chores,setChores,goals=[],members=[],toastAdd}){
                   <div style={{fontSize:13,color:A.label4,marginBottom:10}}>{c.recurrence} · Next: {c.next_due||'—'}{c.member_name&&<span style={{marginLeft:8}}>· {c.member_name}</span>}</div>
                   <div style={{display:'flex',gap:8,alignItems:'center'}}>
                     {c.member_color&&<div style={{width:22,height:22,borderRadius:'50%',background:c.member_color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700,color:'#fff',flexShrink:0}}>{c.member_initials}</div>}
-                    <button onClick={()=>toggleDone(c)} style={{flex:1,padding:'9px 0',borderRadius:A.rXs,border:'none',background:c.done?A.inputBg:A.green,color:c.done?A.label3:'#fff',fontSize:14,fontWeight:700,cursor:'pointer'}}>
+                    <button onClick={()=>toggleDone(c)} style={{flex:1,padding:'10px 0',borderRadius:A.rXs,border:'none',background:c.done?A.inputBg:A.green,color:c.done?A.label3:'#fff',fontSize:14,fontWeight:700,cursor:'pointer'}}>
                       {c.done?'Undo':'Mark Done'}
                     </button>
-                    <button onClick={()=>openEdit(c)} style={{background:A.inputBg,border:'none',borderRadius:A.rXs,color:A.label2,fontSize:13,cursor:'pointer',fontWeight:500,padding:'9px 14px'}}>Edit</button>
-                    <button onClick={()=>deleteChore(c.id)} style={{background:'none',border:'none',color:A.red,fontSize:13,cursor:'pointer',fontWeight:500,padding:'9px 4px'}}>Delete</button>
+                    <button onClick={()=>openEdit(c)} style={{background:A.inputBg,border:'none',borderRadius:A.rXs,color:A.label2,fontSize:13,cursor:'pointer',fontWeight:500,padding:'10px 16px'}}>Edit</button>
+                    <button onClick={()=>deleteChore(c.id)} style={{background:A.redFill,border:'none',borderRadius:A.rXs,color:A.red,fontSize:13,cursor:'pointer',fontWeight:600,padding:'10px 14px'}}>Delete</button>
                   </div>
                 </div>
               );
@@ -2804,7 +2808,11 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,toastAdd}){
   const [catInput,setCatInput]=useState('');
   const [editingDay,setEditingDay]=useState(null);
   const [mealInput,setMealInput]=useState('');
+  const [removing,setRemoving]=useState(new Set());
   const inputRef=useRef();
+  const removeTimers=useRef({});
+
+  useEffect(()=>()=>{Object.values(removeTimers.current).forEach(clearTimeout)},[]);
 
   const addItem=async()=>{
     if(!input.trim()) return;
@@ -2818,10 +2826,22 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,toastAdd}){
   const toggle=async id=>{
     const result=await api.put(`/api/grocery/${id}/toggle`);
     setGrocery(p=>p.map(i=>i.id===id?{...i,checked:result.checked}:i));
-  };
-  const clearChecked=async()=>{
-    await api.del('/api/grocery/checked');
-    setGrocery(p=>p.filter(i=>!i.checked));
+    if(result.checked){
+      // Start removal countdown — item fades then deletes after 1.2s
+      removeTimers.current[id]=setTimeout(async()=>{
+        setRemoving(s=>{const n=new Set(s);n.add(id);return n;});
+        setTimeout(async()=>{
+          await api.del(`/api/grocery/${id}`);
+          setGrocery(p=>p.filter(i=>i.id!==id));
+          setRemoving(s=>{const n=new Set(s);n.delete(id);return n;});
+        },350);
+      },1200);
+    } else {
+      // User unchecked before auto-remove fired — cancel the timer
+      clearTimeout(removeTimers.current[id]);
+      delete removeTimers.current[id];
+      setRemoving(s=>{const n=new Set(s);n.delete(id);return n;});
+    }
   };
   const saveMeal=async day=>{
     await api.put(`/api/meals/${day}`,{meal:mealInput});
@@ -2841,7 +2861,7 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,toastAdd}){
             <h1 style={{fontSize:isMobile?34:44,fontWeight:800,letterSpacing:'-.05em',lineHeight:1.05}}>Grocery</h1>
             <p style={{fontSize:15,marginTop:6,color:A.label4,fontWeight:400}}>{unchecked.length} items remaining</p>
           </div>
-          {checked.length>0&&<button onClick={clearChecked} style={{background:'none',border:'none',color:A.label4,fontSize:14,cursor:'pointer'}}>Clear checked</button>}
+          {checked.length>0&&<span style={{fontSize:13,color:A.label4}}>{checked.length} in cart</span>}
         </div>
         <div style={{display:'flex',gap:10,marginBottom:8}}>
           <Inp value={input} onChange={e=>setInput(e.target.value)} placeholder="Add item..." onKeyDown={e=>e.key==='Enter'&&addItem()} inputRef={inputRef}/>
@@ -2888,10 +2908,11 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,toastAdd}){
         })}
         {checked.length>0&&(
           <div style={{marginBottom:16}}>
-            <div style={{fontSize:12,fontWeight:700,color:A.label5,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:6,paddingLeft:4}}>Checked ({checked.length})</div>
+            <div style={{fontSize:12,fontWeight:700,color:A.label5,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:6,paddingLeft:4}}>In Cart ({checked.length})</div>
             <Card>
               {checked.map((item,idx)=>(
-                <div key={item.id} onClick={()=>toggle(item.id)} style={{display:'flex',alignItems:'center',gap:14,padding:'13px 16px',borderTop:idx>0?`1px solid ${A.sep}`:'none',cursor:'pointer',opacity:.45}}>
+                <div key={item.id} onClick={()=>toggle(item.id)}
+                  style={{display:'flex',alignItems:'center',gap:14,padding:'13px 16px',borderTop:idx>0?`1px solid ${A.sep}`:'none',cursor:'pointer',opacity:removing.has(item.id)?0:0.45,transform:removing.has(item.id)?'translateX(20px)':'none',transition:'opacity .3s ease,transform .3s ease',overflow:'hidden',maxHeight:removing.has(item.id)?0:80}}>
                   <div style={{width:24,height:24,borderRadius:'50%',background:A.green,border:`2px solid ${A.green}`,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}>
                     <svg width="12" height="9" viewBox="0 0 12 9" fill="none"><path d="M1 4.5L4.5 8L11 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   </div>
@@ -4564,7 +4585,7 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
     return(
       <div style={{display:'flex',flexDirection:'column',height:'100vh',overflow:'hidden',background:A.systemBg}}>
         {/* Mobile top bar */}
-        <div className="hdr" style={{height:54,background:'#fff',borderBottom:'1px solid rgba(0,0,0,0.07)',boxShadow:scrolled?'0 1px 12px rgba(0,0,0,0.06)':'none',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 16px',flexShrink:0}}>
+        <div className="hdr" style={{paddingTop:'max(12px, env(safe-area-inset-top))',background:'#fff',borderBottom:'1px solid rgba(0,0,0,0.07)',boxShadow:scrolled?'0 1px 12px rgba(0,0,0,0.06)':'none',display:'flex',alignItems:'center',justifyContent:'space-between',padding:`max(12px, env(safe-area-inset-top)) 16px 12px`,flexShrink:0}}>
           <span style={{fontSize:17,fontWeight:700,letterSpacing:'-.03em',color:A.label1}}>{nav.find(n=>n.id===screen)?.label}</span>
           <button onClick={()=>setScreen('settings')} style={{width:30,height:30,borderRadius:'50%',background:A.inputBg,border:'none',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',color:A.label3}}>
             <svg width="15" height="15" viewBox="0 0 17 17" fill="none"><circle cx="8.5" cy="8.5" r="2.5" stroke="currentColor" strokeWidth="1.5"/><path d="M8.5 1v2M8.5 14v2M1 8.5h2M14 8.5h2M3.05 3.05l1.42 1.42M12.53 12.53l1.42 1.42M12.53 3.05l-1.42 1.42M4.47 12.53l-1.42 1.42" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>

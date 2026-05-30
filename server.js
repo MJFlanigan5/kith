@@ -185,6 +185,8 @@ function localDate(d = new Date()) {
 // ── Chore status helper ───────────────────────────────────────────────────────
 function updateChoreStatuses() {
   const today = localDate();
+  // Reset done flag when the next recurrence date has arrived (skip one-time chores)
+  db.prepare("UPDATE chores SET done=0 WHERE done=1 AND next_due <= ? AND recurrence != 'One-time'").run(today);
   db.prepare("UPDATE chores SET status='overdue'  WHERE next_due < ? AND done=0").run(today);
   db.prepare("UPDATE chores SET status='due'      WHERE next_due = ? AND done=0").run(today);
   db.prepare("UPDATE chores SET status='upcoming' WHERE next_due > ?").run(today);
@@ -200,14 +202,15 @@ function addMonths(d) {
 
 function computeNextDue(recurrence) {
   const d = new Date();
-  if (recurrence.startsWith('Daily'))      d.setDate(d.getDate() + 1);
-  else if (recurrence.startsWith('Bi-w'))  d.setDate(d.getDate() + 14);
-  else if (recurrence.startsWith('Month')) addMonths(d);
+  if (recurrence.startsWith('Daily'))       d.setDate(d.getDate() + 1);
+  else if (recurrence.startsWith('Bi-w'))   d.setDate(d.getDate() + 14);
+  else if (recurrence.startsWith('Month'))  addMonths(d);
   else if (recurrence.startsWith('Annual')) d.setFullYear(d.getFullYear() + 1);
   else if (recurrence.startsWith('Weekday')) {
     d.setDate(d.getDate() + 1);
     while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
-  } else d.setDate(d.getDate() + 7); // Weekly
+  } else if (recurrence === 'One-time') return '9999-12-31';
+  else d.setDate(d.getDate() + 7); // Weekly
   return localDate(d);
 }
 
@@ -553,6 +556,11 @@ app.put('/api/grocery/:id/toggle', requireAuth, (req, res) => {
 
 app.delete('/api/grocery/checked', requireAuth, (req, res) => {
   db.prepare('DELETE FROM grocery WHERE checked=1').run();
+  res.json({ ok: true });
+});
+
+app.delete('/api/grocery/:id', requireAuth, (req, res) => {
+  db.prepare('DELETE FROM grocery WHERE id=?').run(req.params.id);
   res.json({ ok: true });
 });
 

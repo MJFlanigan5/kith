@@ -965,7 +965,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         </div>
                       </>
                     )}
-                    {visiblePanelId==='w_wotd'&&(()=>{const w=widgetData.wotd;return(
+                    {visiblePanelId==='w_wotd'&&(()=>{const w=widgetData.wotd;if(!w)return null;return(
                       <>
                         <WLabel>Word of the Day</WLabel>
                         <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',gap:10}}>

@@ -2307,7 +2307,7 @@ app.get('/api/widgets/data', async (req, res) => {
   // Word of the day — date-seeded from curated list, definition from Free Dictionary API
   p.push(_wFetch(`wotd:${new Date().toISOString().slice(0,10)}`, 86400000, async () => {
     const words = [
-      'serendipity','ephemeral','sonder','mellifluous','solipsism','petrichor','hiraeth',
+      'serendipity','ephemeral','eloquent','mellifluous','solipsism','petrichor','resilience',
       'sanguine','laconic','insouciant','perspicacious','loquacious','ebullient','taciturn',
       'ineffable','verisimilitude','sycophant','equanimity','obfuscate','pernicious',
       'magnanimous','recalcitrant','perfidious','propitious','querulous','truculent',
@@ -2317,7 +2317,7 @@ app.get('/api/widgets/data', async (req, res) => {
       'resilient','stoic','transient','ubiquitous','vigilant','wistful','zealous','altruistic',
       'benevolent','circumspect','diligent','erudite','fervent','gregarious','haughty',
       'indolent','judicious','keen','luminous','munificent','nascent','ostentatious','prudent',
-      'querulous','rapturous','serene','timorous','unequivocal','vivacious','whimsical',
+      'rapturous','serene','timorous','unequivocal','vivacious','whimsical','reverent',
       'exuberant','felicitous','grandiloquent','halcyon','impetuous','jocular','kinetic',
       'laudable','meticulous','nuanced','oblivious','palpable','quintessential','reticent',
       'scrupulous','tenuous','umbrage','vanquish','winsome','xenial','yielding','zephyr',
@@ -2329,13 +2329,15 @@ app.get('/api/widgets/data', async (req, res) => {
     if (!r.ok) return null;
     const d = await r.json();
     const entry = d[0];
-    const meaning = entry?.meanings?.[0];
+    if (!entry?.word) return null;
+    const meaning = entry.meanings?.[0];
     const def = meaning?.definitions?.[0];
+    if (!def?.definition) return null;
     return {
       word: entry.word,
       partOfSpeech: meaning?.partOfSpeech || '',
-      definition: def?.definition || '',
-      example: def?.example || '',
+      definition: def.definition,
+      example: def.example || '',
     };
   }).then(d => { if (d) result.wotd = d; }));
 

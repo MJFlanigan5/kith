@@ -626,11 +626,12 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
   useEffect(()=>()=>clearTimeout(nightDismissTimer.current),[]);
 
   const todayStr=localDate();
-  const agendaDays=[0,1,2,3].map(offset=>{
+  const agendaDays=[0,1,2,3,4,5,6].map(offset=>{
     const d=new Date(); d.setDate(d.getDate()+offset);
     const label=offset===0?'Today':offset===1?'Tomorrow':DAYS[d.getDay()];
     return{label,date:localDate(d)};
   });
+  const hasUpcomingEvents=agendaDays.some(({date})=>(events||[]).some(e=>e.date===date));
   const dueC=chores.filter(c=>(c.status==='due'||c.status==='overdue')&&!c.done);
   const upCD=(countdowns||[]).filter(c=>daysUntil(c.date)>=0);
   const progressMembers=memberProgress.filter(m=>m.monthly_goal>0);
@@ -803,26 +804,45 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
           {/* Main 3-col grid */}
           <div style={{flex:1,display:'grid',gridTemplateColumns:'1fr 1.6fr 1fr',gap:isTV?16:12,minHeight:0,zoom:isTV?1.1:undefined}}>
 
-            {/* LEFT: Upcoming events */}
+            {/* LEFT: Upcoming events, or QR code when calendar is empty */}
             <Widget style={{display:'flex',flexDirection:'column',overflow:'hidden'}}>
-              <WLabel>Upcoming</WLabel>
-              <div ref={calScrollRef} style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:14,WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
-                {agendaDays.map(({label,date})=>{
-                  const evs=events.filter(e=>e.date===date);
-                  return(
-                    <div key={date}>
-                      <div style={{fontSize:10,fontWeight:700,color:D.t3,marginBottom:6,textTransform:'uppercase',letterSpacing:'.08em'}}>{label}</div>
-                      {evs.length===0&&<div style={{fontSize:13,color:D.t4}}>Free</div>}
-                      {evs.map(ev=>(
-                        <div key={ev.id} style={{background:ev.color+'18',borderRadius:8,padding:'8px 11px',marginBottom:4,borderLeft:`3px solid ${ev.color}`}}>
-                          <div style={{fontSize:14,color:D.t1,fontWeight:600}}>{ev.title}</div>
-                          <div style={{fontSize:12,color:D.t3,fontVariantNumeric:'tabular-nums',marginTop:1}}>{fmtTime(ev.time,clockFormat)}</div>
+              {hasUpcomingEvents?(
+                <>
+                  <WLabel>Upcoming</WLabel>
+                  <div ref={calScrollRef} style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:14,WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
+                    {agendaDays.filter(({date})=>(events||[]).some(e=>e.date===date)).map(({label,date})=>{
+                      const evs=(events||[]).filter(e=>e.date===date);
+                      return(
+                        <div key={date}>
+                          <div style={{fontSize:10,fontWeight:700,color:D.t3,marginBottom:6,textTransform:'uppercase',letterSpacing:'.08em'}}>{label}</div>
+                          {evs.map(ev=>(
+                            <div key={ev.id} style={{background:ev.color+'18',borderRadius:8,padding:'8px 11px',marginBottom:4,borderLeft:`3px solid ${ev.color}`}}>
+                              <div style={{fontSize:14,color:D.t1,fontWeight:600}}>{ev.title}</div>
+                              <div style={{fontSize:12,color:D.t3,fontVariantNumeric:'tabular-nums',marginTop:1}}>{fmtTime(ev.time,clockFormat)}</div>
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
-                  );
-                })}
-              </div>
+                      );
+                    })}
+                  </div>
+                </>
+              ):wifiQrData?(
+                <>
+                  <WLabel>Guest WiFi</WLabel>
+                  <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:12}}>
+                    <img src={wifiQrData.dataUrl} alt="WiFi QR" style={{width:isTV?160:130,height:isTV?160:130,objectFit:'contain',borderRadius:10,display:'block'}}/>
+                    <div style={{fontSize:14,fontWeight:600,color:D.t2,letterSpacing:'.02em'}}>{wifiQrData.ssid}</div>
+                    <div style={{fontSize:11,color:D.t4}}>Scan to connect</div>
+                  </div>
+                </>
+              ):(
+                <>
+                  <WLabel>Upcoming</WLabel>
+                  <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                    <div style={{fontSize:13,color:D.t4,textAlign:'center'}}>Nothing scheduled</div>
+                  </div>
+                </>
+              )}
             </Widget>
 
             {/* CENTER: rotating panel + dinner */}
@@ -1472,8 +1492,8 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
 
             {/* RIGHT: weather + dynamic extras */}
             <div style={{display:'flex',flexDirection:'column',gap:12,minHeight:0,overflow:'hidden'}}>
-              {/* Weather — grows to fill right col; QR below it gets its fixed size first */}
-              <Widget style={{flex:1,minHeight:isTV?180:155,overflow:'hidden'}}>
+              {/* Weather */}
+              <Widget style={{flexShrink:0}}>
                 <WLabel>Weather</WLabel>
                 {weather?(
                   <>
@@ -1514,17 +1534,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                   {unchecked.length>6&&<div style={{fontSize:11,color:D.t4,marginTop:6}}>+{unchecked.length-6} more</div>}
                 </Widget>
               );})()}
-              {/* WiFi QR — explicit fixed image size so it can never overflow regardless of right-col height */}
-              {wifiQrData&&(
-                <Widget style={{flexShrink:0}}>
-                  <WLabel>Guest WiFi</WLabel>
-                  <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:8}}>
-                    <img src={wifiQrData.dataUrl} alt="WiFi QR" style={{width:isTV?130:110,height:isTV?130:110,objectFit:'contain',borderRadius:8,display:'block'}}/>
-                    <div style={{fontSize:12,fontWeight:600,color:D.t2,letterSpacing:'.02em'}}>{wifiQrData.ssid}</div>
-                  </div>
-                </Widget>
-              )}
-              {/* Pinned notes — fills remaining space; when paired with QR, both share via flex:1; minHeight keeps at least 2 notes visible */}
+              {/* Pinned notes — fills remaining space below weather */}
               {pinnedNotes.length>0&&(
                 <Widget style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minHeight:100}}>
                   <WLabel>Notes</WLabel>

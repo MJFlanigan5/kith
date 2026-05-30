@@ -653,6 +653,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
     ...(upCD.length>0?['countdowns']:[]),
     ...(goals.length>0?['goals']:[]),
     ...(progressMembers.length>0?['members']:[]),
+    ...(widgetData.wotd?['w_wotd']:[]),
     ...(widgetData.quote?['w_quote']:[]),
     ...(widgetData.stocks?.length?['w_stocks']:[]),
     ...(widgetData.producthunt?.length?['w_producthunt']:[]),
@@ -964,6 +965,19 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         </div>
                       </>
                     )}
+                    {visiblePanelId==='w_wotd'&&(()=>{const w=widgetData.wotd;return(
+                      <>
+                        <WLabel>Word of the Day</WLabel>
+                        <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',gap:10}}>
+                          <div>
+                            <span style={{fontSize:isTV?38:30,fontWeight:800,color:D.t1,letterSpacing:'-.02em',lineHeight:1}}>{w.word}</span>
+                            {w.partOfSpeech&&<span style={{fontSize:13,color:D.t4,fontStyle:'italic',marginLeft:10}}>{w.partOfSpeech}</span>}
+                          </div>
+                          <div style={{fontSize:15,color:D.t2,lineHeight:1.55}}>{w.definition}</div>
+                          {w.example&&<div style={{fontSize:13,color:D.t3,fontStyle:'italic',lineHeight:1.4,borderLeft:`3px solid ${D.sep}`,paddingLeft:10}}>"{w.example}"</div>}
+                        </div>
+                      </>
+                    );})()}
                     {visiblePanelId==='w_quote'&&(
                       <>
                         <WLabel>Quote</WLabel>

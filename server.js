@@ -2304,6 +2304,41 @@ app.get('/api/widgets/data', async (req, res) => {
     }).then(d => { if (d) result.ha_sensors = d; }));
   }
 
+  // Word of the day — date-seeded from curated list, definition from Free Dictionary API
+  p.push(_wFetch(`wotd:${new Date().toISOString().slice(0,10)}`, 86400000, async () => {
+    const words = [
+      'serendipity','ephemeral','sonder','mellifluous','solipsism','petrichor','hiraeth',
+      'sanguine','laconic','insouciant','perspicacious','loquacious','ebullient','taciturn',
+      'ineffable','verisimilitude','sycophant','equanimity','obfuscate','pernicious',
+      'magnanimous','recalcitrant','perfidious','propitious','querulous','truculent',
+      'vociferous','tenacious','sagacious','bellicose','obstinate','vicarious','nonchalant',
+      'garrulous','mendacious','lethargic','acerbic','candid','deferential','fastidious',
+      'intrepid','jubilant','languid','mercurial','nebulous','opulent','pensive','quixotic',
+      'resilient','stoic','transient','ubiquitous','vigilant','wistful','zealous','altruistic',
+      'benevolent','circumspect','diligent','erudite','fervent','gregarious','haughty',
+      'indolent','judicious','keen','luminous','munificent','nascent','ostentatious','prudent',
+      'querulous','rapturous','serene','timorous','unequivocal','vivacious','whimsical',
+      'exuberant','felicitous','grandiloquent','halcyon','impetuous','jocular','kinetic',
+      'laudable','meticulous','nuanced','oblivious','palpable','quintessential','reticent',
+      'scrupulous','tenuous','umbrage','vanquish','winsome','xenial','yielding','zephyr',
+      'alacrity','brevity','cogent','diffident','elusive','fortuitous','gaunt','heuristic',
+    ];
+    const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(),0,0)) / 86400000);
+    const word = words[dayOfYear % words.length];
+    const r = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${word}`, { signal: AbortSignal.timeout(8000) });
+    if (!r.ok) return null;
+    const d = await r.json();
+    const entry = d[0];
+    const meaning = entry?.meanings?.[0];
+    const def = meaning?.definitions?.[0];
+    return {
+      word: entry.word,
+      partOfSpeech: meaning?.partOfSpeech || '',
+      definition: def?.definition || '',
+      example: def?.example || '',
+    };
+  }).then(d => { if (d) result.wotd = d; }));
+
   await Promise.allSettled(p);
   res.json(result);
 });

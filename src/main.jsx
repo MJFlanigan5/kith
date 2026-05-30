@@ -584,6 +584,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
     const s=_calScroll.current;
     clearInterval(s.timer);s.pausing=false;
     if(!el) return;
+    el.scrollTop=0; // reset position whenever events change
     const t=setTimeout(()=>{
       if(el.scrollHeight<=el.clientHeight+20) return;
       s.timer=setInterval(()=>{
@@ -1437,12 +1438,12 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         </>
                       );
                     })()}
-                    {activePanelId==='dinner'&&(
+                    {activePanelId==='dinner'&&(()=>{const td=todayDinner()||'—';return(
                       <>
                         <WLabel>Dinner tonight</WLabel>
                         <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',gap:16}}>
-                          <div style={{fontSize:isTV?44:36,fontWeight:800,color:todayDinner()&&todayDinner()!=='—'?D.t1:D.t4,letterSpacing:'-.02em',lineHeight:1.2}}>
-                            {todayDinner()||'—'}
+                          <div style={{fontSize:isTV?44:36,fontWeight:800,color:td!=='—'?D.t1:D.t4,letterSpacing:'-.02em',lineHeight:1.2}}>
+                            {td}
                           </div>
                           <div style={{display:'flex',gap:8}}>
                             {[1,2].map(offset=>{
@@ -1459,7 +1460,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                           </div>
                         </div>
                       </>
-                    )}
+                    );})()}
                   </Widget>
                 </div>
               )}
@@ -1509,9 +1510,9 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                   {unchecked.length>8&&<div style={{fontSize:11,color:D.t4,marginTop:6}}>+{unchecked.length-8} more</div>}
                 </Widget>
               );})()}
-              {/* WiFi QR — flex:1 so it shares remaining space with notes and never clips */}
+              {/* WiFi QR — flex:1 shares space with notes; minHeight ensures QR stays scannable when grocery is tall */}
               {wifiQrData&&(
-                <Widget style={{flex:1,minHeight:0,display:'flex',flexDirection:'column'}}>
+                <Widget style={{flex:1,minHeight:isTV?180:150,display:'flex',flexDirection:'column'}}>
                   <WLabel>Guest WiFi</WLabel>
                   <div style={{flex:1,minHeight:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:8}}>
                     <img src={wifiQrData.dataUrl} alt="WiFi QR" style={{maxWidth:'100%',maxHeight:isTV?160:130,width:'auto',height:'auto',objectFit:'contain',borderRadius:8,display:'block'}}/>
@@ -1519,9 +1520,9 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                   </div>
                 </Widget>
               )}
-              {/* Pinned notes — fills remaining space; when paired with QR, both share via flex:1 */}
+              {/* Pinned notes — fills remaining space; when paired with QR, both share via flex:1; minHeight keeps at least 2 notes visible */}
               {pinnedNotes.length>0&&(
-                <Widget style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minHeight:0}}>
+                <Widget style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minHeight:100}}>
                   <WLabel>Notes</WLabel>
                   <div style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:8}}>
                     {pinnedNotes.map(n=>(

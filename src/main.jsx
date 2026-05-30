@@ -671,7 +671,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
       const result=await api.put(`/api/chores/${id}/done`);
       if(result.error) return;
       setChores(p=>p.map(c=>c.id===id?{...c,done:result.done,next_due:result.next_due,status:result.status}:c));
-      if(result.done){setDmChoreConfetti(true);setTimeout(()=>setDmChoreConfetti(false),2500);}
+      if(result.completed||result.done){setDmChoreConfetti(true);setTimeout(()=>setDmChoreConfetti(false),2500);}
     }catch(e){}
   };
 
@@ -1445,19 +1445,19 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                     {activePanelId==='dinner'&&(()=>{const td=todayDinner()||'—';return(
                       <>
                         <WLabel>Dinner tonight</WLabel>
-                        <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',gap:16}}>
-                          <div style={{fontSize:isTV?44:36,fontWeight:800,color:td!=='—'?D.t1:D.t4,letterSpacing:'-.02em',lineHeight:1.2}}>
+                        <div style={{flex:1,display:'flex',flexDirection:'column',gap:12,minHeight:0}}>
+                          <div style={{fontSize:isTV?40:32,fontWeight:800,color:td!=='—'?D.t1:D.t4,letterSpacing:'-.02em',lineHeight:1.2,flexShrink:0}}>
                             {td}
                           </div>
-                          <div style={{display:'flex',gap:8}}>
-                            {[1,2].map(offset=>{
+                          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:6,flex:1,alignContent:'start'}}>
+                            {[1,2,3,4,5,6].map(offset=>{
                               const d=new Date();d.setDate(d.getDate()+offset);
                               const dayName=DAYS[d.getDay()];
                               const meal=(meals||[]).find(m=>m.day===dayName)?.meal||'—';
                               return(
-                                <div key={offset} style={{flex:1,background:'rgba(255,255,255,0.05)',borderRadius:8,padding:'10px 12px'}}>
-                                  <div style={{fontSize:10,fontWeight:700,color:D.t3,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>{offset===1?'Tomorrow':dayName}</div>
-                                  <div style={{fontSize:14,color:meal!=='—'?D.t2:D.t4,fontWeight:500}}>{meal}</div>
+                                <div key={offset} style={{background:'rgba(255,255,255,0.05)',borderRadius:8,padding:'8px 10px'}}>
+                                  <div style={{fontSize:9,fontWeight:700,color:D.t3,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:3}}>{offset===1?'Tmrw':dayName}</div>
+                                  <div style={{fontSize:12,color:meal!=='—'?D.t2:D.t4,fontWeight:500,lineHeight:1.3}}>{meal}</div>
                                 </div>
                               );
                             })}
@@ -2672,7 +2672,7 @@ function ChoresScreen({chores,setChores,goals=[],members=[],toastAdd}){
       const result=await api.put(`/api/chores/${c.id}/done`);
       if(result.error){toastAdd(result.error,'red');return;}
       setChores(p=>p.map(x=>x.id===c.id?{...x,done:result.done,next_due:result.next_due,status:result.status,streak:result.streak??x.streak}:x));
-      if(result.done){
+      if(result.completed||result.done){
         toastAdd(`${c.name} done!`);
         setChoreConfetti(true);
         setTimeout(()=>setChoreConfetti(false),2500);
@@ -2850,6 +2850,12 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,toastAdd}){
 
   useEffect(()=>()=>{Object.values(removeTimers.current).forEach(clearTimeout)},[]);
   useEffect(()=>{api.get('/api/grocery/history').then(r=>Array.isArray(r)&&setHistory(r)).catch(()=>{})},[]);
+  // Clear any checked items left over from previous sessions
+  useEffect(()=>{
+    const stale=(grocery||[]).filter(i=>i.checked);
+    if(!stale.length) return;
+    api.del('/api/grocery/checked').then(()=>setGrocery(p=>p.filter(i=>!i.checked))).catch(()=>{});
+  },[]);
 
   const addFromHistory=async name=>{
     try{

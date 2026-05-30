@@ -506,13 +506,18 @@ app.put('/api/chores/:id', requireAdmin, (req, res) => {
 app.put('/api/chores/:id/done', requireAuth, (req, res) => {
   const c = db.prepare('SELECT * FROM chores WHERE id=?').get(req.params.id);
   if (!c) return res.status(404).json({ error: 'Not found' });
-  const done = c.done ? 0 : 1;
+  const isRecurring = c.recurrence && c.recurrence !== 'One-time';
+  // For recurring chores: always mark complete (never toggle back) and immediately reset done=0
+  // so the chore shows as upcoming with the new date. For one-time: toggle done.
+  const done = isRecurring ? 1 : (c.done ? 0 : 1);
   const todayISO = localDate();
   const todayDisplay = new Date().toLocaleDateString('en-US', { month:'short', day:'numeric' });
   const nextDue = done ? computeNextDue(c.recurrence) : todayISO;
   const lastDone = done ? todayDisplay : c.last_done;
   const newStreak = done ? (c.streak || 0) + 1 : Math.max(0, (c.streak || 0) - 1);
-  db.prepare('UPDATE chores SET done=?,last_done=?,next_due=?,streak=? WHERE id=?').run(done, lastDone, nextDue, newStreak, c.id);
+  // Recurring chores: reset done=0 immediately after logging — they advance to next cycle
+  const storedDone = isRecurring ? 0 : done;
+  db.prepare('UPDATE chores SET done=?,last_done=?,next_due=?,streak=? WHERE id=?').run(storedDone, lastDone, nextDue, newStreak, c.id);
   if (done && req.user.role !== 'admin') {
     const member = db.prepare('SELECT * FROM family_members WHERE id=?').get(Number(req.user.sub));
     if (member) {
@@ -529,7 +534,7 @@ app.put('/api/chores/:id/done', requireAuth, (req, res) => {
   }
   updateChoreStatuses();
   const newStatus = db.prepare('SELECT status FROM chores WHERE id=?').get(c.id)?.status || 'upcoming';
-  res.json({ done, next_due: nextDue, status: newStatus, points_earned: done ? (c.points || 1) : 0, streak: newStreak });
+  res.json({ done: storedDone, completed: done === 1, next_due: nextDue, status: newStatus, points_earned: done ? (c.points || 1) : 0, streak: newStreak });
 });
 
 app.delete('/api/chores/:id', requireAdmin, (req, res) => {

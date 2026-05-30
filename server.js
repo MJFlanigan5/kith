@@ -2304,132 +2304,34 @@ app.get('/api/widgets/data', async (req, res) => {
     }).then(d => { if (d) result.ha_sensors = d; }));
   }
 
-  // Word of the day — API-first with bundled fallback so it always shows
+  // Word of the day — word list for selection, definition from Free Dictionary API, stale cache as fallback
   p.push(_wFetch(`wotd:${new Date().toISOString().slice(0,10)}`, 86400000, async () => {
-    const WOTD = [
-      {word:'serendipity',pos:'noun',def:'The occurrence of pleasant discoveries by accident or good fortune.',ex:'Finding that old photo was pure serendipity.'},
-      {word:'ephemeral',pos:'adjective',def:'Lasting for a very short time; transitory.',ex:'The ephemeral beauty of cherry blossoms is part of their appeal.'},
-      {word:'petrichor',pos:'noun',def:'The pleasant smell that accompanies the first rain after a dry spell.',ex:'She stepped outside and breathed in the petrichor after the storm.'},
-      {word:'mellifluous',pos:'adjective',def:'Sweet or musical; pleasant to hear.',ex:'His mellifluous voice filled the room.'},
-      {word:'equanimity',pos:'noun',def:'Mental calmness and composure, especially in difficult situations.',ex:'She faced the criticism with remarkable equanimity.'},
-      {word:'laconic',pos:'adjective',def:'Using very few words; brief and concise.',ex:'His laconic reply was simply "no."'},
-      {word:'sanguine',pos:'adjective',def:'Optimistic, especially in a difficult situation.',ex:'Despite the setbacks, she remained sanguine about the outcome.'},
-      {word:'ebullient',pos:'adjective',def:'Cheerful and full of energy; exuberant.',ex:'The ebullient crowd cheered as the team took the field.'},
-      {word:'taciturn',pos:'adjective',def:'Reserved or uncommunicative; saying little.',ex:'He was a taciturn man who preferred listening to talking.'},
-      {word:'perspicacious',pos:'adjective',def:'Having a ready insight into things; shrewd.',ex:'A perspicacious investor, she saw the opportunity before anyone else.'},
-      {word:'ineffable',pos:'adjective',def:'Too great or extreme to be expressed in words.',ex:'Standing at the summit, she felt an ineffable sense of peace.'},
-      {word:'magnanimous',pos:'adjective',def:'Generous or forgiving, especially toward a rival or less powerful person.',ex:'In victory, he was magnanimous and praised his opponent.'},
-      {word:'pernicious',pos:'adjective',def:'Having a harmful effect, especially in a gradual or subtle way.',ex:'The pernicious influence of misinformation spread slowly through the community.'},
-      {word:'recalcitrant',pos:'adjective',def:'Having an obstinately uncooperative attitude.',ex:'The recalcitrant student refused to follow any of the new rules.'},
-      {word:'propitious',pos:'adjective',def:'Giving or indicating a good chance of success; favorable.',ex:'The clear sky was a propitious sign for the outdoor ceremony.'},
-      {word:'truculent',pos:'adjective',def:'Eager or quick to argue or fight; aggressively defiant.',ex:'The truculent negotiator refused every compromise.'},
-      {word:'sagacious',pos:'adjective',def:'Having or showing keen mental discernment and good judgment.',ex:'Her sagacious advice steered the company through the crisis.'},
-      {word:'bellicose',pos:'adjective',def:'Demonstrating aggression and willingness to fight.',ex:'His bellicose rhetoric alarmed the diplomatic community.'},
-      {word:'vicarious',pos:'adjective',def:'Experienced in the imagination through another person.',ex:'She lived vicariously through the adventures in her novels.'},
-      {word:'nonchalant',pos:'adjective',def:'Feeling or appearing casually calm and relaxed.',ex:'He gave a nonchalant shrug and walked away.'},
-      {word:'garrulous',pos:'adjective',def:'Excessively talkative, especially on trivial matters.',ex:'The garrulous neighbor kept them on the doorstep for an hour.'},
-      {word:'acerbic',pos:'adjective',def:'Sharp and forthright; having a sharp quality.',ex:'Her acerbic wit could cut through any pretension.'},
-      {word:'fastidious',pos:'adjective',def:'Very attentive to accuracy and detail; meticulous.',ex:'A fastidious editor, he caught every misplaced comma.'},
-      {word:'intrepid',pos:'adjective',def:'Fearless; adventurous; bold.',ex:'The intrepid explorer pressed on through the blizzard.'},
-      {word:'languid',pos:'adjective',def:'Displaying or having a disinclination for physical exertion; relaxed.',ex:'They spent a languid afternoon by the river.'},
-      {word:'mercurial',pos:'adjective',def:'Subject to sudden or unpredictable changes of mood or mind.',ex:'His mercurial temperament made him exciting but exhausting to work with.'},
-      {word:'nebulous',pos:'adjective',def:'Not clearly defined or stated; vague and ill-formed.',ex:'The plan was still nebulous, more dream than strategy.'},
-      {word:'opulent',pos:'adjective',def:'Ostentatiously rich and luxurious; lavish.',ex:'The opulent ballroom was decorated with gold leaf and crystal chandeliers.'},
-      {word:'quixotic',pos:'adjective',def:'Exceedingly idealistic; unrealistic and impractical.',ex:'His quixotic quest to reform the system in a single term was admirable but naive.'},
-      {word:'stoic',pos:'adjective',def:'Enduring pain and hardship without showing feelings or complaining.',ex:'She bore the long recovery with stoic determination.'},
-      {word:'ubiquitous',pos:'adjective',def:'Present, appearing, or found everywhere.',ex:'Smartphones have become ubiquitous in modern life.'},
-      {word:'wistful',pos:'adjective',def:'Having or showing a feeling of vague or regretful longing.',ex:'She gazed wistfully at the old photographs.'},
-      {word:'altruistic',pos:'adjective',def:'Showing a selfless concern for the well-being of others.',ex:'His altruistic donations changed hundreds of lives.'},
-      {word:'circumspect',pos:'adjective',def:'Wary and unwilling to take risks; cautious.',ex:'She was circumspect about making promises she might not keep.'},
-      {word:'erudite',pos:'adjective',def:'Having or showing great knowledge or learning.',ex:'The erudite professor could speak for hours on almost any topic.'},
-      {word:'fervent',pos:'adjective',def:'Having or displaying a passionate intensity.',ex:'He was a fervent believer in the power of education.'},
-      {word:'gregarious',pos:'adjective',def:'Fond of company; sociable.',ex:'A gregarious host, she made every guest feel at home.'},
-      {word:'haughty',pos:'adjective',def:'Arrogantly superior and disdainful.',ex:'Her haughty manner put everyone in the room on edge.'},
-      {word:'indolent',pos:'adjective',def:'Wanting to avoid activity or exertion; lazy.',ex:'An indolent summer heat settled over the city.'},
-      {word:'judicious',pos:'adjective',def:'Having, showing, or done with good judgment; sensible.',ex:'A judicious use of resources made the project a success.'},
-      {word:'luminous',pos:'adjective',def:'Full of or shedding light; bright or shining.',ex:'The luminous full moon lit up the entire valley.'},
-      {word:'nascent',pos:'adjective',def:'Just coming into existence and beginning to display signs of future potential.',ex:'A nascent movement for change was forming in the city.'},
-      {word:'pensive',pos:'adjective',def:'Engaged in, involving, or reflecting deep or serious thought.',ex:'She sat in pensive silence, staring out the window.'},
-      {word:'reticent',pos:'adjective',def:'Not revealing one\'s thoughts or feelings readily.',ex:'He was reticent about discussing his past.'},
-      {word:'tenuous',pos:'adjective',def:'Very weak or slight; lacking substance.',ex:'The connection between the two theories was tenuous at best.'},
-      {word:'vivacious',pos:'adjective',def:'Attractively lively and animated.',ex:'Her vivacious personality lit up every room she entered.'},
-      {word:'whimsical',pos:'adjective',def:'Playfully quaint or fanciful, especially in an appealing and amusing way.',ex:'The garden was full of whimsical sculptures made from driftwood.'},
-      {word:'alacrity',pos:'noun',def:'Brisk and cheerful readiness.',ex:'She accepted the offer with alacrity.'},
-      {word:'brevity',pos:'noun',def:'Concise and exact use of words in writing or speech.',ex:'The speech was praised for its clarity and brevity.'},
-      {word:'cogent',pos:'adjective',def:'Clear, logical, and convincing.',ex:'She made a cogent argument for restructuring the team.'},
-      {word:'diffident',pos:'adjective',def:'Modest or shy due to a lack of self-confidence.',ex:'Despite his talent, he was diffident about sharing his work.'},
-      {word:'elusive',pos:'adjective',def:'Difficult to find, catch, or achieve.',ex:'Success remained elusive despite years of hard work.'},
-      {word:'fortuitous',pos:'adjective',def:'Happening by chance rather than design; lucky.',ex:'Their fortuitous meeting at the conference launched a decade-long collaboration.'},
-      {word:'halcyon',pos:'adjective',def:'Denoting a period of time in the past that was idyllically happy and peaceful.',ex:'She often recalled the halcyon days of her childhood summers.'},
-      {word:'impetuous',pos:'adjective',def:'Acting or done quickly and without thought; impulsive.',ex:'His impetuous decision cost him the deal.'},
-      {word:'jocular',pos:'adjective',def:'Fond of or characterized by joking; playful.',ex:'His jocular manner helped ease the tension in the room.'},
-      {word:'laudable',pos:'adjective',def:'Deserving praise and commendation.',ex:'Her commitment to volunteering is truly laudable.'},
-      {word:'meticulous',pos:'adjective',def:'Taking or showing extreme care about minute details; precise.',ex:'The meticulous accountant checked every figure twice.'},
-      {word:'nuanced',pos:'adjective',def:'Characterized by subtle shades of meaning or expression.',ex:'Her nuanced reading of the poem revealed layers most readers missed.'},
-      {word:'oblivious',pos:'adjective',def:'Not aware of or concerned about what is happening around one.',ex:'He was oblivious to the chaos unfolding behind him.'},
-      {word:'palpable',pos:'adjective',def:'So intense as to seem almost tangible; able to be touched or felt.',ex:'The tension in the room was palpable.'},
-      {word:'quintessential',pos:'adjective',def:'Representing the most perfect or typical example of a quality or class.',ex:'She was the quintessential team player.'},
-      {word:'scrupulous',pos:'adjective',def:'Diligent, thorough, and extremely attentive to details; very careful about doing what is right.',ex:'He was scrupulous in his financial reporting.'},
-      {word:'umbrage',pos:'noun',def:'Offense or annoyance.',ex:'She took umbrage at the implication that she hadn\'t tried.'},
-      {word:'winsome',pos:'adjective',def:'Attractive or appealing in appearance or character.',ex:'Her winsome smile made her an instant favorite at the event.'},
-      {word:'zephyr',pos:'noun',def:'A gentle, mild breeze.',ex:'A warm zephyr rustled through the trees on the summer evening.'},
-      {word:'obfuscate',pos:'verb',def:'To make unclear or difficult to understand; to bewilder.',ex:'The lengthy contract was designed to obfuscate rather than clarify.'},
-      {word:'perfidious',pos:'adjective',def:'Deceitful and untrustworthy; guilty of betrayal.',ex:'His perfidious actions destroyed the trust of everyone around him.'},
-      {word:'loquacious',pos:'adjective',def:'Tending to talk a great deal; talkative.',ex:'The loquacious guide gave more history than the tourists could absorb.'},
-      {word:'insouciant',pos:'adjective',def:'Showing a casual lack of concern; indifferent.',ex:'Her insouciant attitude toward deadlines frustrated the entire team.'},
-      {word:'sycophant',pos:'noun',def:'A person who flatters someone important in order to gain personal advantage.',ex:'The executive was surrounded by sycophants who never challenged his ideas.'},
-      {word:'verisimilitude',pos:'noun',def:'The appearance of being true or real.',ex:'The film\'s verisimilitude depended on its painstaking period details.'},
-      {word:'vociferous',pos:'adjective',def:'Expressing opinions in a loud and forceful way.',ex:'The vociferous crowd drowned out the speaker entirely.'},
-      {word:'tenacious',pos:'adjective',def:'Tending to keep a firm hold; persistent.',ex:'A tenacious researcher, she spent years tracking down every source.'},
-      {word:'obstinate',pos:'adjective',def:'Stubbornly refusing to change one\'s opinion or chosen course of action.',ex:'His obstinate refusal to negotiate prolonged the conflict unnecessarily.'},
-      {word:'mendacious',pos:'adjective',def:'Not telling the truth; lying.',ex:'The mendacious witness contradicted herself three times.'},
-      {word:'lethargic',pos:'adjective',def:'Affected by lethargy; sluggish and apathetic.',ex:'The heat made everyone lethargic by midafternoon.'},
-      {word:'deferential',pos:'adjective',def:'Showing deference; respectfully submissive.',ex:'She was deferential toward her mentor even after surpassing him.'},
-      {word:'rapturous',pos:'adjective',def:'Characterized by, feeling, or expressing great pleasure or enthusiasm.',ex:'The audience gave a rapturous ovation at the end of the performance.'},
-      {word:'serene',pos:'adjective',def:'Calm, peaceful, and untroubled; tranquil.',ex:'The lake at dawn was utterly serene.'},
-      {word:'timorous',pos:'adjective',def:'Showing or suffering from nervousness, fear, or a lack of confidence.',ex:'His timorous voice betrayed his anxiety during the presentation.'},
-      {word:'unequivocal',pos:'adjective',def:'Leaving no doubt; unambiguous.',ex:'Her unequivocal refusal ended the discussion immediately.'},
-      {word:'exuberant',pos:'adjective',def:'Filled with or characterized by a lively energy and excitement.',ex:'The children\'s exuberant laughter carried down the street.'},
-      {word:'felicitous',pos:'adjective',def:'Well chosen or suited to the circumstances; pleasing and fortunate.',ex:'It was a felicitous coincidence that brought the old friends together.'},
-      {word:'grandiloquent',pos:'adjective',def:'Pompous or extravagant in language, style, or manner.',ex:'His grandiloquent speech impressed no one and said very little.'},
-      {word:'kinetic',pos:'adjective',def:'Relating to or resulting from motion; full of energy.',ex:'Her kinetic personality kept the whole team energized.'},
-      {word:'ostentatious',pos:'adjective',def:'Characterized by a display designed to impress.',ex:'The ostentatious decor was more spectacle than taste.'},
-      {word:'prudent',pos:'adjective',def:'Acting with or showing care and thought for the future.',ex:'It was prudent to save before spending.'},
-      {word:'querulous',pos:'adjective',def:'Complaining in a petulant or whining manner.',ex:'A querulous critic, he found fault with everything.'},
-      {word:'reverent',pos:'adjective',def:'Feeling or showing deep and solemn respect.',ex:'The crowd fell into a reverent silence as the ceremony began.'},
-      {word:'xenial',pos:'adjective',def:'Of or relating to hospitality; friendly to strangers.',ex:'The xenial innkeeper made every traveler feel at home.'},
-      {word:'benevolent',pos:'adjective',def:'Well-meaning and kindly; generous.',ex:'The benevolent donor funded the entire library wing anonymously.'},
-      {word:'diligent',pos:'adjective',def:'Having or showing care and conscientiousness in one\'s work.',ex:'Her diligent preparation made the presentation flawless.'},
-      {word:'munificent',pos:'adjective',def:'Larger or more generous than is usual or necessary.',ex:'His munificent gift endowed the scholarship for a century.'},
-      {word:'resilient',pos:'adjective',def:'Able to withstand or recover quickly from difficult conditions.',ex:'The resilient community rebuilt faster than anyone expected.'},
-      {word:'vigilant',pos:'adjective',def:'Keeping careful watch for possible danger or difficulties.',ex:'A vigilant guard noticed the discrepancy in the shipment.'},
-      {word:'zealous',pos:'adjective',def:'Having or showing great energy or enthusiasm in pursuit of a cause.',ex:'A zealous reformer, she campaigned tirelessly for the new policy.'},
-      {word:'candid',pos:'adjective',def:'Truthful and straightforward; frank.',ex:'She appreciated his candid assessment of her work.'},
-      {word:'keen',pos:'adjective',def:'Having or showing eagerness or enthusiasm.',ex:'He was keen to learn everything about the subject.'},
-      {word:'transient',pos:'adjective',def:'Lasting only for a short time; impermanent.',ex:'Fame proved transient; within a year he was forgotten.'},
-      {word:'gaunt',pos:'adjective',def:'Lean and haggard, especially because of suffering or age.',ex:'After the long illness, he looked gaunt and pale.'},
-      {word:'heuristic',pos:'adjective',def:'Enabling a person to discover or learn something for themselves.',ex:'The teacher used a heuristic approach to let students find the solution.'},
-      {word:'cogitate',pos:'verb',def:'To think deeply about something; to meditate or ponder.',ex:'She sat quietly, cogitating over the problem for nearly an hour.'},
-      {word:'melancholy',pos:'noun',def:'A feeling of pensive sadness, typically with no obvious cause.',ex:'A gentle melancholy settled over him as the evening drew in.'},
-      {word:'audacious',pos:'adjective',def:'Showing a willingness to take surprisingly bold risks.',ex:'The audacious plan surprised even his closest advisors.'},
-      {word:'candor',pos:'noun',def:'The quality of being open and honest in expression; frankness.',ex:'She appreciated his candor, even when it stung.'},
-      {word:'diaphanous',pos:'adjective',def:'Light, delicate, and translucent.',ex:'The diaphanous curtains drifted in the summer breeze.'},
+    const words = [
+      'serendipity','ephemeral','petrichor','mellifluous','equanimity','laconic','sanguine',
+      'ebullient','taciturn','perspicacious','ineffable','magnanimous','pernicious','recalcitrant',
+      'propitious','truculent','sagacious','bellicose','vicarious','nonchalant','garrulous',
+      'acerbic','fastidious','intrepid','languid','mercurial','nebulous','opulent','quixotic',
+      'stoic','ubiquitous','wistful','altruistic','circumspect','erudite','fervent','gregarious',
+      'haughty','indolent','judicious','luminous','nascent','pensive','reticent','tenuous',
+      'vivacious','whimsical','alacrity','brevity','cogent','diffident','elusive','fortuitous',
+      'halcyon','impetuous','jocular','laudable','meticulous','nuanced','oblivious','palpable',
+      'quintessential','scrupulous','umbrage','winsome','zephyr','obfuscate','perfidious',
+      'loquacious','insouciant','sycophant','verisimilitude','vociferous','tenacious','obstinate',
+      'mendacious','lethargic','deferential','rapturous','serene','timorous','unequivocal',
+      'exuberant','felicitous','grandiloquent','inscrutable','imperious','kinetic','ostentatious',
+      'prudent','querulous','reverent','benevolent','diligent','munificent','resilient','vigilant',
+      'zealous','candid','transient','heuristic','melancholy','audacious','diaphanous','cogitate',
     ];
     const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(),0,0)) / 86400000);
-    const fallback = WOTD[dayOfYear % WOTD.length];
-    try {
-      const r = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${fallback.word}`, { signal: AbortSignal.timeout(6000) });
-      if (r.ok) {
-        const d = await r.json();
-        const entry = d[0];
-        const meaning = entry?.meanings?.[0];
-        const def = meaning?.definitions?.[0];
-        if (entry?.word && def?.definition) {
-          return { word: entry.word, partOfSpeech: meaning.partOfSpeech || '', definition: def.definition, example: def.example || '' };
-        }
-      }
-    } catch {}
-    return { word: fallback.word, partOfSpeech: fallback.pos, definition: fallback.def, example: fallback.ex || '' };
+    const word = words[dayOfYear % words.length];
+    const r = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${word}`, { signal: AbortSignal.timeout(6000) });
+    if (!r.ok) return null;
+    const d = await r.json();
+    const entry = d[0];
+    const meaning = entry?.meanings?.[0];
+    const def = meaning?.definitions?.[0];
+    if (!entry?.word || !def?.definition) return null;
+    return { word: entry.word, partOfSpeech: meaning.partOfSpeech || '', definition: def.definition, example: def.example || '' };
   }).then(d => { if (d) result.wotd = d; }));
 
   await Promise.allSettled(p);

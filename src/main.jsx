@@ -108,7 +108,7 @@ function ToastStack({toasts}){
   return(
     <div style={{position:'fixed',bottom:28,right:28,zIndex:9999,display:'flex',flexDirection:'column',gap:8,pointerEvents:'none'}}>
       {toasts.map(t=>(
-        <div key={t.id} style={{background:'rgba(28,28,30,0.88)',backdropFilter:'blur(20px)',color:'#fff',padding:'12px 18px',borderRadius:13,fontSize:14,fontWeight:500,boxShadow:A.shadowLg,animation:'toastIn .22s cubic-bezier(.4,0,.2,1)',display:'flex',alignItems:'center',gap:10,minWidth:200}}>
+        <div key={t.id} style={{background:'rgba(28,28,30,0.92)',backdropFilter:'blur(20px)',color:'#F5F5F7',border:'1px solid rgba(255,255,255,0.10)',padding:'12px 18px',borderRadius:13,fontSize:14,fontWeight:500,boxShadow:A.shadowLg,animation:'toastIn .22s cubic-bezier(.4,0,.2,1)',display:'flex',alignItems:'center',gap:10,minWidth:200}}>
           <div style={{width:8,height:8,borderRadius:'50%',background:tint[t.type]||A.green,flexShrink:0}}/>
           {t.msg}
         </div>
@@ -415,7 +415,7 @@ function FamilyScreen({members,setMembers,toastAdd}){
         <div style={{padding:'14px 16px'}}>
           <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:12}}>
             {COLORS.map(c=>(
-              <button key={c} onClick={()=>setForm(p=>({...p,color:c}))} style={{width:30,height:30,borderRadius:'50%',border:`3px solid ${form.color===c?'#1C1C1E':'transparent'}`,background:c,cursor:'pointer'}}/>
+              <button key={c} onClick={()=>setForm(p=>({...p,color:c}))} style={{width:30,height:30,borderRadius:'50%',border:`3px solid ${form.color===c?A.label1:'transparent'}`,background:c,cursor:'pointer'}}/>
             ))}
           </div>
           <div style={{display:'flex',gap:8}}>
@@ -452,7 +452,7 @@ function FamilyScreen({members,setMembers,toastAdd}){
                 <div style={{padding:'0 16px 14px'}}>
                   <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:10}}>
                     {COLORS.map(c=>(
-                      <button key={c} onClick={()=>setEditForm(p=>({...p,color:c}))} style={{width:26,height:26,borderRadius:'50%',border:`3px solid ${editForm.color===c?'#1C1C1E':'transparent'}`,background:c,cursor:'pointer'}}/>
+                      <button key={c} onClick={()=>setEditForm(p=>({...p,color:c}))} style={{width:26,height:26,borderRadius:'50%',border:`3px solid ${editForm.color===c?A.label1:'transparent'}`,background:c,cursor:'pointer'}}/>
                     ))}
                   </div>
                   <div style={{display:'flex',gap:8}}>
@@ -2525,7 +2525,7 @@ function InboxScreen({toastAdd,events,setEvents,setInboxCount}){
                       <input type="date"
                         value={editDates[item.id]??(isValidDate(item.event_date)?item.event_date:localDate())}
                         onChange={e=>setEditDates(p=>({...p,[item.id]:e.target.value}))}
-                        style={{fontSize:13,color:A.label1,background:'#fff',border:`1px solid ${!isValidDate(item.event_date)&&!editDates[item.id]?A.amber:A.sep}`,borderRadius:A.rXs,padding:'5px 8px',cursor:'pointer'}}
+                        style={{fontSize:13,color:A.label1,background:A.cardBg,border:`1px solid ${!isValidDate(item.event_date)&&!editDates[item.id]?A.amber:A.sep}`,borderRadius:A.rXs,padding:'5px 8px',cursor:'pointer'}}
                       />
                       {!isValidDate(item.event_date)&&!editDates[item.id]&&(
                         <span style={{fontSize:11,color:A.amber}}>AI returned "{item.event_date}" — pick a date</span>
@@ -2554,9 +2554,9 @@ function InboxScreen({toastAdd,events,setEvents,setInboxCount}){
 
       <Card style={{padding:'16px 18px',marginBottom:24}}>
         <div style={{fontSize:14,color:A.label3,marginBottom:10}}>Forward any email with dates to this address:</div>
-        <div style={{background:'#1C1C1E',borderRadius:A.rSm,padding:'12px 16px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-          <span style={{fontFamily:'JetBrains Mono,monospace',fontSize:15,color:'#30D158'}}>{fwdAddress}</span>
-          <button onClick={()=>{navigator.clipboard.writeText(fwdAddress);toastAdd('Copied','blue');}} style={{background:'rgba(255,255,255,0.1)',border:'none',color:'rgba(255,255,255,0.7)',borderRadius:6,padding:'5px 12px',fontSize:12,cursor:'pointer'}}>Copy</button>
+        <div style={{background:A.inputBg,borderRadius:A.rSm,padding:'12px 16px',display:'flex',alignItems:'center',justifyContent:'space-between',border:`1px solid ${A.sep}`}}>
+          <span style={{fontFamily:'JetBrains Mono,monospace',fontSize:14,color:A.green,wordBreak:'break-all'}}>{fwdAddress}</span>
+          <button onClick={()=>{navigator.clipboard.writeText(fwdAddress);toastAdd('Copied','blue');}} style={{background:A.inputBg,border:`1px solid ${A.sep}`,color:A.label2,borderRadius:6,padding:'5px 12px',fontSize:12,cursor:'pointer',flexShrink:0,marginLeft:12}}>Copy</button>
         </div>
       </Card>
 
@@ -2679,7 +2679,7 @@ function ChoresScreen({chores,setChores,goals=[],members=[],toastAdd}){
                 <div key={c.id} style={{padding:'14px 16px',borderTop:`1px solid ${A.sep}`,borderLeft:`3px solid ${c.status==='due'?A.amber:c.status==='overdue'?A.red:'transparent'}`,background:c.done?A.greenFill:c.status==='due'?`${A.amber}06`:c.status==='overdue'?`${A.red}06`:'transparent',opacity:c.done?.6:1,transition:'opacity .3s'}}>
                   <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
                     <div style={{display:'flex',alignItems:'center',gap:8,minWidth:0}}>
-                      <span style={{fontSize:15,fontWeight:600,textDecoration:c.done?'line-through':'none',color:c.done?A.label4:A.label1}}>{c.name}</span>
+                      <span style={{fontSize:15,fontWeight:600,textDecoration:c.done?'line-through':'none',color:c.done?A.label4:A.label1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</span>
                       {(c.streak||0)>=2&&!c.done&&<span style={{fontSize:11,fontWeight:700,color:A.amber,background:A.amberFill,padding:'2px 7px',borderRadius:A.rPill,flexShrink:0}}>{c.streak}×</span>}
                     </div>
                     <Badge color={p.color} bg={p.bg}>{p.label}</Badge>
@@ -2830,10 +2830,12 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,toastAdd}){
     if(!input.trim()) return;
     const body={name:input.trim()};
     if(catInput.trim()) body.category=catInput.trim();
-    const newItem=await api.post('/api/grocery',body);
-    setGrocery(p=>[...p,newItem]);
-    setInput('');
-    inputRef.current?.focus();
+    try{
+      const newItem=await api.post('/api/grocery',body);
+      setGrocery(p=>[...p,newItem]);
+      setInput('');
+      inputRef.current?.focus();
+    }catch{toastAdd('Failed to add item','red');}
   };
   const toggle=async id=>{
     const result=await api.put(`/api/grocery/${id}/toggle`);
@@ -2886,12 +2888,14 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,toastAdd}){
         </div>
         {history.filter(h=>!unchecked.some(i=>i.name.toLowerCase()===h.name.toLowerCase())).slice(0,6).length>0&&(
           <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:14}}>
-            {history.filter(h=>!unchecked.some(i=>i.name.toLowerCase()===h.name.toLowerCase())).slice(0,6).map(h=>(
-              <button key={h.name} onClick={()=>addFromHistory(h.name)}
+            {history.filter(h=>!unchecked.some(i=>i.name.toLowerCase()===h.name.toLowerCase())).slice(0,6).map(h=>{
+              const display=h.name.charAt(0).toUpperCase()+h.name.slice(1);
+              return(
+              <button key={h.name} onClick={()=>addFromHistory(display)}
                 style={{fontSize:13,padding:'5px 11px',borderRadius:A.rPill,border:`1px solid ${A.sep}`,background:A.cardBg,color:A.label2,cursor:'pointer',fontWeight:500}}>
-                {h.name.charAt(0).toUpperCase()+h.name.slice(1)}
+                {display}
               </button>
-            ))}
+            );})}
           </div>
         )}
         {unchecked.length===0&&checked.length===0&&(
@@ -3567,7 +3571,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
           {qaList.length>0&&(
             <div style={{display:'flex',flexDirection:'column',gap:0,marginBottom:14,borderRadius:A.rSm,overflow:'hidden',border:`1px solid ${A.sep}`}}>
               {qaList.map((action,i)=>(
-                <div key={action.id} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',background:'#fff',borderTop:i>0?`1px solid ${A.sep}`:'none'}}>
+                <div key={action.id} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',background:A.cardBg,borderTop:i>0?`1px solid ${A.sep}`:'none'}}>
                   <span style={{fontSize:20,flexShrink:0}}>{action.icon||'⚡'}</span>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:14,fontWeight:600,color:A.label1}}>{action.label}</div>
@@ -4253,7 +4257,7 @@ function NotesScreen({notes,setNotes,toastAdd}){
           {notes.map(n=>(
             <div key={n.id} style={{background:n.color||'#FAFAF5',borderRadius:A.r,padding:'18px 20px',position:'relative',border:'1px solid rgba(0,0,0,0.06)'}}>
               {n.pinned&&<div style={{position:'absolute',top:12,right:14,width:8,height:8,borderRadius:'50%',background:A.blue}}/>}
-              <div style={{fontSize:15,fontWeight:700,color:'#1C1C1E',marginBottom:n.content?8:0,paddingRight:16}}>{n.title}</div>
+              <div style={{fontSize:15,fontWeight:700,color:'#1A1A1A',marginBottom:n.content?8:0,paddingRight:16}}>{n.title}</div>
               {n.content&&<div style={{fontSize:13,color:'#3C3C43',lineHeight:1.5,whiteSpace:'pre-wrap'}}>{n.content}</div>}
               <div style={{display:'flex',gap:10,marginTop:14,alignItems:'center'}}>
                 <button onClick={()=>togglePin(n)} style={{background:'none',border:'none',fontSize:12,color:n.pinned?A.blue:A.label4,cursor:'pointer',fontWeight:600,padding:0}}>{n.pinned?'Unpin':'Pin to display'}</button>
@@ -4671,15 +4675,15 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
           })}
         </div>
         <div style={{padding:'12px 10px 16px',borderTop:`1px solid ${A.sep}`}}>
-          <button onClick={onDisplay} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',borderRadius:A.rSm,border:'1px solid rgba(0,0,0,0.09)',cursor:'pointer',width:'100%',background:'transparent',color:A.label3,fontSize:13,fontWeight:500,textAlign:'left',marginBottom:8,transition:'background .12s'}}
-            onMouseEnter={e=>e.currentTarget.style.background='rgba(0,0,0,0.04)'}
+          <button onClick={onDisplay} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',borderRadius:A.rSm,border:`1px solid ${A.sep}`,cursor:'pointer',width:'100%',background:'transparent',color:A.label3,fontSize:13,fontWeight:500,textAlign:'left',marginBottom:8,transition:'background .12s'}}
+            onMouseEnter={e=>e.currentTarget.style.background=A.inputBg}
             onMouseLeave={e=>e.currentTarget.style.background='transparent'}
           >
             <svg width="15" height="12" viewBox="0 0 15 12" fill="none"><rect x=".75" y=".75" width="13.5" height="9" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M4 11.25h7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M7.5 9.75v1.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
             Display Mode
           </button>
           <button onClick={onLogout} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',borderRadius:A.rSm,border:'none',cursor:'pointer',width:'100%',background:'transparent',color:A.label4,fontSize:13,fontWeight:400,textAlign:'left',marginBottom:10,transition:'background .12s'}}
-            onMouseEnter={e=>e.currentTarget.style.background='rgba(0,0,0,0.04)'}
+            onMouseEnter={e=>e.currentTarget.style.background=A.inputBg}
             onMouseLeave={e=>e.currentTarget.style.background='transparent'}
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M5 13H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M10 10l3-3-3-3M13 7H5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
@@ -4690,7 +4694,7 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
       </div>
 
       <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
-        <div className="hdr" style={{height:54,background:'#fff',borderBottom:'1px solid rgba(0,0,0,0.07)',boxShadow:scrolled?'0 1px 12px rgba(0,0,0,0.06)':'none',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 26px',flexShrink:0}}>
+        <div className="hdr" style={{height:54,background:A.cardBg,borderBottom:`1px solid ${A.sep}`,boxShadow:scrolled?A.shadowSm:'none',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 26px',flexShrink:0}}>
           <span style={{fontSize:17,fontWeight:700,letterSpacing:'-.03em',color:A.label1}}>{nav.find(n=>n.id===screen)?.label}</span>
           <div style={{display:'flex',alignItems:'center',gap:14}}>
             <button onClick={()=>setScreen('settings')} style={{width:30,height:30,borderRadius:'50%',background:A.inputBg,border:'none',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',color:A.label3}}>
@@ -4885,7 +4889,7 @@ function SetupWizard({onComplete}){
   const dots=(
     <div style={{display:'flex',gap:8,marginBottom:40}}>
       {[1,2,3,4].map(s=>(
-        <div key={s} style={{width:s===step?24:8,height:8,borderRadius:4,background:s<=step?A.blue:'rgba(0,0,0,0.12)',transition:'all .3s'}}/>
+        <div key={s} style={{width:s===step?24:8,height:8,borderRadius:4,background:s<=step?A.blue:A.sep,transition:'all .3s'}}/>
       ))}
     </div>
   );
@@ -4924,7 +4928,7 @@ function SetupWizard({onComplete}){
     <>
       <Card style={{padding:20,marginBottom:16}}>
         <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:14}}>
-          {COLORS.map(c=><button key={c} onClick={()=>setMemberColor(c)} style={{width:30,height:30,borderRadius:'50%',border:`3px solid ${memberColor===c?'#1C1C1E':'transparent'}`,background:c,cursor:'pointer'}}/>)}
+          {COLORS.map(c=><button key={c} onClick={()=>setMemberColor(c)} style={{width:30,height:30,borderRadius:'50%',border:`3px solid ${memberColor===c?A.label1:'transparent'}`,background:c,cursor:'pointer'}}/>)}
         </div>
         <div style={{display:'flex',gap:8}}>
           <Inp value={memberName} onChange={e=>setMemberName(e.target.value)} placeholder="Name (e.g. Emma)" onKeyDown={e=>e.key==='Enter'&&addMember()}/>
@@ -4987,7 +4991,8 @@ function QuickAddFAB({screen,setGrocery,setChores,toastAdd,isAdmin}){
   const defaultType=screen==='grocery'?'grocery':screen==='chores'&&isAdmin?'chore':null;
   const activeType=type||defaultType;
 
-  const close=()=>{setOpen(false);setType(null);setInput('');};
+  const close=useCallback(()=>{setOpen(false);setType(null);setInput('');},[]);
+  useEffect(()=>{close();},[screen]);
 
   const submit=async()=>{
     if(!input.trim()||!activeType) return;

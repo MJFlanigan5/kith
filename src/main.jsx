@@ -1510,13 +1510,13 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                   {unchecked.length>8&&<div style={{fontSize:11,color:D.t4,marginTop:6}}>+{unchecked.length-8} more</div>}
                 </Widget>
               );})()}
-              {/* WiFi QR — flex:1 shares space with notes; minHeight ensures QR stays scannable when grocery is tall */}
+              {/* WiFi QR — explicit fixed image size so it can never overflow regardless of right-col height */}
               {wifiQrData&&(
-                <Widget style={{flex:1,minHeight:isTV?180:150,display:'flex',flexDirection:'column'}}>
+                <Widget style={{flexShrink:0}}>
                   <WLabel>Guest WiFi</WLabel>
-                  <div style={{flex:1,minHeight:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:8}}>
-                    <img src={wifiQrData.dataUrl} alt="WiFi QR" style={{maxWidth:'100%',maxHeight:isTV?160:130,width:'auto',height:'auto',objectFit:'contain',borderRadius:8,display:'block'}}/>
-                    <div style={{fontSize:13,fontWeight:600,color:D.t2,letterSpacing:'.02em'}}>{wifiQrData.ssid}</div>
+                  <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:8}}>
+                    <img src={wifiQrData.dataUrl} alt="WiFi QR" style={{width:isTV?130:110,height:isTV?130:110,objectFit:'contain',borderRadius:8,display:'block'}}/>
+                    <div style={{fontSize:12,fontWeight:600,color:D.t2,letterSpacing:'.02em'}}>{wifiQrData.ssid}</div>
                   </div>
                 </Widget>
               )}

@@ -2334,6 +2334,29 @@ app.get('/api/widgets/data', async (req, res) => {
     return { word: entry.word, partOfSpeech: meaning.partOfSpeech || '', definition: def.definition, example: def.example || '' };
   }).then(d => { if (d) result.wotd = d; }));
 
+  // Sunrise / sunset + moon phase — sunrisesunset.io (free, no key)
+  {
+    const lat = gs('weather_lat'); const lon = gs('weather_lon');
+    if (lat && lon) {
+      p.push(_wFetch(`sun:${lat}:${lon}`, 1800000, async () => {
+        const r = await fetch(`https://api.sunrisesunset.io/json?lat=${lat}&lng=${lon}&date=today`, { signal: AbortSignal.timeout(6000) });
+        if (!r.ok) return null;
+        const d = await r.json();
+        if (d.status !== 'OK') return null;
+        const x = d.results;
+        return { sunrise: x.sunrise, sunset: x.sunset, golden_hour: x.golden_hour, moon_phase: x.moon_phase, moon_illumination: x.moon_illumination };
+      }).then(d => { if (d) result.sun = d; }));
+    }
+  }
+
+  // Daily compliment — affirmations.dev (free, no key)
+  p.push(_wFetch(`compliment:${new Date().toISOString().slice(0,13)}`, 21600000, async () => {
+    const r = await fetch('https://www.affirmations.dev/', { signal: AbortSignal.timeout(6000) });
+    if (!r.ok) return null;
+    const d = await r.json();
+    return d.affirmation ? { text: d.affirmation } : null;
+  }).then(d => { if (d) result.compliment = d; }));
+
   await Promise.allSettled(p);
   res.json(result);
 });
@@ -2939,5 +2962,24 @@ async function homeyPoll() {
 
 setInterval(() => homeyPoll().catch(() => {}), 15000);
 setTimeout(() => homeyPoll().catch(() => {}), 6000); // initial run after 6s
+
+// Sync US federal holidays into the events table (runs on boot + yearly cron)
+async function syncUSHolidays() {
+  const ins = db.prepare('INSERT OR IGNORE INTO events (title,date,time,calendar,color,source,external_id) VALUES (?,?,?,?,?,?,?)');
+  for (const year of [new Date().getFullYear(), new Date().getFullYear() + 1]) {
+    try {
+      const r = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${year}/US`, { signal: AbortSignal.timeout(8000) });
+      if (!r.ok) continue;
+      const holidays = await r.json();
+      for (const h of holidays) {
+        if (!h.global || !h.types?.includes('Public')) continue;
+        const extId = `nager-${h.date}`;
+        ins.run(h.localName || h.name, h.date, 'All day', 'kith', '#FF6B6B', 'holiday', extId);
+      }
+    } catch (e) { console.error('[holidays]', e?.message || e); }
+  }
+}
+syncUSHolidays();
+cron.schedule('0 3 1 1 *', syncUSHolidays); // re-sync on Jan 1st each year
 
 app.listen(PORT, () => console.log(`Kith running → http://localhost:${PORT}`));

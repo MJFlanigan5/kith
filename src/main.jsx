@@ -654,6 +654,8 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
     ...(goals.length>0?['goals']:[]),
     ...(progressMembers.length>0?['members']:[]),
     ...(widgetData.wotd?['w_wotd']:[]),
+    ...(widgetData.sun?['w_sun']:[]),
+    ...(widgetData.compliment?['w_compliment']:[]),
     ...(widgetData.quote?['w_quote']:[]),
     ...(widgetData.stocks?.length?['w_stocks']:[]),
     ...(widgetData.producthunt?.length?['w_producthunt']:[]),
@@ -975,6 +977,33 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                           </div>
                           <div style={{fontSize:15,color:D.t2,lineHeight:1.55}}>{w.definition}</div>
                           {w.example&&<div style={{fontSize:13,color:D.t3,fontStyle:'italic',lineHeight:1.4,borderLeft:`3px solid ${D.sep}`,paddingLeft:10}}>"{w.example}"</div>}
+                        </div>
+                      </>
+                    );})()}
+                    {visiblePanelId==='w_sun'&&(()=>{const s=widgetData.sun;if(!s)return null;return(
+                      <>
+                        <WLabel>Sun & Moon</WLabel>
+                        <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',gap:14}}>
+                          <div style={{display:'flex',gap:20}}>
+                            <div style={{flex:1}}>
+                              <div style={{fontSize:11,fontWeight:700,color:D.t4,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:3}}>Sunrise</div>
+                              <div style={{fontSize:isTV?24:20,fontWeight:700,color:D.t1}}>{s.sunrise}</div>
+                            </div>
+                            <div style={{flex:1}}>
+                              <div style={{fontSize:11,fontWeight:700,color:D.t4,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:3}}>Sunset</div>
+                              <div style={{fontSize:isTV?24:20,fontWeight:700,color:D.t1}}>{s.sunset}</div>
+                            </div>
+                          </div>
+                          {s.golden_hour&&<div><div style={{fontSize:11,fontWeight:700,color:D.t4,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:3}}>Golden Hour</div><div style={{fontSize:15,color:D.t2}}>{s.golden_hour}</div></div>}
+                          {s.moon_phase&&<div style={{display:'flex',alignItems:'center',gap:8}}><div style={{fontSize:11,fontWeight:700,color:D.t4,textTransform:'uppercase',letterSpacing:'.08em'}}>{s.moon_phase}</div>{s.moon_illumination!=null&&<div style={{fontSize:11,color:D.t4}}>{Math.round(s.moon_illumination)}% illuminated</div>}</div>}
+                        </div>
+                      </>
+                    );})()}
+                    {visiblePanelId==='w_compliment'&&(()=>{const c=widgetData.compliment;if(!c)return null;return(
+                      <>
+                        <WLabel>Daily Affirmation</WLabel>
+                        <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center'}}>
+                          <div style={{fontSize:isTV?20:17,color:D.t1,fontWeight:500,lineHeight:1.55,fontStyle:'italic'}}>"{c.text}"</div>
                         </div>
                       </>
                     );})()}

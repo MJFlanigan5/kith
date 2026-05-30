@@ -2965,7 +2965,8 @@ setTimeout(() => homeyPoll().catch(() => {}), 6000); // initial run after 6s
 
 // Sync US federal holidays into the events table (runs on boot + yearly cron)
 async function syncUSHolidays() {
-  const ins = db.prepare('INSERT OR IGNORE INTO events (title,date,time,calendar,color,source,external_id) VALUES (?,?,?,?,?,?,?)');
+  const exists = db.prepare('SELECT id FROM events WHERE external_id=?');
+  const ins = db.prepare('INSERT INTO events (title,date,time,calendar,color,source,external_id) VALUES (?,?,?,?,?,?,?)');
   for (const year of [new Date().getFullYear(), new Date().getFullYear() + 1]) {
     try {
       const r = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${year}/US`, { signal: AbortSignal.timeout(8000) });
@@ -2974,7 +2975,7 @@ async function syncUSHolidays() {
       for (const h of holidays) {
         if (!h.global || !h.types?.includes('Public')) continue;
         const extId = `nager-${h.date}`;
-        ins.run(h.localName || h.name, h.date, 'All day', 'kith', '#FF6B6B', 'holiday', extId);
+        if (!exists.get(extId)) ins.run(h.localName || h.name, h.date, 'All day', 'kith', '#FF6B6B', 'holiday', extId);
       }
     } catch (e) { console.error('[holidays]', e?.message || e); }
   }

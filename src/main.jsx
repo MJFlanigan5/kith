@@ -4573,7 +4573,7 @@ function GoalsScreen({goals,setGoals,toastAdd}){
 }
 
 
-function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocery,setGrocery,meals,setMeals,icsSources,setIcsSources,inboxCount,setInboxCount,countdowns,setCountdowns,members,setMembers,photos,setPhotos,clockFormat,setClockFormat,weather,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd,setRefreshMs,parseRefreshMs,goals,setGoals,notes,setNotes,polls,setPolls,bookmarks,setBookmarks,quickActions,setQuickActions,setRotationMs,setWifiQrData}){
+function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocery,setGrocery,meals,setMeals,icsSources,setIcsSources,inboxCount,setInboxCount,countdowns,setCountdowns,members,setMembers,photos,setPhotos,clockFormat,setClockFormat,weather,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd,setRefreshMs,parseRefreshMs,goals,setGoals,notes,setNotes,polls,setPolls,bookmarks,setBookmarks,quickActions,setQuickActions,setRotationMs,setWifiQrData,darkMode,onDarkMode}){
   const isMobile=useIsMobile();
   const [screen,setScreen]=useState('dashboard');
   const {toasts,add:toastAdd}=useToast();
@@ -4613,7 +4613,7 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
     bookmarks:  <BookmarksScreen bookmarks={bookmarks} setBookmarks={setBookmarks} toastAdd={toastAdd}/>,
     polls:      <PollsScreen polls={polls} setPolls={setPolls} toastAdd={toastAdd}/>,
     inbox:      <InboxScreen toastAdd={toastAdd} events={events} setEvents={setEvents} setInboxCount={setInboxCount}/>,
-    settings:   <SettingsScreen toastAdd={toastAdd} icsSources={icsSources} setIcsSources={setIcsSources} onDisplay={onDisplay} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} setQuickActions={setQuickActions} setRotationMs={setRotationMs} setWifiQrData={setWifiQrData} darkMode={darkMode} onDarkMode={handleDarkMode}/>,
+    settings:   <SettingsScreen toastAdd={toastAdd} icsSources={icsSources} setIcsSources={setIcsSources} onDisplay={onDisplay} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} setQuickActions={setQuickActions} setRotationMs={setRotationMs} setWifiQrData={setWifiQrData} darkMode={darkMode} onDarkMode={onDarkMode}/>,
   };
 
   if(isMobile){
@@ -5067,7 +5067,7 @@ function App(){
     return ()=>mq.removeEventListener('change',apply);
   },[darkMode]);
   const handleDarkMode=v=>{setDarkMode(v);localStorage.setItem('kith_dark',v);};
-  const [mode,setMode]=useState('manage');
+  const [mode,setMode]=useState(()=>localStorage.getItem('kith_mode')||'manage');
   const [events,setEvents]=useState([]);
   const [chores,setChores]=useState([]);
   const [grocery,setGrocery]=useState([]);
@@ -5228,9 +5228,11 @@ function App(){
     </div>
   );
 
+  const goDisplay=()=>{localStorage.setItem('kith_mode','display');setMode('display');};
+  const goManage=()=>{localStorage.setItem('kith_mode','manage');setMode('manage');};
   return mode==='display'
-    ?<DisplayMode onManage={()=>setMode('manage')} events={events} chores={chores} setChores={setChores} meals={meals} grocery={grocery} countdowns={countdowns} clockFormat={clockFormat} weather={weather} nightModeStart={nightModeStart} nightModeEnd={nightModeEnd} goals={goals} notes={notes} polls={polls} rotationMs={rotationMs} wifiQrData={wifiQrData} quickActions={quickActions}/>
-    :<ManageMode onDisplay={()=>setMode('display')} onLogout={handleLogout} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources} inboxCount={inboxCount} setInboxCount={setInboxCount} countdowns={countdowns} setCountdowns={setCountdowns} members={members} setMembers={setMembers} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} weather={weather} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} goals={goals} setGoals={setGoals} notes={notes} setNotes={setNotes} polls={polls} setPolls={setPolls} bookmarks={bookmarks} setBookmarks={setBookmarks} quickActions={quickActions} setQuickActions={setQuickActions} setRotationMs={setRotationMs} setWifiQrData={setWifiQrData}/>;
+    ?<DisplayMode onManage={goManage} events={events} chores={chores} setChores={setChores} meals={meals} grocery={grocery} countdowns={countdowns} clockFormat={clockFormat} weather={weather} nightModeStart={nightModeStart} nightModeEnd={nightModeEnd} goals={goals} notes={notes} polls={polls} rotationMs={rotationMs} wifiQrData={wifiQrData} quickActions={quickActions}/>
+    :<ManageMode onDisplay={goDisplay} onLogout={handleLogout} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources} inboxCount={inboxCount} setInboxCount={setInboxCount} countdowns={countdowns} setCountdowns={setCountdowns} members={members} setMembers={setMembers} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} weather={weather} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} goals={goals} setGoals={setGoals} notes={notes} setNotes={setNotes} polls={polls} setPolls={setPolls} bookmarks={bookmarks} setBookmarks={setBookmarks} quickActions={quickActions} setQuickActions={setQuickActions} setRotationMs={setRotationMs} setWifiQrData={setWifiQrData} darkMode={darkMode} onDarkMode={handleDarkMode}/>;
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);

@@ -577,6 +577,26 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
     window.addEventListener('touchstart',show);
     return()=>{window.removeEventListener('mousemove',show);window.removeEventListener('touchstart',show);clearTimeout(hideTimer.current);};
   },[]);
+  const calScrollRef=useRef(null);
+  const _calScroll=useRef({timer:null,pausing:false});
+  useEffect(()=>{
+    const el=calScrollRef.current;
+    const s=_calScroll.current;
+    clearInterval(s.timer);s.pausing=false;
+    if(!el) return;
+    const t=setTimeout(()=>{
+      if(el.scrollHeight<=el.clientHeight+20) return;
+      s.timer=setInterval(()=>{
+        if(s.pausing) return;
+        el.scrollTop+=0.4;
+        if(el.scrollTop+el.clientHeight>=el.scrollHeight-4){
+          s.pausing=true;
+          setTimeout(()=>{el.scrollTop=0;setTimeout(()=>{s.pausing=false;},1500);},3000);
+        }
+      },16);
+    },200);
+    return()=>{clearTimeout(t);clearInterval(s.timer);};
+  },[events]);
   const h12=now.getHours()%12||12;
   const min=String(now.getMinutes()).padStart(2,'0');
   const ampm=now.getHours()>=12?'PM':'AM';
@@ -611,6 +631,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
   const progressMembers=memberProgress.filter(m=>m.monthly_goal>0);
   const pinnedNotes=useMemo(()=>(notes||[]).filter(n=>n.pinned),[notes]);
   const centerPanels=[
+    'dinner',
     ...(dueC.length>0?['chores']:[]),
     ...(upCD.length>0?['countdowns']:[]),
     ...(goals.length>0?['goals']:[]),
@@ -780,7 +801,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
             {/* LEFT: Upcoming events */}
             <Widget style={{display:'flex',flexDirection:'column',overflow:'hidden'}}>
               <WLabel>Upcoming</WLabel>
-              <div style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:14,WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
+              <div ref={calScrollRef} style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:14,WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
                 {agendaDays.map(({label,date})=>{
                   const evs=events.filter(e=>e.date===date);
                   return(
@@ -805,10 +826,11 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                 <div key={activePanelId} className='screen' style={{flex:1,display:'flex',flexDirection:'column',minHeight:0}}>
                   <Widget style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
                     {centerPanels.length>1&&(
-                      <div style={{display:'flex',gap:5,marginBottom:10}}>
-                        {centerPanels.map((p,i)=>(
-                          <div key={p} style={{width:5,height:5,borderRadius:'50%',background:i===centerIdx%centerPanels.length?D.t2:D.t4,transition:'background .4s'}}/>
-                        ))}
+                      <div style={{display:'flex',gap:3,marginBottom:10}}>
+                        {centerPanels.map((p,i)=>{
+                          const active=i===centerIdx%centerPanels.length;
+                          return <div key={p} style={{height:2,borderRadius:1,flex:active?2:1,background:active?D.t2:D.t4,transition:'all .4s ease'}}/>;
+                        })}
                       </div>
                     )}
                     {activePanelId==='chores'&&(
@@ -1415,26 +1437,32 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         </>
                       );
                     })()}
+                    {activePanelId==='dinner'&&(
+                      <>
+                        <WLabel>Dinner tonight</WLabel>
+                        <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',gap:16}}>
+                          <div style={{fontSize:isTV?44:36,fontWeight:800,color:todayDinner()&&todayDinner()!=='—'?D.t1:D.t4,letterSpacing:'-.02em',lineHeight:1.2}}>
+                            {todayDinner()||'—'}
+                          </div>
+                          <div style={{display:'flex',gap:8}}>
+                            {[1,2].map(offset=>{
+                              const d=new Date();d.setDate(d.getDate()+offset);
+                              const dayName=DAYS[d.getDay()];
+                              const meal=(meals||[]).find(m=>m.day===dayName)?.meal||'—';
+                              return(
+                                <div key={offset} style={{flex:1,background:'rgba(255,255,255,0.05)',borderRadius:8,padding:'10px 12px'}}>
+                                  <div style={{fontSize:10,fontWeight:700,color:D.t3,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>{offset===1?'Tomorrow':dayName}</div>
+                                  <div style={{fontSize:14,color:meal!=='—'?D.t2:D.t4,fontWeight:500}}>{meal}</div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </Widget>
                 </div>
               )}
-              <Widget style={{flexShrink:0}}>
-                <WLabel>Dinner tonight</WLabel>
-                <div style={{fontSize:26,fontWeight:700,color:D.t1,letterSpacing:'-.02em',lineHeight:1.2,marginBottom:12}}>{todayDinner()||'—'}</div>
-                <div style={{display:'flex',gap:8}}>
-                  {[1,2].map(offset=>{
-                    const d=new Date(); d.setDate(d.getDate()+offset);
-                    const dayName=DAYS[d.getDay()];
-                    const meal=(meals||[]).find(m=>m.day===dayName)?.meal||'—';
-                    return(
-                      <div key={offset} style={{flex:1,background:'rgba(255,255,255,0.05)',borderRadius:8,padding:'7px 10px'}}>
-                        <div style={{fontSize:10,fontWeight:700,color:D.t3,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:3}}>{offset===1?'Tomorrow':dayName}</div>
-                        <div style={{fontSize:12,color:meal!=='—'?D.t2:D.t4,fontWeight:500}}>{meal}</div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </Widget>
             </div>
 
             {/* RIGHT: weather + dynamic extras */}
@@ -1481,17 +1509,17 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                   {unchecked.length>8&&<div style={{fontSize:11,color:D.t4,marginTop:6}}>+{unchecked.length-8} more</div>}
                 </Widget>
               );})()}
-              {/* WiFi QR — when configured */}
+              {/* WiFi QR — flex:1 so it shares remaining space with notes and never clips */}
               {wifiQrData&&(
-                <Widget style={{flexShrink:0}}>
+                <Widget style={{flex:1,minHeight:0,display:'flex',flexDirection:'column'}}>
                   <WLabel>Guest WiFi</WLabel>
-                  <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:8}}>
-                    <img src={wifiQrData.dataUrl} alt="WiFi QR" style={{width:'100%',maxWidth:200,borderRadius:8,display:'block'}}/>
+                  <div style={{flex:1,minHeight:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:8}}>
+                    <img src={wifiQrData.dataUrl} alt="WiFi QR" style={{maxWidth:'100%',maxHeight:isTV?160:130,width:'auto',height:'auto',objectFit:'contain',borderRadius:8,display:'block'}}/>
                     <div style={{fontSize:13,fontWeight:600,color:D.t2,letterSpacing:'.02em'}}>{wifiQrData.ssid}</div>
                   </div>
                 </Widget>
               )}
-              {/* Pinned notes — fills remaining space */}
+              {/* Pinned notes — fills remaining space; when paired with QR, both share via flex:1 */}
               {pinnedNotes.length>0&&(
                 <Widget style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minHeight:0}}>
                   <WLabel>Notes</WLabel>

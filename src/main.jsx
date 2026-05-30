@@ -2841,7 +2841,7 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,toastAdd}){
   const isMobile=useIsMobile();
   const [input,setInput]=useState('');
   const [catInput,setCatInput]=useState('');
-  const [editingDay,setEditingDay]=useState(null);
+  const [editingField,setEditingField]=useState(null); // {day, field:'breakfast'|'lunch'|'dinner'}
   const [mealInput,setMealInput]=useState('');
   const [removing,setRemoving]=useState(new Set());
   const [history,setHistory]=useState([]);
@@ -2898,10 +2898,16 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,toastAdd}){
       setRemoving(s=>{const n=new Set(s);n.delete(id);return n;});
     }
   };
-  const saveMeal=async day=>{
-    await api.put(`/api/meals/${day}`,{meal:mealInput});
-    setMeals(p=>p.map(m=>m.day===day?{...m,meal:mealInput}:m));
-    setEditingDay(null); setMealInput('');
+  const saveMeal=async(day,field)=>{
+    const current=(meals||[]).find(m=>m.day===day)||{};
+    const body={
+      meal:     field==='dinner'    ?mealInput:(current.meal||''),
+      breakfast:field==='breakfast' ?mealInput:(current.breakfast||''),
+      lunch:    field==='lunch'     ?mealInput:(current.lunch||''),
+    };
+    await api.put(`/api/meals/${day}`,body);
+    setMeals(p=>p.map(m=>m.day===day?{...m,...body}:m));
+    setEditingField(null); setMealInput('');
   };
 
   const unchecked=(grocery||[]).filter(i=>!i.checked);
@@ -2998,22 +3004,32 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,toastAdd}){
           {(meals||[]).map((m,i)=>{
             const dayName=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date().getDay()];
             const isToday=m.day===dayName;
-            const isEditing=editingDay===m.day;
             return(
-              <div key={m.day} style={{padding:'13px 16px',borderTop:i>0?`1px solid ${A.sep}`:'none',background:isToday?A.blueFill:'transparent'}}>
-                <div style={{display:'flex',alignItems:'center',gap:10}}>
-                  <span style={{fontSize:13,fontWeight:isToday?700:500,color:isToday?A.blue:A.label4,width:30,flexShrink:0}}>{m.day}</span>
-                  {isEditing?(
-                    <div style={{flex:1,display:'flex',gap:6}}>
-                      <Inp value={mealInput} onChange={e=>setMealInput(e.target.value)} placeholder="Meal..." onKeyDown={e=>e.key==='Enter'&&saveMeal(m.day)} style={{fontSize:14}}/>
-                      <Btn sm onClick={()=>saveMeal(m.day)}>OK</Btn>
-                    </div>
-                  ):(
-                    <>
-                      <span style={{flex:1,fontSize:15,color:m.meal?A.label1:A.label5,fontStyle:m.meal?'normal':'italic',fontWeight:isToday?500:400}}>{m.meal||'Not planned'}</span>
-                      <button onClick={()=>{setEditingDay(m.day);setMealInput(m.meal);}} style={{background:'none',border:'none',color:A.blue,fontSize:13,cursor:'pointer',fontWeight:500,flexShrink:0}}>{m.meal?'Edit':'Add'}</button>
-                    </>
-                  )}
+              <div key={m.day} style={{padding:'12px 16px',borderTop:i>0?`1px solid ${A.sep}`:'none',background:isToday?A.blueFill:'transparent'}}>
+                <div style={{display:'flex',alignItems:'flex-start',gap:10}}>
+                  <span style={{fontSize:13,fontWeight:isToday?700:500,color:isToday?A.blue:A.label4,width:30,flexShrink:0,paddingTop:2}}>{m.day}</span>
+                  <div style={{flex:1,display:'flex',flexDirection:'column',gap:5}}>
+                    {[['breakfast','B',m.breakfast],['lunch','L',m.lunch],['dinner','D',m.meal]].map(([field,lbl,val])=>{
+                      const isEditing=editingField?.day===m.day&&editingField?.field===field;
+                      return(
+                        <div key={field} style={{display:'flex',alignItems:'center',gap:6}}>
+                          <span style={{fontSize:10,fontWeight:700,color:A.label5,width:12,flexShrink:0}}>{lbl}</span>
+                          {isEditing?(
+                            <>
+                              <Inp value={mealInput} onChange={e=>setMealInput(e.target.value)} placeholder={`${field}...`} onKeyDown={e=>e.key==='Enter'&&saveMeal(m.day,field)} style={{fontSize:13,flex:1}}/>
+                              <Btn sm onClick={()=>saveMeal(m.day,field)}>OK</Btn>
+                              <button onClick={()=>{setEditingField(null);setMealInput('');}} style={{background:'none',border:'none',color:A.label4,fontSize:12,cursor:'pointer'}}>✕</button>
+                            </>
+                          ):(
+                            <>
+                              <span style={{flex:1,fontSize:14,color:val?A.label1:A.label5,fontStyle:val?'normal':'italic'}}>{val||'—'}</span>
+                              <button onClick={()=>{setEditingField({day:m.day,field});setMealInput(val||'');}} style={{background:'none',border:'none',color:A.blue,fontSize:12,cursor:'pointer',fontWeight:500,flexShrink:0}}>{val?'Edit':'Add'}</button>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             );

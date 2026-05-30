@@ -187,6 +187,8 @@ try { db.exec('ALTER TABLE chores ADD COLUMN goal_amount REAL DEFAULT 1'); } cat
 try { db.exec('ALTER TABLE chores ADD COLUMN member_id INTEGER'); } catch {}
 try { db.exec('ALTER TABLE chores ADD COLUMN streak INTEGER DEFAULT 0'); } catch {}
 try { db.exec("ALTER TABLE family_members ADD COLUMN reward TEXT DEFAULT ''"); } catch {}
+try { db.exec("ALTER TABLE meals ADD COLUMN breakfast TEXT DEFAULT ''"); } catch {}
+try { db.exec("ALTER TABLE meals ADD COLUMN lunch TEXT DEFAULT ''"); } catch {}
 // Grocery quick-add history
 db.exec(`CREATE TABLE IF NOT EXISTS grocery_history (
   name TEXT PRIMARY KEY,

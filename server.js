@@ -588,8 +588,11 @@ app.get('/api/meals', (req, res) => {
 });
 
 app.put('/api/meals/:day', requireAuth, (req, res) => {
-  const meal = req.body?.meal ?? '';
-  db.prepare('INSERT OR REPLACE INTO meals (day,meal) VALUES (?,?)').run(req.params.day, meal);
+  const existing = db.prepare('SELECT * FROM meals WHERE day=?').get(req.params.day) || {};
+  const meal      = req.body?.meal      ?? existing.meal      ?? '';
+  const breakfast = req.body?.breakfast ?? existing.breakfast ?? '';
+  const lunch     = req.body?.lunch     ?? existing.lunch     ?? '';
+  db.prepare('INSERT OR REPLACE INTO meals (day,meal,breakfast,lunch) VALUES (?,?,?,?)').run(req.params.day, meal, breakfast, lunch);
   res.json({ ok: true });
 });
 

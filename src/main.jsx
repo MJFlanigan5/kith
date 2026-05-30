@@ -804,9 +804,9 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
           {/* Main 3-col grid */}
           <div style={{flex:1,display:'grid',gridTemplateColumns:'1fr 1.6fr 1fr',gap:isTV?16:12,minHeight:0,zoom:isTV?1.1:undefined}}>
 
-            {/* LEFT: Upcoming events, or QR code when calendar is empty */}
+            {/* LEFT: scrollable events + QR always pinned at bottom */}
             <Widget style={{display:'flex',flexDirection:'column',overflow:'hidden'}}>
-              {hasUpcomingEvents?(
+              {hasUpcomingEvents&&(
                 <>
                   <WLabel>Upcoming</WLabel>
                   <div ref={calScrollRef} style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:14,WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
@@ -826,22 +826,18 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                     })}
                   </div>
                 </>
-              ):wifiQrData?(
-                <>
-                  <WLabel>Guest WiFi</WLabel>
-                  <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:12}}>
-                    <img src={wifiQrData.dataUrl} alt="WiFi QR" style={{width:isTV?160:130,height:isTV?160:130,objectFit:'contain',borderRadius:10,display:'block'}}/>
-                    <div style={{fontSize:14,fontWeight:600,color:D.t2,letterSpacing:'.02em'}}>{wifiQrData.ssid}</div>
-                    <div style={{fontSize:11,color:D.t4}}>Scan to connect</div>
-                  </div>
-                </>
-              ):(
-                <>
-                  <WLabel>Upcoming</WLabel>
-                  <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center'}}>
-                    <div style={{fontSize:13,color:D.t4,textAlign:'center'}}>Nothing scheduled</div>
-                  </div>
-                </>
+              )}
+              {wifiQrData?(
+                <div style={{flexShrink:0,display:'flex',flexDirection:'column',alignItems:'center',gap:8,paddingTop:hasUpcomingEvents?12:0,flex:hasUpcomingEvents?0:1,justifyContent:'center',borderTop:hasUpcomingEvents?`1px solid ${D.sep}`:'none',marginTop:hasUpcomingEvents?8:0}}>
+                  {!hasUpcomingEvents&&<WLabel>Guest WiFi</WLabel>}
+                  <img src={wifiQrData.dataUrl} alt="WiFi QR" style={{width:hasUpcomingEvents?(isTV?100:80):(isTV?160:130),height:hasUpcomingEvents?(isTV?100:80):(isTV?160:130),objectFit:'contain',borderRadius:10,display:'block'}}/>
+                  <div style={{fontSize:hasUpcomingEvents?11:14,fontWeight:600,color:D.t2,letterSpacing:'.02em'}}>{wifiQrData.ssid}</div>
+                  {!hasUpcomingEvents&&<div style={{fontSize:11,color:D.t4}}>Scan to connect</div>}
+                </div>
+              ):!hasUpcomingEvents&&(
+                <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                  <div style={{fontSize:13,color:D.t4,textAlign:'center'}}>Nothing scheduled</div>
+                </div>
               )}
             </Widget>
 

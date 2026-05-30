@@ -774,12 +774,12 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                 <div key={date} style={{marginBottom:10}}>
                   <div style={{fontSize:10,fontWeight:700,color:D.t3,marginBottom:6,textTransform:'uppercase',letterSpacing:'.08em'}}>{label}</div>
                   {evs.length===0&&<div style={{fontSize:13,color:D.t4}}>Free</div>}
-                  {evs.slice(0,3).map(ev=>(
-                    <div key={ev.id} style={{background:ev.color+'18',borderRadius:8,padding:'8px 11px',marginBottom:4,borderLeft:`3px solid ${ev.color}`}}>
+                  {evs.slice(0,3).map(ev=>{const c=ev.color||'#34C759';return(
+                    <div key={ev.id} style={{background:c+'18',borderRadius:8,padding:'8px 11px',marginBottom:4,borderLeft:`3px solid ${c}`}}>
                       <div style={{fontSize:14,color:D.t1,fontWeight:600}}>{ev.title}</div>
                       <div style={{fontSize:12,color:D.t3,fontVariantNumeric:'tabular-nums',marginTop:1}}>{fmtTime(ev.time,clockFormat)}</div>
                     </div>
-                  ))}
+                  );})}
                 </div>
               );
             })}
@@ -815,12 +815,12 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                       return(
                         <div key={date}>
                           <div style={{fontSize:10,fontWeight:700,color:D.t3,marginBottom:6,textTransform:'uppercase',letterSpacing:'.08em'}}>{label}</div>
-                          {evs.map(ev=>(
-                            <div key={ev.id} style={{background:ev.color+'18',borderRadius:8,padding:'8px 11px',marginBottom:4,borderLeft:`3px solid ${ev.color}`}}>
+                          {evs.map(ev=>{const c=ev.color||'#34C759';return(
+                            <div key={ev.id} style={{background:c+'18',borderRadius:8,padding:'8px 11px',marginBottom:4,borderLeft:`3px solid ${c}`}}>
                               <div style={{fontSize:14,color:D.t1,fontWeight:600}}>{ev.title}</div>
                               <div style={{fontSize:12,color:D.t3,fontVariantNumeric:'tabular-nums',marginTop:1}}>{fmtTime(ev.time,clockFormat)}</div>
                             </div>
-                          ))}
+                          );})}
                         </div>
                       );
                     })}
@@ -828,7 +828,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                 </>
               )}
               {wifiQrData?(
-                <div style={{flexShrink:0,display:'flex',flexDirection:'column',alignItems:'center',gap:8,paddingTop:hasUpcomingEvents?12:0,flex:hasUpcomingEvents?0:1,justifyContent:'center',borderTop:hasUpcomingEvents?`1px solid ${D.sep}`:'none',marginTop:hasUpcomingEvents?8:0}}>
+                <div style={{flexShrink:0,display:'flex',flexDirection:'column',alignItems:'center',gap:8,paddingTop:hasUpcomingEvents?12:0,...(!hasUpcomingEvents&&{flex:1}),justifyContent:'center',borderTop:hasUpcomingEvents?`1px solid ${D.sep}`:'none',marginTop:hasUpcomingEvents?8:0}}>
                   {!hasUpcomingEvents&&<WLabel>Guest WiFi</WLabel>}
                   <img src={wifiQrData.dataUrl} alt="WiFi QR" style={{width:hasUpcomingEvents?(isTV?100:80):(isTV?160:130),height:hasUpcomingEvents?(isTV?100:80):(isTV?160:130),objectFit:'contain',borderRadius:10,display:'block'}}/>
                   <div style={{fontSize:hasUpcomingEvents?11:14,fontWeight:600,color:D.t2,letterSpacing:'.02em'}}>{wifiQrData.ssid}</div>

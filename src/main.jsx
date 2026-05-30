@@ -1472,8 +1472,8 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
 
             {/* RIGHT: weather + dynamic extras */}
             <div style={{display:'flex',flexDirection:'column',gap:12,minHeight:0,overflow:'hidden'}}>
-              {/* Weather — always */}
-              <Widget style={{flexShrink:0}}>
+              {/* Weather — grows to fill right col; QR below it gets its fixed size first */}
+              <Widget style={{flex:1,minHeight:isTV?180:155,overflow:'hidden'}}>
                 <WLabel>Weather</WLabel>
                 {weather?(
                   <>

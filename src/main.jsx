@@ -578,13 +578,14 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
     return()=>{window.removeEventListener('mousemove',show);window.removeEventListener('touchstart',show);clearTimeout(hideTimer.current);};
   },[]);
   const calScrollRef=useRef(null);
-  const _calScroll=useRef({timer:null,pausing:false});
+  const _calScroll=useRef({timer:null,pauseT:null,unPauseT:null,pausing:false});
   useEffect(()=>{
     const el=calScrollRef.current;
     const s=_calScroll.current;
-    clearInterval(s.timer);s.pausing=false;
+    clearInterval(s.timer);clearTimeout(s.pauseT);clearTimeout(s.unPauseT);
+    s.pausing=false;
     if(!el) return;
-    el.scrollTop=0; // reset position whenever events change
+    el.scrollTop=0;
     const t=setTimeout(()=>{
       if(el.scrollHeight<=el.clientHeight+20) return;
       s.timer=setInterval(()=>{
@@ -592,11 +593,14 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
         el.scrollTop+=0.4;
         if(el.scrollTop+el.clientHeight>=el.scrollHeight-4){
           s.pausing=true;
-          setTimeout(()=>{el.scrollTop=0;setTimeout(()=>{s.pausing=false;},1500);},3000);
+          s.pauseT=setTimeout(()=>{
+            el.scrollTop=0;
+            s.unPauseT=setTimeout(()=>{s.pausing=false;},1500);
+          },3000);
         }
       },16);
     },200);
-    return()=>{clearTimeout(t);clearInterval(s.timer);};
+    return()=>{clearTimeout(t);clearInterval(s.timer);clearTimeout(s.pauseT);clearTimeout(s.unPauseT);};
   },[events]);
   const h12=now.getHours()%12||12;
   const min=String(now.getMinutes()).padStart(2,'0');
@@ -1500,14 +1504,14 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                 <Widget style={{flexShrink:0}}>
                   <WLabel>Grocery</WLabel>
                   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'2px 12px'}}>
-                    {unchecked.slice(0,8).map(item=>(
+                    {unchecked.slice(0,6).map(item=>(
                       <div key={item.id} style={{display:'flex',alignItems:'center',gap:7,padding:'4px 0'}}>
                         <div style={{width:4,height:4,borderRadius:'50%',background:'rgba(255,255,255,0.35)',flexShrink:0}}/>
                         <span style={{fontSize:13,color:D.t2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{item.name}</span>
                       </div>
                     ))}
                   </div>
-                  {unchecked.length>8&&<div style={{fontSize:11,color:D.t4,marginTop:6}}>+{unchecked.length-8} more</div>}
+                  {unchecked.length>6&&<div style={{fontSize:11,color:D.t4,marginTop:6}}>+{unchecked.length-6} more</div>}
                 </Widget>
               );})()}
               {/* WiFi QR — explicit fixed image size so it can never overflow regardless of right-col height */}

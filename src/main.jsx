@@ -560,11 +560,14 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
     return()=>{clearInterval(id);clearTimeout(newsFadeTimer.current);};
   },[news.length]);
   const [centerIdx,setCenterIdx]=useState(0);
+  const [visiblePanelId,setVisiblePanelId]=useState('dinner');
+  const [panelOpacity,setPanelOpacity]=useState(1);
+  const panelFirstRender=useRef(true);
   useEffect(()=>{
     let id;
     const start=()=>{id=setInterval(()=>setCenterIdx(i=>i+1),rotationMs);};
     const stop=()=>clearInterval(id);
-    const onVis=()=>document.visibilityState==='hidden'?stop():start();
+    const onVis=()=>{stop();if(document.visibilityState!=='hidden')start();};
     start();
     document.addEventListener('visibilitychange',onVis);
     return()=>{stop();document.removeEventListener('visibilitychange',onVis);};
@@ -673,9 +676,6 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
     ...(polls.length>0?['w_polls']:[]),
   ];
   const activePanelId=centerPanels[centerIdx%Math.max(1,centerPanels.length)];
-  const [visiblePanelId,setVisiblePanelId]=useState(centerPanels[0]||'dinner');
-  const [panelOpacity,setPanelOpacity]=useState(1);
-  const panelFirstRender=useRef(true);
   useEffect(()=>{
     if(panelFirstRender.current){panelFirstRender.current=false;setVisiblePanelId(activePanelId);return;}
     setPanelOpacity(0);

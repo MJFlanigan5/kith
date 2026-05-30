@@ -550,8 +550,9 @@ app.post('/api/grocery', requireAuth, (req, res) => {
   const { name, category } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'name is required' });
   const r = db.prepare('INSERT INTO grocery (name,category) VALUES (?,?)').run(name.trim(), category||'Other');
+  const histName = name.trim().toLowerCase();
   db.prepare('INSERT INTO grocery_history (name,count,last_used) VALUES (?,1,?) ON CONFLICT(name) DO UPDATE SET count=count+1, last_used=?')
-    .run(name.trim(), localDate(), localDate());
+    .run(histName, localDate(), localDate());
   res.json({ id: r.lastInsertRowid, name: name.trim(), category: category||'Other', checked: 0 });
 });
 

@@ -124,7 +124,7 @@ function Drawer({open,onClose,title,children,width=440}){
   return(
     <>
       {open&&<div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.18)',zIndex:100,animation:'fadeIn .15s'}}/>}
-      <div style={{position:'fixed',top:isMobile?'auto':0,bottom:isMobile?0:'auto',right:0,height:isMobile?'92%':'100%',width:effectiveWidth,background:'#fff',zIndex:101,borderRadius:isMobile?'20px 20px 0 0':'0',transform:open?'translate(0,0)':translateOut,transition:'transform .32s cubic-bezier(.4,0,.2,1)',display:'flex',flexDirection:'column',boxShadow:open?'0 -2px 40px rgba(0,0,0,0.12)':'none'}}>
+      <div style={{position:'fixed',top:isMobile?'auto':0,bottom:isMobile?0:'auto',right:0,height:isMobile?'92%':'100%',width:effectiveWidth,background:A.cardBg,zIndex:101,borderRadius:isMobile?'20px 20px 0 0':'0',transform:open?'translate(0,0)':translateOut,transition:'transform .32s cubic-bezier(.4,0,.2,1)',display:'flex',flexDirection:'column',boxShadow:open?'0 -2px 40px rgba(0,0,0,0.12)':'none'}}>
         {isMobile&&<div style={{width:36,height:4,borderRadius:2,background:A.sep,margin:'12px auto 0',flexShrink:0}}/>}
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:isMobile?'14px 20px 12px':'20px 24px 16px',borderBottom:`1px solid ${A.sep}`}}>
           <span style={{fontSize:17,fontWeight:600,letterSpacing:'-.01em'}}>{title}</span>
@@ -141,7 +141,7 @@ function Modal({open,onClose,title,children,width=660}){
   return(
     <>
       <div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.24)',zIndex:200,animation:'fadeIn .15s'}}/>
-      <div style={{position:'fixed',top:'50%',left:'50%',transform:'translate(-50%,-50%)',background:'#fff',borderRadius:A.r,border:'1px solid rgba(0,0,0,0.06)',zIndex:201,width,maxWidth:'94vw',maxHeight:'88vh',display:'flex',flexDirection:'column',boxShadow:A.shadowLg,animation:'slideUp .2s cubic-bezier(.4,0,.2,1)'}}>
+      <div style={{position:'fixed',top:'50%',left:'50%',transform:'translate(-50%,-50%)',background:A.cardBg,borderRadius:A.r,border:`1px solid ${A.sep}`,zIndex:201,width,maxWidth:'94vw',maxHeight:'88vh',display:'flex',flexDirection:'column',boxShadow:A.shadowLg,animation:'slideUp .2s cubic-bezier(.4,0,.2,1)'}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'20px 24px 16px',borderBottom:`1px solid ${A.sep}`}}>
           <span style={{fontSize:17,fontWeight:600}}>{title}</span>
           <button onClick={onClose} style={{width:28,height:28,borderRadius:'50%',background:A.inputBg,border:'none',cursor:'pointer',fontSize:16,color:A.label3,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
@@ -156,7 +156,7 @@ function FormGroup({children,label,footer}){
   return(
     <div style={{marginBottom:22}}>
       {label&&<div style={{fontSize:11,fontWeight:600,color:A.label4,marginBottom:7,paddingLeft:6,textTransform:'uppercase',letterSpacing:'.07em'}}>{label}</div>}
-      <div style={{background:'#fff',borderRadius:A.r,overflow:'hidden',boxShadow:A.shadowSm,border:'1px solid rgba(0,0,0,0.06)'}}>
+      <div style={{background:A.cardBg,borderRadius:A.r,overflow:'hidden',boxShadow:A.shadowSm,border:`1px solid ${A.sep}`}}>
         {React.Children.map(children,(child,i)=>(
           <div key={i} style={{borderTop:i>0?`1px solid ${A.sep}`:'none'}}>{child}</div>
         ))}
@@ -184,13 +184,13 @@ function Inp({value,onChange,placeholder,type='text',onKeyDown,onBlur,disabled,i
   return(
     <input ref={inputRef} type={type} value={value} onChange={onChange} placeholder={placeholder} onKeyDown={onKeyDown} disabled={disabled}
       onFocus={()=>setFocus(true)} onBlur={e=>{setFocus(false);onBlur&&onBlur(e);}}
-      style={{width:'100%',background:focus?'#fff':A.inputBg,border:`1.5px solid ${focus?A.blue:'rgba(0,0,0,0.09)'}`,borderRadius:A.rXs,color:A.label1,padding:'9px 12px',fontSize:15,outline:'none',transition:'background .15s,border-color .15s',opacity:disabled?.5:1,...s}}/>
+      style={{width:'100%',background:focus?A.cardBg:A.inputBg,border:`1.5px solid ${focus?A.blue:A.sep}`,borderRadius:A.rXs,color:A.label1,padding:'9px 12px',fontSize:15,outline:'none',transition:'background .15s,border-color .15s',opacity:disabled?.5:1,...s}}/>
   );
 }
 
 function Sel({value,onChange,children}){
   return(
-    <select value={value} onChange={onChange} style={{background:A.inputBg,border:'1.5px solid rgba(0,0,0,0.09)',borderRadius:A.rXs,color:A.label1,padding:'9px 12px',fontSize:15,outline:'none',cursor:'pointer',width:'100%'}}>{children}</select>
+    <select value={value} onChange={onChange} style={{background:A.inputBg,border:`1.5px solid ${A.sep}`,borderRadius:A.rXs,color:A.label1,padding:'9px 12px',fontSize:15,outline:'none',cursor:'pointer',width:'100%'}}>{children}</select>
   );
 }
 
@@ -230,7 +230,7 @@ function Badge({children,color=A.blue,bg}){
 }
 
 function Card({children,style:s={}}){
-  return <div style={{background:'#fff',borderRadius:A.r,boxShadow:A.shadowSm,border:'1px solid rgba(0,0,0,0.06)',...s}}>{children}</div>;
+  return <div style={{background:A.cardBg,borderRadius:A.r,boxShadow:A.shadowSm,border:`1px solid ${A.sep}`,...s}}>{children}</div>;
 }
 
 function Confetti({active,count=48}){
@@ -2819,9 +2819,11 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,toastAdd}){
   useEffect(()=>{api.get('/api/grocery/history').then(r=>Array.isArray(r)&&setHistory(r)).catch(()=>{})},[]);
 
   const addFromHistory=async name=>{
-    const newItem=await api.post('/api/grocery',{name});
-    setGrocery(p=>[...p,newItem]);
-    toastAdd(`${name} added`);
+    try{
+      const newItem=await api.post('/api/grocery',{name});
+      setGrocery(p=>[...p,newItem]);
+      toastAdd(`${name} added`);
+    }catch{toastAdd('Failed to add','red');}
   };
 
   const addItem=async()=>{
@@ -2838,13 +2840,15 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,toastAdd}){
     setGrocery(p=>p.map(i=>i.id===id?{...i,checked:result.checked}:i));
     if(result.checked){
       // Start removal countdown — item fades then deletes after 1.2s
-      removeTimers.current[id]=setTimeout(async()=>{
+      removeTimers.current[id]=setTimeout(()=>{
         setRemoving(s=>{const n=new Set(s);n.add(id);return n;});
-        setTimeout(async()=>{
+        const fadeTimer=setTimeout(async()=>{
           await api.del(`/api/grocery/${id}`);
           setGrocery(p=>p.filter(i=>i.id!==id));
           setRemoving(s=>{const n=new Set(s);n.delete(id);return n;});
+          delete removeTimers.current[`${id}_fade`];
         },350);
+        removeTimers.current[`${id}_fade`]=fadeTimer;
       },1200);
     } else {
       // User unchecked before auto-remove fired — cancel the timer
@@ -2885,7 +2889,7 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,toastAdd}){
             {history.filter(h=>!unchecked.some(i=>i.name.toLowerCase()===h.name.toLowerCase())).slice(0,6).map(h=>(
               <button key={h.name} onClick={()=>addFromHistory(h.name)}
                 style={{fontSize:13,padding:'5px 11px',borderRadius:A.rPill,border:`1px solid ${A.sep}`,background:A.cardBg,color:A.label2,cursor:'pointer',fontWeight:500}}>
-                {h.name}
+                {h.name.charAt(0).toUpperCase()+h.name.slice(1)}
               </button>
             ))}
           </div>
@@ -4636,7 +4640,7 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
             );
           })}
         </div>
-        <QuickAddFAB screen={screen} setGrocery={setGrocery} setChores={setChores} toastAdd={toastAdd}/>
+        <QuickAddFAB screen={screen} setGrocery={setGrocery} setChores={setChores} toastAdd={toastAdd} isAdmin={!!auth&&!currentMember&&!kiosk}/>
         <ToastStack toasts={toasts}/>
       </div>
     );
@@ -4653,7 +4657,7 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
           {nav.map(item=>{
             const active=screen===item.id;
             return(
-              <button key={item.id} onClick={()=>setScreen(item.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',borderRadius:A.rSm,border:'none',cursor:'pointer',width:'100%',background:active?'#1A1A1A':'transparent',color:active?'#fff':A.label3,fontSize:14,fontWeight:active?600:400,textAlign:'left',marginBottom:1,transition:'background .12s,color .12s'}}
+              <button key={item.id} onClick={()=>setScreen(item.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',borderRadius:A.rSm,border:'none',cursor:'pointer',width:'100%',background:active?A.label1:'transparent',color:active?A.cardBg:A.label3,fontSize:14,fontWeight:active?600:400,textAlign:'left',marginBottom:1,transition:'background .12s,color .12s'}}
                 onMouseEnter={e=>{if(!active)e.currentTarget.style.background=A.inputBg;}}
                 onMouseLeave={e=>{if(!active)e.currentTarget.style.background='transparent';}}
                 onMouseDown={e=>{e.currentTarget.style.transform='scale(.99)';}}
@@ -4973,13 +4977,14 @@ function SetupWizard({onComplete}){
 }
 
 /* ── Quick Add FAB (mobile-only floating action button) ─────────────── */
-function QuickAddFAB({screen,setGrocery,setChores,toastAdd}){
+function QuickAddFAB({screen,setGrocery,setChores,toastAdd,isAdmin}){
   const [open,setOpen]=useState(false);
   const [type,setType]=useState(null);
   const [input,setInput]=useState('');
   const fabRef=useRef();
 
-  const defaultType=screen==='grocery'?'grocery':screen==='chores'?'chore':null;
+  // Non-admins can't create chores; if on chores screen default to grocery for them
+  const defaultType=screen==='grocery'?'grocery':screen==='chores'&&isAdmin?'chore':null;
   const activeType=type||defaultType;
 
   const close=()=>{setOpen(false);setType(null);setInput('');};
@@ -5018,7 +5023,7 @@ function QuickAddFAB({screen,setGrocery,setChores,toastAdd}){
             {!activeType&&(
               <div style={{display:'flex',gap:10,marginBottom:4}}>
                 <button onClick={()=>setType('grocery')} style={{flex:1,padding:'13px',borderRadius:A.r,background:A.greenFill,color:A.green,fontWeight:600,border:'none',cursor:'pointer',fontSize:14}}>Grocery Item</button>
-                <button onClick={()=>setType('chore')} style={{flex:1,padding:'13px',borderRadius:A.r,background:A.amberFill,color:A.amber,fontWeight:600,border:'none',cursor:'pointer',fontSize:14}}>Chore</button>
+                {isAdmin&&<button onClick={()=>setType('chore')} style={{flex:1,padding:'13px',borderRadius:A.r,background:A.amberFill,color:A.amber,fontWeight:600,border:'none',cursor:'pointer',fontSize:14}}>Chore</button>}
               </div>
             )}
             {activeType&&(
@@ -5048,7 +5053,8 @@ function App(){
     const apply=()=>{
       const sysDark=window.matchMedia('(prefers-color-scheme: dark)').matches;
       const isDark=darkMode==='Dark'||(darkMode==='System'&&sysDark);
-      document.documentElement.dataset.dark=isDark?'true':'';
+      if(isDark) document.documentElement.setAttribute('data-dark','true');
+      else document.documentElement.removeAttribute('data-dark');
     };
     apply();
     const mq=window.matchMedia('(prefers-color-scheme: dark)');

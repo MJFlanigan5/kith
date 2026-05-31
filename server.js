@@ -574,6 +574,7 @@ app.put('/api/grocery/:id/toggle', requireAuth, (req, res) => {
 
 app.delete('/api/grocery/checked', requireAuth, (req, res) => {
   db.prepare('DELETE FROM grocery WHERE checked=1').run();
+  broadcastSSE('grocery', { action: 'clear_checked' });
   res.json({ ok: true });
 });
 

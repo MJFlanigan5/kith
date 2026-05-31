@@ -548,7 +548,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
     const es=new EventSource('/api/events/stream');
     es.addEventListener('activity',e=>{try{const ev=JSON.parse(e.data);setSmEvents(p=>[ev,...p].slice(0,10));}catch{}});
     es.addEventListener('refresh',()=>{loadHA();loadSm();loadWidgets();});
-    es.addEventListener('grocery',e=>{try{const d=JSON.parse(e.data);if(setGrocery){if(d.action==='add')setGrocery(p=>[...p,d.item]);else if(d.action==='remove')setGrocery(p=>p.filter(i=>i.id!==d.id));else if(d.action==='toggle')setGrocery(p=>p.map(i=>i.id===d.id?{...i,checked:d.checked}:i));}}catch{}});
+    es.addEventListener('grocery',e=>{try{const d=JSON.parse(e.data);if(setGrocery){if(d.action==='add')setGrocery(p=>[...p,d.item]);else if(d.action==='remove')setGrocery(p=>p.filter(i=>i.id!==d.id));else if(d.action==='toggle')setGrocery(p=>p.map(i=>i.id===d.id?{...i,checked:d.checked}:i));else if(d.action==='clear_checked')setGrocery(p=>p.filter(i=>!i.checked));}}catch{}});
     es.addEventListener('open',()=>setOnline(true));
     es.addEventListener('error',()=>setOnline(false));
     return()=>{clearInterval(fa);clearInterval(fb);clearInterval(fc);es.close();};

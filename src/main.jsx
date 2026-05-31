@@ -719,7 +719,10 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
   useEffect(()=>{
     if(panelFirstRender.current){panelFirstRender.current=false;setVisiblePanelId(activePanelId);return;}
     setPanelOpacity(0);
-    const t=setTimeout(()=>{setVisiblePanelId(activePanelId);setPanelOpacity(1);},350);
+    const t=setTimeout(()=>{
+      setVisiblePanelId(activePanelId);
+      requestAnimationFrame(()=>requestAnimationFrame(()=>setPanelOpacity(1)));
+    },300);
     return()=>clearTimeout(t);
   },[activePanelId]);
 
@@ -937,7 +940,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         })}
                       </div>
                     )}
-                    <div style={{flex:1,display:'flex',flexDirection:'column',minHeight:0,opacity:panelOpacity,transition:'opacity 0.35s ease'}}>
+                    <div style={{flex:1,display:'flex',flexDirection:'column',minHeight:0,opacity:panelOpacity,transition:'opacity 0.3s ease'}}>
                     {visiblePanelId==='chores'&&(
                       <>
                         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
@@ -1025,9 +1028,13 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                       <>
                         <WLabel>Word of the Day</WLabel>
                         <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',gap:10}}>
-                          <div>
+                          <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
                             <span style={{fontSize:isTV?38:30,fontWeight:800,color:D.t1,letterSpacing:'-.02em',lineHeight:1}}>{w.word}</span>
-                            {w.partOfSpeech&&<span style={{fontSize:13,color:D.t4,fontStyle:'italic',marginLeft:10}}>{w.partOfSpeech}</span>}
+                            {w.audio&&<button onClick={()=>{try{new Audio(w.audio).play();}catch(e){}}} style={{background:'none',border:`1px solid ${D.border}`,borderRadius:6,padding:'3px 8px',cursor:'pointer',color:D.t3,fontSize:13,lineHeight:1}}>▶</button>}
+                          </div>
+                          <div style={{display:'flex',alignItems:'center',gap:10}}>
+                            {w.phonetic&&<span style={{fontSize:13,color:D.t4}}>{w.phonetic}</span>}
+                            {w.partOfSpeech&&<span style={{fontSize:13,color:D.t4,fontStyle:'italic'}}>{w.partOfSpeech}</span>}
                           </div>
                           <div style={{fontSize:15,color:D.t2,lineHeight:1.55}}>{w.definition}</div>
                           {w.example&&<div style={{fontSize:13,color:D.t3,fontStyle:'italic',lineHeight:1.4,borderLeft:`3px solid ${D.sep}`,paddingLeft:10}}>"{w.example}"</div>}

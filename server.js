@@ -2331,7 +2331,10 @@ app.get('/api/widgets/data', async (req, res) => {
     const meaning = entry?.meanings?.[0];
     const def = meaning?.definitions?.[0];
     if (!entry?.word || !def?.definition) return null;
-    return { word: entry.word, partOfSpeech: meaning.partOfSpeech || '', definition: def.definition, example: def.example || '' };
+    const phonetics = entry.phonetics || [];
+    const phonetic = entry.phonetic || phonetics.find(p => p.text)?.text || '';
+    const audio = phonetics.find(p => p.audio)?.audio || '';
+    return { word: entry.word, partOfSpeech: meaning.partOfSpeech || '', definition: def.definition, example: def.example || '', phonetic, audio };
   }).then(d => { if (d) result.wotd = d; }));
 
   // Sunrise / sunset + moon phase — sunrisesunset.io (free, no key)

@@ -185,8 +185,8 @@ function localDate(d = new Date()) {
 // ── Chore status helper ───────────────────────────────────────────────────────
 function updateChoreStatuses() {
   const today = localDate();
-  // Reset done flag when the next recurrence date has arrived (skip one-time chores)
-  db.prepare("UPDATE chores SET done=0 WHERE done=1 AND next_due <= ? AND recurrence != 'One-time'").run(today);
+  // Recurring chores must never stay done — reset any that slipped through
+  db.prepare("UPDATE chores SET done=0 WHERE done=1 AND recurrence != 'One-time'").run();
   // Reset streak for chores that went overdue without being completed
   db.prepare("UPDATE chores SET streak=0 WHERE next_due < ? AND done=0 AND streak > 0 AND recurrence != 'One-time'").run(today);
   db.prepare("UPDATE chores SET status='overdue'  WHERE next_due < ? AND done=0").run(today);

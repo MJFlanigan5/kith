@@ -495,7 +495,7 @@ function PresenceBar({duration,color}){
 }
 
 /* ── Display Mode ────────────────────────────────────────────────────── */
-function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,weather,clockFormat='12h',nightModeStart='23:00',nightModeEnd='06:00',goals=[],notes=[],polls=[],rotationMs=10000,wifiQrData=null,quickActions=[],members=[]}){
+function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,countdowns,photos=[],weather,clockFormat='12h',nightModeStart='23:00',nightModeEnd='06:00',goals=[],notes=[],polls=[],rotationMs=10000,wifiQrData=null,quickActions=[],members=[]}){
   const isMobile=useIsMobile();
   const now=useClock();
   const [liveGames,setLiveGames]=useState([]);
@@ -534,6 +534,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
   const [haEvents,setHaEvents]=useState([]);
   const [smEvents,setSmEvents]=useState([]);
   const [widgetData,setWidgetData]=useState({});
+  const [online,setOnline]=useState(true);
   useEffect(()=>{
     const loadHA=()=>api.get('/api/ha/events').then(d=>{if(Array.isArray(d))setHaEvents(d);}).catch(()=>{});
     const loadSm=()=>fetch('/api/ha/pull').then(r=>r.json()).then(d=>{if(Array.isArray(d))setSmEvents(d);}).catch(()=>{});
@@ -547,6 +548,9 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
     const es=new EventSource('/api/events/stream');
     es.addEventListener('activity',e=>{try{const ev=JSON.parse(e.data);setSmEvents(p=>[ev,...p].slice(0,10));}catch{}});
     es.addEventListener('refresh',()=>{loadHA();loadSm();loadWidgets();});
+    es.addEventListener('grocery',e=>{try{const d=JSON.parse(e.data);if(setGrocery){if(d.action==='add')setGrocery(p=>[...p,d.item]);else if(d.action==='remove')setGrocery(p=>p.filter(i=>i.id!==d.id));else if(d.action==='toggle')setGrocery(p=>p.map(i=>i.id===d.id?{...i,checked:d.checked}:i));}}catch{}});
+    es.addEventListener('open',()=>setOnline(true));
+    es.addEventListener('error',()=>setOnline(false));
     return()=>{clearInterval(fa);clearInterval(fb);clearInterval(fc);es.close();};
   },[]);
   const allSmartEvents=useMemo(()=>[...smEvents,...haEvents].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).slice(0,10),[smEvents,haEvents]);
@@ -656,6 +660,27 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
   const dateStr=`${DAYS[now.getDay()]}, ${MONTHS[now.getMonth()]} ${now.getDate()}`;
 
   // Photo frame — cycles every 12s when photos are present
+  const [photoIdx,setPhotoIdx]=useState(0);
+  useEffect(()=>{
+    if(photos.length<=1){setPhotoIdx(0);return;}
+    const id=setInterval(()=>setPhotoIdx(i=>(i+1)%photos.length),12000);
+    return()=>clearInterval(id);
+  },[photos.length]);
+
+  // Countdown overlay — fires once per countdown per day when it hits today
+  const [countdownOverlay,setCountdownOverlay]=useState(null);
+  const cdTimerRef=useRef(null);
+  useEffect(()=>{
+    const today=(countdowns||[]).find(c=>daysUntil(c.date)===0);
+    if(!today) return;
+    const key=`kith_cd_${today.id}_${localDate()}`;
+    if(localStorage.getItem(key)) return;
+    localStorage.setItem(key,'1');
+    if(cdTimerRef.current) clearTimeout(cdTimerRef.current);
+    setCountdownOverlay(today);
+    cdTimerRef.current=setTimeout(()=>setCountdownOverlay(null),30000);
+  },[countdowns]);
+  useEffect(()=>()=>{if(cdTimerRef.current)clearTimeout(cdTimerRef.current);},[]);
 
   // Night mode
   const [nightDismissed,setNightDismissed]=useState(false);
@@ -682,6 +707,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
   const hasUpcomingEvents=agendaDays.some(({date})=>(events||[]).some(e=>e.date===date));
   const dueC=chores.filter(c=>(c.status==='due'||c.status==='overdue')&&!c.done);
   const upCD=(countdowns||[]).filter(c=>daysUntil(c.date)>=0);
+  const uncheckedGrocery=(grocery||[]).filter(i=>!i.checked);
   const progressMembers=memberProgress.filter(m=>m.monthly_goal>0);
   const pinnedNotes=useMemo(()=>(notes||[]).filter(n=>n.pinned),[notes]);
   const centerPanels=[
@@ -714,6 +740,8 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
     ...(widgetData.ha_sensors?['w_ha_sensors']:[]),
     ...(allSmartEvents.length>0?['w_notifications']:[]),
     ...(polls.length>0?['w_polls']:[]),
+    ...(uncheckedGrocery.length>0?['w_grocery']:[]),
+    ...(photos.length>0?['w_photos']:[]),
   ];
   const activePanelId=centerPanels[centerIdx%Math.max(1,centerPanels.length)];
   useEffect(()=>{
@@ -772,6 +800,16 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
       <Confetti active={dmChoreConfetti} count={14}/>
 
       {/* Presence notification — bottom-right corner card */}
+      {countdownOverlay&&(
+        <div onClick={()=>{if(cdTimerRef.current)clearTimeout(cdTimerRef.current);setCountdownOverlay(null);}} style={{position:'fixed',bottom:isTV?36:24,left:isTV?40:24,zIndex:999,display:'flex',alignItems:'center',gap:16,background:D.card,borderRadius:20,padding:isTV?'20px 28px':'16px 22px',border:`1.5px solid ${A.amber}55`,boxShadow:`0 0 40px ${A.amber}18,0 12px 32px rgba(0,0,0,0.35)`,animation:'presenceIn .35s cubic-bezier(.4,0,.2,1)',cursor:'pointer',maxWidth:isTV?400:320}}>
+          <div style={{width:isTV?56:44,height:isTV?56:44,borderRadius:'50%',background:`${A.amber}20`,border:`2px solid ${A.amber}`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:isTV?26:20}}>{countdownOverlay.emoji||'🎉'}</div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:isTV?22:17,fontWeight:800,color:D.t1,letterSpacing:'-0.01em',lineHeight:1.2}}>{countdownOverlay.label}</div>
+            <div style={{fontSize:isTV?15:12,color:A.amber,fontWeight:600,marginTop:3}}>Today!</div>
+            <PresenceBar key={countdownOverlay.id} duration={30000} color={A.amber}/>
+          </div>
+        </div>
+      )}
       {presenceOverlay&&(
         <div style={{position:'fixed',bottom:isTV?36:24,right:isTV?40:24,zIndex:999,display:'flex',alignItems:'center',gap:16,background:D.card,borderRadius:20,padding:isTV?'20px 28px':'16px 22px',border:`1.5px solid ${presenceOverlay.color}55`,boxShadow:`0 0 40px ${presenceOverlay.color}18,0 12px 32px rgba(0,0,0,0.35)`,animation:'presenceIn .35s cubic-bezier(.4,0,.2,1)',cursor:'pointer',maxWidth:isTV?400:320,overflow:'hidden'}}
           onClick={()=>{if(presenceTimerRef.current)clearTimeout(presenceTimerRef.current);setPresenceOverlay(null);}}>
@@ -797,7 +835,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
         <div style={{textAlign:'right',paddingBottom:8}}>
           <div style={{fontSize:isMobile?14:isTV?26:20,color:D.t2,fontWeight:400,letterSpacing:'-.01em'}}>{dateStr}</div>
           <div style={{fontSize:isTV?14:12,color:D.t4,marginTop:5,display:'flex',alignItems:'center',gap:5,justifyContent:'flex-end',fontFamily:'JetBrains Mono,monospace'}}>
-            <div style={{width:5,height:5,borderRadius:'50%',background:A.green}}/>synced
+            <div style={{width:5,height:5,borderRadius:'50%',background:online?A.green:A.red}}/>{online?'synced':'offline'}
           </div>
         </div>
       </div>
@@ -1598,6 +1636,35 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                             })}
                           </div>
                         </>
+                      );
+                    })()}
+                    {visiblePanelId==='w_grocery'&&(()=>{
+                      const cats=[...new Set(uncheckedGrocery.map(i=>i.category||'Other'))];
+                      return(
+                        <>
+                          <WLabel>Shopping List</WLabel>
+                          <div style={{flex:1,overflowY:'auto',marginTop:4}}>
+                            {cats.map((cat,ci)=>(
+                              <div key={cat}>
+                                <div style={{fontSize:11,fontWeight:700,color:D.t4,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:5,marginTop:ci>0?10:0}}>{cat}</div>
+                                {uncheckedGrocery.filter(i=>(i.category||'Other')===cat).map(i=>(
+                                  <div key={i.id} style={{display:'flex',alignItems:'center',gap:10,padding:'7px 0',borderBottom:`1px solid ${D.sep}`}}>
+                                    <div style={{width:16,height:16,borderRadius:'50%',border:`1.5px solid ${D.t4}`,flexShrink:0}}/>
+                                    <span style={{fontSize:15,color:D.t2,fontWeight:400}}>{i.name}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      );
+                    })()}
+                    {visiblePanelId==='w_photos'&&photos.length>0&&(()=>{
+                      const p=photos[photoIdx%photos.length];
+                      return(
+                        <div style={{flex:1,borderRadius:10,overflow:'hidden',margin:'-2px'}}>
+                          <img key={p.id} src={`/photos/${p.filename}`} style={{width:'100%',height:'100%',objectFit:'cover',display:'block',animation:'fadeIn .8s ease'}} alt=""/>
+                        </div>
                       );
                     })()}
                     {visiblePanelId==='dinner'&&(()=>{const td=todayDinner()||'—';return(
@@ -5435,7 +5502,7 @@ function App(){
   const goDisplay=()=>{localStorage.setItem('kith_mode','display');setMode('display');};
   const goManage=()=>{localStorage.setItem('kith_mode','manage');setMode('manage');};
   return mode==='display'
-    ?<DisplayMode onManage={goManage} events={events} chores={chores} setChores={setChores} meals={meals} grocery={grocery} countdowns={countdowns} clockFormat={clockFormat} weather={weather} nightModeStart={nightModeStart} nightModeEnd={nightModeEnd} goals={goals} notes={notes} polls={polls} rotationMs={rotationMs} wifiQrData={wifiQrData} quickActions={quickActions} members={members}/>
+    ?<DisplayMode onManage={goManage} events={events} chores={chores} setChores={setChores} meals={meals} grocery={grocery} setGrocery={setGrocery} countdowns={countdowns} photos={photos} clockFormat={clockFormat} weather={weather} nightModeStart={nightModeStart} nightModeEnd={nightModeEnd} goals={goals} notes={notes} polls={polls} rotationMs={rotationMs} wifiQrData={wifiQrData} quickActions={quickActions} members={members}/>
     :<ManageMode onDisplay={goDisplay} onLogout={handleLogout} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources} inboxCount={inboxCount} setInboxCount={setInboxCount} countdowns={countdowns} setCountdowns={setCountdowns} members={members} setMembers={setMembers} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} weather={weather} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} goals={goals} setGoals={setGoals} notes={notes} setNotes={setNotes} polls={polls} setPolls={setPolls} bookmarks={bookmarks} setBookmarks={setBookmarks} quickActions={quickActions} setQuickActions={setQuickActions} setRotationMs={setRotationMs} setWifiQrData={setWifiQrData} darkMode={darkMode} onDarkMode={handleDarkMode}/>;
 }
 

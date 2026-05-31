@@ -558,7 +558,9 @@ app.post('/api/grocery', requireAuth, (req, res) => {
   const histName = name.trim().toLowerCase();
   db.prepare('INSERT INTO grocery_history (name,count,last_used) VALUES (?,1,?) ON CONFLICT(name) DO UPDATE SET count=count+1, last_used=?')
     .run(histName, localDate(), localDate());
-  res.json({ id: r.lastInsertRowid, name: name.trim(), category: category||'Other', checked: 0 });
+  const newItem = { id: r.lastInsertRowid, name: name.trim(), category: category||'Other', checked: 0 };
+  broadcastSSE('grocery', { action: 'add', item: newItem });
+  res.json(newItem);
 });
 
 app.put('/api/grocery/:id/toggle', requireAuth, (req, res) => {
@@ -566,6 +568,7 @@ app.put('/api/grocery/:id/toggle', requireAuth, (req, res) => {
   if (!item) return res.status(404).json({ error: 'Not found' });
   const checked = item.checked ? 0 : 1;
   db.prepare('UPDATE grocery SET checked=? WHERE id=?').run(checked, req.params.id);
+  broadcastSSE('grocery', { action: 'toggle', id: Number(req.params.id), checked });
   res.json({ checked });
 });
 
@@ -576,6 +579,7 @@ app.delete('/api/grocery/checked', requireAuth, (req, res) => {
 
 app.delete('/api/grocery/:id', requireAuth, (req, res) => {
   db.prepare('DELETE FROM grocery WHERE id=?').run(req.params.id);
+  broadcastSSE('grocery', { action: 'remove', id: Number(req.params.id) });
   res.json({ ok: true });
 });
 

@@ -2890,8 +2890,12 @@ function haWsConnect() {
       // Skip attribute-only changes (e.g. last_updated, latitude_accuracy) — only care about state value
       if (new_state?.state === old_state?.state) return;
       // Soft-invalidate: force refetch while preserving stale data as fallback if HA is momentarily slow
-      if (entity_id.startsWith('person.')) _wInvalidate('who_home');
-      else if (entity_id.startsWith('climate.')) _wInvalidate('thermostat');
+      // Use configured entity IDs instead of hardcoded prefixes — supports device_tracker.* and other types
+      const _g = k => db.prepare('SELECT value FROM settings WHERE key=?').get(k)?.value || '';
+      const _personIds = new Set(_g('ha_person_entities').split(',').map(s => s.trim()).filter(Boolean));
+      const _climateId = _g('ha_climate_entity').trim();
+      if (_personIds.has(entity_id)) _wInvalidate('who_home');
+      else if (entity_id === _climateId || entity_id.startsWith('climate.')) _wInvalidate('thermostat');
       else _wInvalidate('ha_sensors');
       broadcastSSE('refresh', { source: 'ha', entity: entity_id });
     }

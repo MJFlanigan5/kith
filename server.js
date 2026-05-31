@@ -1200,9 +1200,10 @@ app.delete('/api/notes/:id', requireAdmin, (req, res) => {
 
 // ── Routes: Polls ─────────────────────────────────────────────────────────────
 app.get('/api/polls', (req, res) => {
-  res.json(db.prepare('SELECT * FROM polls ORDER BY created_at DESC').all().map(p => ({
-    ...p, options: JSON.parse(p.options), votes: JSON.parse(p.votes || '{}'),
-  })));
+  res.json(db.prepare('SELECT * FROM polls ORDER BY created_at DESC').all().map(p => {
+    try { return { ...p, options: JSON.parse(p.options), votes: JSON.parse(p.votes || '{}') }; }
+    catch { return { ...p, options: [], votes: {} }; }
+  }));
 });
 
 app.post('/api/polls', requireAdmin, (req, res) => {
@@ -1218,11 +1219,12 @@ app.post('/api/polls', requireAdmin, (req, res) => {
 app.post('/api/polls/:id/vote', requireAuth, (req, res) => {
   const p = db.prepare('SELECT * FROM polls WHERE id=?').get(req.params.id);
   if (!p) return res.status(404).json({ error: 'Not found' });
-  const options = JSON.parse(p.options);
+  let options, votes;
+  try { options = JSON.parse(p.options); } catch { return res.status(500).json({ error: 'Corrupt poll data' }); }
+  try { votes = JSON.parse(p.votes || '{}'); } catch { votes = {}; }
   const { option } = req.body || {};
   if (typeof option !== 'number' || option < 0 || option >= options.length)
     return res.status(400).json({ error: 'Invalid option index' });
-  const votes = JSON.parse(p.votes || '{}');
   votes[option] = (votes[option] || 0) + 1;
   db.prepare('UPDATE polls SET votes=? WHERE id=?').run(JSON.stringify(votes), p.id);
   res.json({ votes });
@@ -1539,7 +1541,7 @@ app.get('/api/ha/pull', async (req, res) => {
 // ── Routes: Quick Actions ─────────────────────────────────────────────────────
 app.get('/api/quick-actions', (req, res) => {
   const raw = db.prepare("SELECT value FROM settings WHERE key='quick_actions'").get()?.value;
-  res.json(JSON.parse(raw || '[]'));
+  try { res.json(JSON.parse(raw || '[]')); } catch { res.json([]); }
 });
 
 app.put('/api/quick-actions', requireAdmin, (req, res) => {
@@ -1552,7 +1554,8 @@ app.put('/api/quick-actions', requireAdmin, (req, res) => {
 app.post('/api/quick-actions/trigger', requireAuth, async (req, res) => {
   const { id } = req.body || {};
   const raw = db.prepare("SELECT value FROM settings WHERE key='quick_actions'").get()?.value;
-  const action = JSON.parse(raw || '[]').find(a => a.id === id);
+  let actions; try { actions = JSON.parse(raw || '[]'); } catch { actions = []; }
+  const action = actions.find(a => a.id === id);
   if (!action) return res.status(404).json({ error: 'Action not found' });
   try {
     let extraHeaders = {};

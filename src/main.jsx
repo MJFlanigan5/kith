@@ -5330,7 +5330,7 @@ function App(){
     if(kiosk){setWizardDone(true);return;}
     if(!auth) return;
     api.get('/api/settings').then(s=>{
-      setWizardDone(s.wizard_completed==='1');
+      setWizardDone(s?.wizard_completed==='1');
     }).catch(()=>setWizardDone(true));
   },[authChecked,auth,kiosk]);
 

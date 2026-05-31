@@ -1034,7 +1034,12 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                         </div>
                       </>
                     );})()}
-                    {visiblePanelId==='w_sun'&&(()=>{const s=widgetData.sun;if(!s)return null;return(
+                    {visiblePanelId==='w_sun'&&(()=>{const s=widgetData.sun;if(!s)return null;
+                      const moonEmoji=(p=>({
+                        'New Moon':'🌑','Waxing Crescent':'🌒','First Quarter':'🌓','Waxing Gibbous':'🌔',
+                        'Full Moon':'🌕','Waning Gibbous':'🌖','Last Quarter':'🌗','Waning Crescent':'🌘'
+                      }[p]||'🌙'))(s.moon_phase);
+                      return(
                       <>
                         <WLabel>Sun & Moon</WLabel>
                         <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',gap:14}}>
@@ -1049,7 +1054,15 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                             </div>
                           </div>
                           {s.golden_hour&&<div><div style={{fontSize:11,fontWeight:700,color:D.t4,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:3}}>Golden Hour</div><div style={{fontSize:15,color:D.t2}}>{s.golden_hour}</div></div>}
-                          {s.moon_phase&&<div style={{display:'flex',alignItems:'center',gap:8}}><div style={{fontSize:11,fontWeight:700,color:D.t4,textTransform:'uppercase',letterSpacing:'.08em'}}>{s.moon_phase}</div>{s.moon_illumination!=null&&<div style={{fontSize:11,color:D.t4}}>{Math.round(s.moon_illumination)}% illuminated</div>}</div>}
+                          {s.moon_phase&&(
+                            <div style={{display:'flex',alignItems:'center',gap:12}}>
+                              <span style={{fontSize:isTV?48:38,lineHeight:1}}>{moonEmoji}</span>
+                              <div>
+                                <div style={{fontSize:isTV?15:13,fontWeight:600,color:D.t2}}>{s.moon_phase}</div>
+                                {s.moon_illumination!=null&&<div style={{fontSize:11,color:D.t4,marginTop:2}}>{Math.round(s.moon_illumination)}% illuminated</div>}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </>
                     );})()}

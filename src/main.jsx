@@ -580,7 +580,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
     const m=members.find(x=>x.name.toLowerCase()===first||x.name.toLowerCase().startsWith(first+' '));
     const color=m?.color||(ev.type==='arrival'?'#34C759':'#8E8E93');
     if(presenceTimerRef.current)clearTimeout(presenceTimerRef.current);
-    setPresenceOverlay({...ev,color});
+    setPresenceOverlay({...ev,color,ts:Date.now()});
     presenceTimerRef.current=setTimeout(()=>setPresenceOverlay(null),60000);
   },[widgetData.who_home]);
   useEffect(()=>()=>{if(presenceTimerRef.current)clearTimeout(presenceTimerRef.current);},[]);
@@ -780,7 +780,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
             <div style={{fontSize:isTV?15:12,color:presenceOverlay.color,fontWeight:600,marginTop:3}}>
               {presenceOverlay.type==='arrival'?'Welcome home!':'has left'}
             </div>
-            <PresenceBar key={presenceOverlay.name+presenceOverlay.type} duration={60000} color={presenceOverlay.color}/>
+            <PresenceBar key={presenceOverlay.ts} duration={60000} color={presenceOverlay.color}/>
           </div>
         </div>
       )}
@@ -1035,10 +1035,8 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                       </>
                     );})()}
                     {visiblePanelId==='w_sun'&&(()=>{const s=widgetData.sun;if(!s)return null;
-                      const moonEmoji=(p=>({
-                        'New Moon':'🌑','Waxing Crescent':'🌒','First Quarter':'🌓','Waxing Gibbous':'🌔',
-                        'Full Moon':'🌕','Waning Gibbous':'🌖','Last Quarter':'🌗','Waning Crescent':'🌘'
-                      }[p]||'🌙'))(s.moon_phase);
+                      const _moonMap={'new moon':'🌑','waxing crescent':'🌒','first quarter':'🌓','waxing gibbous':'🌔','full moon':'🌕','waning gibbous':'🌖','last quarter':'🌗','waning crescent':'🌘'};
+                      const moonEmoji=_moonMap[(s.moon_phase||'').toLowerCase()]||'🌙';
                       return(
                       <>
                         <WLabel>Sun & Moon</WLabel>
@@ -1187,7 +1185,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                       </>
                     )}
                     {visiblePanelId==='w_powerwall'&&(()=>{
-                      const pw=widgetData.powerwall;
+                      const pw=widgetData.powerwall;if(!pw)return null;
                       const gridExport=pw.grid_kw<0;
                       const batCharging=pw.battery_kw<0;
                       return(
@@ -1216,7 +1214,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
                       );
                     })()}
                     {visiblePanelId==='w_flight'&&(()=>{
-                      const f=widgetData.flight;
+                      const f=widgetData.flight;if(!f)return null;
                       const statusColor={active:A.green,landed:A.green,scheduled:D.t3,cancelled:A.red,incident:A.red,diverted:A.amber}[f.status]||D.t3;
                       return(
                         <>
@@ -2173,8 +2171,8 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
   const deleteEvent=async(id,scope='one')=>{
     await api.del(`/api/events/${id}?scope=${scope}`);
     if(scope==='one') setEvents(p=>p.filter(e=>e.id!==id));
-    else if(scope==='all'){ const ev=events.find(e=>e.id===id); const sid=ev?.external_id||id; setEvents(p=>p.filter(e=>e.id!==sid&&e.external_id!==sid)); }
-    else if(scope==='future'){ const ev=events.find(e=>e.id===id); const sid=ev?.external_id||id; setEvents(p=>p.filter(e=>!(( e.id===sid||e.external_id===sid)&&e.date>=ev.date))); }
+    else if(scope==='all'){ const ev=events.find(e=>e.id===id); const sid=String(ev?.external_id||id); setEvents(p=>p.filter(e=>String(e.id)!==sid&&String(e.external_id)!==sid)); }
+    else if(scope==='future'){ const ev=events.find(e=>e.id===id); const sid=String(ev?.external_id||id); setEvents(p=>p.filter(e=>!((String(e.id)===sid||String(e.external_id)===sid)&&e.date>=ev.date))); }
     setSelectedEvent(null);
     setDeleteConfirm(false);
     toastAdd('Event deleted','blue');

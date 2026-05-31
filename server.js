@@ -1578,7 +1578,7 @@ async function _wFetch(key, ttlMs, fn) {
   if (_wCache[key] && Date.now() - _wCache[key].at < ttlMs) return _wCache[key].data;
   try {
     const data = await fn();
-    const cacheable = data !== null && data !== undefined && !(Array.isArray(data) && data.length === 0);
+    const cacheable = data !== null && data !== undefined;
     if (cacheable) { _wCache[key] = { data, at: Date.now() }; delete _wErrors[key]; }
     return data;
   } catch(e) {

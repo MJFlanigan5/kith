@@ -191,7 +191,7 @@ function updateChoreStatuses() {
   db.prepare("UPDATE chores SET streak=0 WHERE next_due < ? AND done=0 AND streak > 0 AND recurrence != 'One-time'").run(today);
   db.prepare("UPDATE chores SET status='overdue'  WHERE next_due < ? AND done=0").run(today);
   db.prepare("UPDATE chores SET status='due'      WHERE next_due = ? AND done=0").run(today);
-  db.prepare("UPDATE chores SET status='upcoming' WHERE next_due > ?").run(today);
+  db.prepare("UPDATE chores SET status='upcoming' WHERE next_due > ? AND done=0").run(today);
 }
 updateChoreStatuses();
 

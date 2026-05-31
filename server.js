@@ -801,6 +801,7 @@ app.get('/api/settings/integrations', requireAdmin, (req, res) => {
     ha_unifi_clients:  get('ha_unifi_clients'),
     ha_unifi_rx:       get('ha_unifi_rx'),
     ha_unifi_tx:       get('ha_unifi_tx'),
+    ha_unifi_ap_count: get('ha_unifi_ap_count'),
     ha_person_entities:  get('ha_person_entities'),
     ha_climate_entity:   get('ha_climate_entity'),
     presence_source:     get('presence_source') || 'both',
@@ -839,9 +840,10 @@ app.put('/api/settings/integrations', requireAdmin, (req, res) => {
   if (req.body.ha_moen_daily    !== undefined) { upd.run('ha_moen_daily',    String(req.body.ha_moen_daily));    clearMoenCache = true; }
   if (req.body.ha_moen_mode     !== undefined) { upd.run('ha_moen_mode',     String(req.body.ha_moen_mode));     clearMoenCache = true; }
   if (req.body.ha_moen_alert    !== undefined) { upd.run('ha_moen_alert',    String(req.body.ha_moen_alert));    clearMoenCache = true; }
-  if (req.body.ha_unifi_clients !== undefined) { upd.run('ha_unifi_clients', String(req.body.ha_unifi_clients)); clearUnifiCache = true; }
-  if (req.body.ha_unifi_rx      !== undefined) { upd.run('ha_unifi_rx',      String(req.body.ha_unifi_rx));      clearUnifiCache = true; }
-  if (req.body.ha_unifi_tx      !== undefined) { upd.run('ha_unifi_tx',      String(req.body.ha_unifi_tx));      clearUnifiCache = true; }
+  if (req.body.ha_unifi_clients   !== undefined) { upd.run('ha_unifi_clients',   String(req.body.ha_unifi_clients));   clearUnifiCache = true; }
+  if (req.body.ha_unifi_rx        !== undefined) { upd.run('ha_unifi_rx',        String(req.body.ha_unifi_rx));        clearUnifiCache = true; }
+  if (req.body.ha_unifi_tx        !== undefined) { upd.run('ha_unifi_tx',        String(req.body.ha_unifi_tx));        clearUnifiCache = true; }
+  if (req.body.ha_unifi_ap_count  !== undefined) { upd.run('ha_unifi_ap_count',  String(req.body.ha_unifi_ap_count));  clearUnifiCache = true; }
   let clearPersonCache = false, clearClimateCache = false;
   if (req.body.ha_person_entities   !== undefined) { upd.run('ha_person_entities',   String(req.body.ha_person_entities));   clearPersonCache = true; }
   if (req.body.presence_source      !== undefined) { upd.run('presence_source',      String(req.body.presence_source));      clearPersonCache = true; }
@@ -1602,8 +1604,8 @@ app.get('/api/widgets/data', async (req, res) => {
   const p = [];
 
   if (gs('widget_quote_enabled') === '1')
-    p.push(_wFetch('quote', 3600000, async () => {
-      const r = await fetch('https://zenquotes.io/api/today', { signal: AbortSignal.timeout(6000) });
+    p.push(_wFetch(`quote:${new Date().toISOString().slice(0,10)}`, 86400000, async () => {
+      const r = await fetch('https://zenquotes.io/api/random', { signal: AbortSignal.timeout(6000) });
       const d = await r.json(); return { text: d[0].q, author: d[0].a };
     }).then(d => { if (d) result.quote = d; }));
 
@@ -2058,6 +2060,7 @@ app.get('/api/widgets/data', async (req, res) => {
   const haClientsEntity = gs('ha_unifi_clients');
   const haRxEntity = gs('ha_unifi_rx');
   const haTxEntity = gs('ha_unifi_tx');
+  const haApCountEntity = gs('ha_unifi_ap_count');
   const unifiUrl = gs('unifi_url');
   const unifiUser = gs('unifi_user');
   const unifiPass = gs('unifi_pass');
@@ -2067,10 +2070,11 @@ app.get('/api/widgets/data', async (req, res) => {
   if (useUnifiHa || (unifiUrl && unifiUser && unifiPass))
     p.push(_wFetch(`unifi:${useUnifiHa ? 'ha' : unifiUrl}`, unifiIntervalMs, async () => {
       if (useUnifiHa) {
-        const [clients, rx, tx] = await Promise.all([
+        const [clients, rx, tx, apCount] = await Promise.all([
           haGet(haClientsEntity),
           haGet(haRxEntity),
           haGet(haTxEntity),
+          haApCountEntity ? haGet(haApCountEntity) : Promise.resolve(null),
         ]);
         const anchor = clients || rx || tx;
         if (!anchor) throw new Error('HA UniFi: no entities returned — check entity IDs and HA connection');
@@ -2079,7 +2083,7 @@ app.get('/api/widgets/data', async (req, res) => {
           clients:  clients ? Math.round(haNum(clients)) : 0,
           rx_mbps:  +haNum(rx).toFixed(1),
           tx_mbps:  +haNum(tx).toFixed(1),
-          ap_count: 0,
+          ap_count: apCount ? Math.round(haNum(apCount)) : 0,
           status:   anchor.state !== 'unavailable' ? 'up' : 'unknown',
           source:   'ha',
         };
@@ -2314,7 +2318,8 @@ app.get('/api/widgets/data', async (req, res) => {
   const _hour  = new Date().toISOString().slice(0, 13);
   for (const k of Object.keys(_wCache)) {
     if ((k.startsWith('wotd:') && k !== `wotd:${_today}`) ||
-        (k.startsWith('compliment:') && k !== `compliment:${_hour}`)) {
+        (k.startsWith('compliment:') && k !== `compliment:${_hour}`) ||
+        (k.startsWith('quote:') && k !== `quote:${_today}`)) {
       delete _wCache[k]; delete _wErrors[k];
     }
   }

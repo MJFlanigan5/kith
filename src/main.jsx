@@ -1463,15 +1463,9 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
                         <>
                           <WLabel>UniFi Network</WLabel>
                           <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',gap:12}}>
-                            <div style={{display:'flex',gap:10}}>
-                              <div style={{flex:1,background:'rgba(255,255,255,0.06)',borderRadius:10,padding:'12px',textAlign:'center'}}>
-                                <div style={{fontSize:40,fontWeight:800,color:D.t1,letterSpacing:'-.04em',lineHeight:1}}>{u.clients}</div>
-                                <div style={{fontSize:11,color:D.t4,marginTop:4}}>devices online</div>
-                              </div>
-                              <div style={{flex:1,background:'rgba(255,255,255,0.06)',borderRadius:10,padding:'12px',textAlign:'center'}}>
-                                <div style={{fontSize:24,fontWeight:700,color:D.t1}}>{u.ap_count}</div>
-                                <div style={{fontSize:11,color:D.t4,marginTop:4}}>access points</div>
-                              </div>
+                            <div style={{background:'rgba(255,255,255,0.06)',borderRadius:10,padding:'14px',textAlign:'center'}}>
+                              <div style={{fontSize:48,fontWeight:800,color:D.t1,letterSpacing:'-.04em',lineHeight:1}}>{u.clients}</div>
+                              <div style={{fontSize:12,color:D.t4,marginTop:5}}>devices online</div>
                             </div>
                             {[
                               {label:'WAN',val:u.status,color:upColor},

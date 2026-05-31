@@ -1147,7 +1147,7 @@ app.post('/api/goals', requireAdmin, (req, res) => {
   res.json(db.prepare('SELECT * FROM household_goals WHERE id=?').get(r.lastInsertRowid));
 });
 
-app.put('/api/goals/:id', requireAuth, (req, res) => {
+app.put('/api/goals/:id', requireAdmin, (req, res) => {
   const g = db.prepare('SELECT * FROM household_goals WHERE id=?').get(req.params.id);
   if (!g) return res.status(404).json({ error: 'Not found' });
   const { name, description, progress_type, progress_current, progress_target, unit, deadline } = req.body || {};
@@ -2194,15 +2194,12 @@ app.get('/api/widgets/data', async (req, res) => {
           });
         });
       }
-      // Deduplicate: exact name first, then first-name fallback (handles "Mike" vs "Mike Flanigan")
-      const seen = new Map(); // normalizedKey → index in unique[]
+      // Deduplicate by exact entity_id — same person can appear from both HA and Homey
+      const seen = new Set();
       const unique = [];
       for (const p of persons) {
-        const exact = p.name.toLowerCase();
-        const first = exact.split(' ')[0];
-        if (seen.has(exact) || seen.has(first)) continue;
-        seen.set(exact, unique.length);
-        seen.set(first, unique.length);
+        if (seen.has(p.entity_id)) continue;
+        seen.add(p.entity_id);
         unique.push(p);
       }
       if (!unique.length) return null;
@@ -2312,8 +2309,18 @@ app.get('/api/widgets/data', async (req, res) => {
     }).then(d => { if (d) result.ha_sensors = d; }));
   }
 
+  // Evict stale dated cache keys (wotd: daily, compliment: hourly) to prevent unbounded memory growth
+  const _today = new Date().toISOString().slice(0, 10);
+  const _hour  = new Date().toISOString().slice(0, 13);
+  for (const k of Object.keys(_wCache)) {
+    if ((k.startsWith('wotd:') && k !== `wotd:${_today}`) ||
+        (k.startsWith('compliment:') && k !== `compliment:${_hour}`)) {
+      delete _wCache[k]; delete _wErrors[k];
+    }
+  }
+
   // Word of the day — word list for selection, definition from Free Dictionary API, stale cache as fallback
-  p.push(_wFetch(`wotd:${new Date().toISOString().slice(0,10)}`, 86400000, async () => {
+  p.push(_wFetch(`wotd:${_today}`, 86400000, async () => {
     const words = [
       'serendipity','ephemeral','petrichor','mellifluous','equanimity','laconic','sanguine',
       'ebullient','taciturn','perspicacious','ineffable','magnanimous','pernicious','recalcitrant',
@@ -2361,7 +2368,7 @@ app.get('/api/widgets/data', async (req, res) => {
   }
 
   // Daily compliment — affirmations.dev (free, no key)
-  p.push(_wFetch(`compliment:${new Date().toISOString().slice(0,13)}`, 21600000, async () => {
+  p.push(_wFetch(`compliment:${_hour}`, 21600000, async () => {
     const r = await fetch('https://www.affirmations.dev/', { signal: AbortSignal.timeout(6000) });
     if (!r.ok) return null;
     const d = await r.json();
@@ -2430,7 +2437,7 @@ app.get('/api/plex/thumb', async (req, res) => {
   } catch { res.status(502).end(); }
 });
 
-app.get('/api/music/now-playing', requireAdmin, async (req, res) => {
+app.get('/api/music/now-playing', requireAuth, async (req, res) => {
   try {
     if (_lastfmCache && Date.now() - _lastfmCacheAt < 15000) return res.json(_lastfmCache);
     const key  = gs('lastfm_api_key');

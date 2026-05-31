@@ -1424,7 +1424,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
                       );
                     })()}
                     {visiblePanelId==='w_moen'&&(()=>{
-                      const m=widgetData.moen;
+                      const m=widgetData.moen;if(!m)return null;
                       const modeColor={home:A.green,away:A.amber,sleep:A.indigo}[m.system_mode]||D.t3;
                       return(
                         <>
@@ -1458,7 +1458,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
                       );
                     })()}
                     {visiblePanelId==='w_unifi'&&(()=>{
-                      const u=widgetData.unifi;
+                      const u=widgetData.unifi;if(!u)return null;
                       const upColor=u.status==='up'?A.green:A.red;
                       return(
                         <>
@@ -1517,7 +1517,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
                       );
                     })()}
                     {visiblePanelId==='w_thermostat'&&(()=>{
-                      const t=widgetData.thermostat;
+                      const t=widgetData.thermostat;if(!t)return null;
                       const modeColor={heat:'#FF6B35',cool:'#3B82F6',heat_cool:'#AF52DE',auto:'#AF52DE',off:D.t4,fan_only:D.t3,dry:'#FF9500'}[t.mode]||D.t3;
                       const actionLabel={heating:'Heating',cooling:'Cooling',idle:'Idle',off:'Off',drying:'Drying',fan:'Fan'}[t.action]||t.action||'';
                       if(t.unavailable) return(
@@ -2863,18 +2863,22 @@ function ChoresScreen({chores,setChores,goals=[],members=[],toastAdd}){
     if(!form.name.trim()) return;
     const recurrence=form.recur==='Weekly'?`Weekly (${form.day.slice(0,3)})`:form.recur;
     const body={name:form.name,recurrence,next_due:form.start,points:form.points,outdoor:form.outdoor?1:0,goal_id:form.goal_id||null,goal_amount:Number(form.goal_amount)||1,member_id:form.member_id||null};
-    if(editChore){
-      const updated=await api.put(`/api/chores/${editChore.id}`,body);
-      setChores(p=>p.map(c=>c.id===editChore.id?updated:c));
-      toastAdd('Chore updated');
-    } else {
-      const newChore=await api.post('/api/chores',{...body,start:form.start});
-      setChores(p=>[...p,newChore]);
-      toastAdd('Chore added');
-    }
-    setDrawerOpen(false);
-    setEditChore(null);
-    setForm({name:'',recur:'Weekly',day:'Monday',start:'',points:1,outdoor:false,goal_id:'',goal_amount:1,member_id:''});
+    try{
+      if(editChore){
+        const updated=await api.put(`/api/chores/${editChore.id}`,body);
+        if(updated.error){toastAdd(updated.error,'red');return;}
+        setChores(p=>p.map(c=>c.id===editChore.id?updated:c));
+        toastAdd('Chore updated');
+      } else {
+        const newChore=await api.post('/api/chores',{...body,start:form.start});
+        if(newChore.error){toastAdd(newChore.error,'red');return;}
+        setChores(p=>[...p,newChore]);
+        toastAdd('Chore added');
+      }
+      setDrawerOpen(false);
+      setEditChore(null);
+      setForm({name:'',recur:'Weekly',day:'Monday',start:'',points:1,outdoor:false,goal_id:'',goal_amount:1,member_id:''});
+    }catch{toastAdd('Failed to save chore','red');}
   };
 
   const deleteChore=async id=>{
@@ -3066,12 +3070,6 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,toastAdd}){
 
   useEffect(()=>()=>{Object.values(removeTimers.current).forEach(clearTimeout)},[]);
   useEffect(()=>{api.get('/api/grocery/history').then(r=>Array.isArray(r)&&setHistory(r)).catch(()=>{})},[]);
-  // Clear any checked items left over from previous sessions
-  useEffect(()=>{
-    const stale=(grocery||[]).filter(i=>i.checked);
-    if(!stale.length) return;
-    api.del('/api/grocery/checked').then(()=>setGrocery(p=>p.filter(i=>!i.checked))).catch(()=>{});
-  },[]);
 
   const addFromHistory=async name=>{
     try{
@@ -3108,9 +3106,11 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,toastAdd}){
         removeTimers.current[`${id}_fade`]=fadeTimer;
       },1200);
     } else {
-      // User unchecked before auto-remove fired — cancel the timer
+      // User unchecked — cancel both the outer delay and the in-progress fade timer
       clearTimeout(removeTimers.current[id]);
+      clearTimeout(removeTimers.current[`${id}_fade`]);
       delete removeTimers.current[id];
+      delete removeTimers.current[`${id}_fade`];
       setRemoving(s=>{const n=new Set(s);n.delete(id);return n;});
     }
   };

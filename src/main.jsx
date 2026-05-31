@@ -768,20 +768,19 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
     <div style={{width:'100vw',height:'100vh',background:D.bg,overflow:'hidden',padding:isMobile?'16px 16px':isTV?'28px 36px':'24px 28px',display:'flex',flexDirection:'column',gap:isMobile?10:isTV?18:14,position:'relative'}}>
       <Confetti active={dmChoreConfetti} count={14}/>
 
-      {/* Presence overlay — arrival / departure notification */}
+      {/* Presence notification — bottom-right corner card */}
       {presenceOverlay&&(
-        <div style={{position:'fixed',inset:0,zIndex:999,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,0.72)',animation:'fadeIn .3s ease',cursor:'pointer'}}
+        <div style={{position:'fixed',bottom:isTV?36:24,right:isTV?40:24,zIndex:999,display:'flex',alignItems:'center',gap:16,background:D.card,borderRadius:20,padding:isTV?'20px 28px':'16px 22px',border:`1.5px solid ${presenceOverlay.color}55`,boxShadow:`0 0 40px ${presenceOverlay.color}18,0 12px 32px rgba(0,0,0,0.35)`,animation:'presenceIn .35s cubic-bezier(.4,0,.2,1)',cursor:'pointer',maxWidth:isTV?400:320,overflow:'hidden'}}
           onClick={()=>{if(presenceTimerRef.current)clearTimeout(presenceTimerRef.current);setPresenceOverlay(null);}}>
-          <div style={{background:D.card,borderRadius:28,padding:isTV?'52px 72px':'40px 56px',textAlign:'center',maxWidth:520,border:`1.5px solid ${presenceOverlay.color}55`,boxShadow:`0 0 80px ${presenceOverlay.color}22,0 24px 48px rgba(0,0,0,0.4)`,animation:'presenceIn .35s cubic-bezier(.4,0,.2,1)'}}>
-            <div style={{width:isTV?96:80,height:isTV?96:80,borderRadius:'50%',background:`${presenceOverlay.color}20`,border:`2px solid ${presenceOverlay.color}`,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 24px',fontSize:isTV?44:36}}>
-              {presenceOverlay.type==='arrival'?'🏠':'👋'}
-            </div>
-            <div style={{fontSize:isTV?52:40,fontWeight:800,color:D.t1,letterSpacing:'-0.02em',lineHeight:1,marginBottom:10}}>{presenceOverlay.name}</div>
-            <div style={{fontSize:isTV?24:20,color:presenceOverlay.color,fontWeight:600,marginBottom:4}}>
+          <div style={{width:isTV?56:44,height:isTV?56:44,borderRadius:'50%',background:`${presenceOverlay.color}20`,border:`2px solid ${presenceOverlay.color}`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:isTV?26:20}}>
+            {presenceOverlay.type==='arrival'?'🏠':'👋'}
+          </div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:isTV?22:17,fontWeight:800,color:D.t1,letterSpacing:'-0.01em',lineHeight:1.2}}>{presenceOverlay.name}</div>
+            <div style={{fontSize:isTV?15:12,color:presenceOverlay.color,fontWeight:600,marginTop:3}}>
               {presenceOverlay.type==='arrival'?'Welcome home!':'has left'}
             </div>
             <PresenceBar key={presenceOverlay.name+presenceOverlay.type} duration={60000} color={presenceOverlay.color}/>
-            <div style={{fontSize:11,color:D.t4,marginTop:10}}>tap to dismiss</div>
           </div>
         </div>
       )}

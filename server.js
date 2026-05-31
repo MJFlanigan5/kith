@@ -2398,11 +2398,20 @@ app.get('/api/plex/thumb', async (req, res) => {
   const plexToken = gs('plex_token');
   if (!plexUrl || !plexToken) return res.status(404).end();
   const thumbPath = req.query.path;
-  if (!thumbPath || !thumbPath.startsWith('/library/')) return res.status(400).end();
+  if (!thumbPath || !thumbPath.startsWith('/')) return res.status(400).end();
+  // Block absolute/external URLs — path must be a relative Plex path
+  if (/^\/\/|https?:\/\//.test(thumbPath)) return res.status(400).end();
   try {
     const base = plexUrl.replace(/\/$/, '');
-    const r = await fetch(`${base}${thumbPath}?X-Plex-Token=${plexToken}`, { signal: AbortSignal.timeout(8000) });
-    if (!r.ok) return res.status(r.status).end();
+    const sep = thumbPath.includes('?') ? '&' : '?';
+    const r = await fetch(`${base}${thumbPath}${sep}X-Plex-Token=${plexToken}`, {
+      headers: { 'X-Plex-Token': plexToken, Accept: 'image/*' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!r.ok) {
+      console.error(`[plex/thumb] ${r.status} for path: ${thumbPath}`);
+      return res.status(r.status).end();
+    }
     const buf = await r.arrayBuffer();
     res.set('Content-Type', r.headers.get('content-type') || 'image/jpeg');
     res.set('Cache-Control', 'public, max-age=3600');

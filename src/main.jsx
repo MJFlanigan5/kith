@@ -3316,7 +3316,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [haDiscovering,setHaDiscovering]=useState(false);
   const [haDiscovered,setHaDiscovered]=useState(null); // {moen:{all,map}, unifi:{all,map}}
   const [haMoenMap,setHaMoenMap]=useState({flow:'',pressure:'',daily:'',mode:'',alert:''});
-  const [haUnifiMap,setHaUnifiMap]=useState({clients:'',rx:'',tx:'',ap_count:''});
+  const [haUnifiMap,setHaUnifiMap]=useState({clients:'',rx:'',tx:''});
   const [haMoenSource,setHaMoenSource]=useState('direct'); // 'ha' or 'direct'
   const [haUnifiSource,setHaUnifiSource]=useState('direct');
   const [haPersonIds,setHaPersonIds]=useState([]);
@@ -3432,7 +3432,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
     api.get('/api/settings/integrations').then(d=>{setHasAnthropicKey(!!d.has_anthropic);setHasBeehiivKey(!!d.has_beehiiv);setHasYoutubeKey(!!d.has_youtube);setHasEtsyKey(!!d.has_etsy);setHasTeslemetryKey(!!d.has_teslemetry);setHasAviationstackKey(!!d.has_aviationstack);setHasNextdnsKey(!!d.has_nextdns);setHasBeszel(!!d.has_beszel);if(d.beszel_url)setBeszelUrl(d.beszel_url);setHasPlexKey(!!d.has_plex);if(d.plex_url)setPlexUrl(d.plex_url);setHasLastfm(!!d.has_lastfm);if(d.lastfm_user)setLastfmUser(d.lastfm_user);setHasMoen(!!d.has_moen);setHasUnifi(!!d.has_unifi);
       // HA entity maps
       const mm={flow:d.ha_moen_flow||'',pressure:d.ha_moen_pressure||'',daily:d.ha_moen_daily||'',mode:d.ha_moen_mode||'',alert:d.ha_moen_alert||''};
-      const um={clients:d.ha_unifi_clients||'',rx:d.ha_unifi_rx||'',tx:d.ha_unifi_tx||'',ap_count:d.ha_unifi_ap_count||''};
+      const um={clients:d.ha_unifi_clients||'',rx:d.ha_unifi_rx||'',tx:d.ha_unifi_tx||''};
       setHaMoenMap(mm); setHaUnifiMap(um);
       if(mm.flow) setHaMoenSource('ha');
       if(um.clients||um.rx||um.tx) setHaUnifiSource('ha');
@@ -3958,7 +3958,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
                 </div>
               ))}
               <div style={{fontSize:12,fontWeight:600,color:A.label2,marginTop:12,marginBottom:8}}>UniFi Entity Mapping</div>
-              {[['clients','Client count'],['rx','Download (Mbit/s)'],['tx','Upload (Mbit/s)'],['ap_count','Access point count']].map(([k,label])=>(
+              {[['clients','Client count'],['rx','Download (Mbit/s)'],['tx','Upload (Mbit/s)']].map(([k,label])=>(
                 <div key={k} style={{marginBottom:6}}>
                   <div style={{fontSize:11,color:A.label4,marginBottom:2}}>{label}</div>
                   <select value={haUnifiMap[k]||''} onChange={e=>setHaUnifiMap(m=>({...m,[k]:e.target.value}))} style={{width:'100%',background:A.inputBg,border:`1px solid ${A.sep}`,borderRadius:A.rSm,padding:'5px 8px',fontSize:12,color:A.label1}}>
@@ -4022,7 +4022,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
                 );
               })()}
               <Btn sm style={{marginTop:8}} onClick={async()=>{
-                const payload={ha_moen_flow:haMoenMap.flow,ha_moen_pressure:haMoenMap.pressure,ha_moen_daily:haMoenMap.daily,ha_moen_mode:haMoenMap.mode,ha_moen_alert:haMoenMap.alert,ha_unifi_clients:haUnifiMap.clients,ha_unifi_rx:haUnifiMap.rx,ha_unifi_tx:haUnifiMap.tx,ha_unifi_ap_count:haUnifiMap.ap_count,ha_person_entities:haPersonIds.join(','),ha_climate_entity:haClimateEntity,ha_sensor_entities:haSensorEntities,presence_source:presenceSource};
+                const payload={ha_moen_flow:haMoenMap.flow,ha_moen_pressure:haMoenMap.pressure,ha_moen_daily:haMoenMap.daily,ha_moen_mode:haMoenMap.mode,ha_moen_alert:haMoenMap.alert,ha_unifi_clients:haUnifiMap.clients,ha_unifi_rx:haUnifiMap.rx,ha_unifi_tx:haUnifiMap.tx,ha_person_entities:haPersonIds.join(','),ha_climate_entity:haClimateEntity,ha_sensor_entities:haSensorEntities,presence_source:presenceSource};
                 await fetch('/api/settings/integrations',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify(payload)});
                 if(haMoenMap.flow) setHaMoenSource('ha'); else setHaMoenSource('direct');
                 if(haUnifiMap.clients||haUnifiMap.rx||haUnifiMap.tx) setHaUnifiSource('ha'); else setHaUnifiSource('direct');

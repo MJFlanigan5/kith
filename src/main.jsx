@@ -483,8 +483,19 @@ function FamilyScreen({members,setMembers,toastAdd}){
   );
 }
 
+/* ── Presence overlay progress bar ───────────────────────────────────── */
+function PresenceBar({duration,color}){
+  const [w,setW]=useState(100);
+  useEffect(()=>{const t=setTimeout(()=>setW(0),40);return()=>clearTimeout(t);},[]);
+  return(
+    <div style={{height:4,background:`${color}25`,borderRadius:2,marginTop:28,overflow:'hidden'}}>
+      <div style={{height:'100%',width:`${w}%`,background:color,borderRadius:2,transition:`width ${duration/1000}s linear`}}/>
+    </div>
+  );
+}
+
 /* ── Display Mode ────────────────────────────────────────────────────── */
-function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,weather,clockFormat='12h',nightModeStart='23:00',nightModeEnd='06:00',goals=[],notes=[],polls=[],rotationMs=10000,wifiQrData=null,quickActions=[]}){
+function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,weather,clockFormat='12h',nightModeStart='23:00',nightModeEnd='06:00',goals=[],notes=[],polls=[],rotationMs=10000,wifiQrData=null,quickActions=[],members=[]}){
   const isMobile=useIsMobile();
   const now=useClock();
   const [liveGames,setLiveGames]=useState([]);
@@ -547,6 +558,32 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
     const id=setInterval(load,12000);
     return()=>clearInterval(id);
   },[]);
+
+  // Presence overlay — fires when who_home state changes
+  const [presenceOverlay,setPresenceOverlay]=useState(null);
+  const presenceTimerRef=useRef(null);
+  const prevPersonsRef=useRef(null);
+  useEffect(()=>{
+    const persons=widgetData.who_home?.persons;
+    if(!persons)return;
+    if(prevPersonsRef.current===null){prevPersonsRef.current=persons;return;}
+    const prevMap=Object.fromEntries(prevPersonsRef.current.map(p=>[p.entity_id,p.state]));
+    let ev=null;
+    for(const p of persons){
+      const prev=prevMap[p.entity_id]||'unknown';
+      if(prev!=='home'&&p.state==='home'){ev={type:'arrival',name:p.name.split(' ')[0],entity_id:p.entity_id};break;}
+      if(prev==='home'&&p.state!=='home'){ev={type:'departure',name:p.name.split(' ')[0],entity_id:p.entity_id};break;}
+    }
+    prevPersonsRef.current=persons;
+    if(!ev)return;
+    const first=ev.name.toLowerCase();
+    const m=members.find(x=>x.name.toLowerCase()===first||x.name.toLowerCase().startsWith(first+' '));
+    const color=m?.color||(ev.type==='arrival'?'#34C759':'#8E8E93');
+    if(presenceTimerRef.current)clearTimeout(presenceTimerRef.current);
+    setPresenceOverlay({...ev,color});
+    presenceTimerRef.current=setTimeout(()=>setPresenceOverlay(null),60000);
+  },[widgetData.who_home]);
+  useEffect(()=>()=>{if(presenceTimerRef.current)clearTimeout(presenceTimerRef.current);},[]);
 
   const [newsIdx,setNewsIdx]=useState(0);
   const [newsVisible,setNewsVisible]=useState(true);
@@ -730,6 +767,24 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,countdowns,
   return(
     <div style={{width:'100vw',height:'100vh',background:D.bg,overflow:'hidden',padding:isMobile?'16px 16px':isTV?'28px 36px':'24px 28px',display:'flex',flexDirection:'column',gap:isMobile?10:isTV?18:14,position:'relative'}}>
       <Confetti active={dmChoreConfetti} count={14}/>
+
+      {/* Presence overlay — arrival / departure notification */}
+      {presenceOverlay&&(
+        <div style={{position:'fixed',inset:0,zIndex:999,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,0.72)',animation:'fadeIn .3s ease',cursor:'pointer'}}
+          onClick={()=>{if(presenceTimerRef.current)clearTimeout(presenceTimerRef.current);setPresenceOverlay(null);}}>
+          <div style={{background:D.card,borderRadius:28,padding:isTV?'52px 72px':'40px 56px',textAlign:'center',maxWidth:520,border:`1.5px solid ${presenceOverlay.color}55`,boxShadow:`0 0 80px ${presenceOverlay.color}22,0 24px 48px rgba(0,0,0,0.4)`,animation:'presenceIn .35s cubic-bezier(.4,0,.2,1)'}}>
+            <div style={{width:isTV?96:80,height:isTV?96:80,borderRadius:'50%',background:`${presenceOverlay.color}20`,border:`2px solid ${presenceOverlay.color}`,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 24px',fontSize:isTV?44:36}}>
+              {presenceOverlay.type==='arrival'?'🏠':'👋'}
+            </div>
+            <div style={{fontSize:isTV?52:40,fontWeight:800,color:D.t1,letterSpacing:'-0.02em',lineHeight:1,marginBottom:10}}>{presenceOverlay.name}</div>
+            <div style={{fontSize:isTV?24:20,color:presenceOverlay.color,fontWeight:600,marginBottom:4}}>
+              {presenceOverlay.type==='arrival'?'Welcome home!':'has left'}
+            </div>
+            <PresenceBar key={presenceOverlay.name+presenceOverlay.type} duration={60000} color={presenceOverlay.color}/>
+            <div style={{fontSize:11,color:D.t4,marginTop:10}}>tap to dismiss</div>
+          </div>
+        </div>
+      )}
 
       {/* Header — clock + date */}
       <div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-between',flexShrink:0}}>
@@ -5363,7 +5418,7 @@ function App(){
   const goDisplay=()=>{localStorage.setItem('kith_mode','display');setMode('display');};
   const goManage=()=>{localStorage.setItem('kith_mode','manage');setMode('manage');};
   return mode==='display'
-    ?<DisplayMode onManage={goManage} events={events} chores={chores} setChores={setChores} meals={meals} grocery={grocery} countdowns={countdowns} clockFormat={clockFormat} weather={weather} nightModeStart={nightModeStart} nightModeEnd={nightModeEnd} goals={goals} notes={notes} polls={polls} rotationMs={rotationMs} wifiQrData={wifiQrData} quickActions={quickActions}/>
+    ?<DisplayMode onManage={goManage} events={events} chores={chores} setChores={setChores} meals={meals} grocery={grocery} countdowns={countdowns} clockFormat={clockFormat} weather={weather} nightModeStart={nightModeStart} nightModeEnd={nightModeEnd} goals={goals} notes={notes} polls={polls} rotationMs={rotationMs} wifiQrData={wifiQrData} quickActions={quickActions} members={members}/>
     :<ManageMode onDisplay={goDisplay} onLogout={handleLogout} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources} inboxCount={inboxCount} setInboxCount={setInboxCount} countdowns={countdowns} setCountdowns={setCountdowns} members={members} setMembers={setMembers} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} weather={weather} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} goals={goals} setGoals={setGoals} notes={notes} setNotes={setNotes} polls={polls} setPolls={setPolls} bookmarks={bookmarks} setBookmarks={setBookmarks} quickActions={quickActions} setQuickActions={setQuickActions} setRotationMs={setRotationMs} setWifiQrData={setWifiQrData} darkMode={darkMode} onDarkMode={handleDarkMode}/>;
 }
 

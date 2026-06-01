@@ -1572,7 +1572,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
                       );
                     })()}
                     {visiblePanelId==='w_notifications'&&(()=>{
-                      const recent=allSmartEvents.slice(0,3);
+                      const recent=allSmartEvents.slice(0,5);
                       if(!recent.length) return null;
                       const fmtAgo=ts=>{
                         if(!ts) return '';

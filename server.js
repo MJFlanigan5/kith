@@ -8,6 +8,7 @@ const db         = require('./db');
 const jwt        = require('jsonwebtoken');
 const bcrypt     = require('bcryptjs');
 const WebSocket  = require('ws');
+const { io: socketIoClient } = require('socket.io-client');
 
 const app  = express();
 const PORT = process.env.PORT || 7400;
@@ -983,7 +984,9 @@ app.get('/api/news', async (req, res) => {
         return parseRSS(xml);
       } catch { return []; }
     }));
-    _newsCache = results.flat().slice(0, 20);
+    const flat = results.flat();
+    for (let i = flat.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [flat[i], flat[j]] = [flat[j], flat[i]]; }
+    _newsCache = flat.slice(0, 20);
     _newsCacheAt = Date.now();
     res.json(_newsCache);
   } catch (e) {
@@ -1299,6 +1302,7 @@ app.put('/api/settings/smart-home', requireAdmin, (req, res) => {
   }
   // Reconnect real-time clients when credentials change
   if (ha_url !== undefined || ha_token !== undefined) haWsRestart();
+  if (homey_url !== undefined || homey_token !== undefined) setTimeout(homeySocketConnect, 500);
   res.json({ ok: true });
 });
 
@@ -2198,12 +2202,16 @@ app.get('/api/widgets/data', async (req, res) => {
           });
         });
       }
-      // Deduplicate by exact entity_id — same person can appear from both HA and Homey
-      const seen = new Set();
+      // Deduplicate: first by entity_id, then by normalized name (HA + Homey can both report same person)
+      const seenId = new Set();
+      const seenName = new Set();
       const unique = [];
       for (const p of persons) {
-        if (seen.has(p.entity_id)) continue;
-        seen.add(p.entity_id);
+        if (seenId.has(p.entity_id)) continue;
+        const normName = (p.name || '').toLowerCase().trim();
+        if (normName && seenName.has(normName)) continue;
+        seenId.add(p.entity_id);
+        if (normName) seenName.add(normName);
         unique.push(p);
       }
       if (!unique.length) return null;
@@ -2998,6 +3006,69 @@ async function homeyPoll() {
 
 setInterval(() => homeyPoll().catch(() => {}), 15000);
 setTimeout(() => homeyPoll().catch(() => {}), 6000); // initial run after 6s
+
+// ── Homey real-time socket.io connection ──────────────────────────────────────
+let _homeySocket = null;
+let _homeyDeviceBroadcastTimer = null; // throttle device capability SSE bursts
+
+function homeySocketConnect() {
+  const g = k => db.prepare('SELECT value FROM settings WHERE key=?').get(k)?.value || '';
+  const url = g('homey_url').replace(/\/$/, '');
+  const token = g('homey_token');
+  if (!url || !token) return;
+
+  if (_homeySocket) { try { _homeySocket.disconnect(); } catch {} _homeySocket = null; }
+
+  console.log('[homey-socket] connecting to', url);
+  _homeySocket = socketIoClient(url, {
+    transports: ['websocket'],
+    auth: { token },
+    reconnection: true,
+    reconnectionDelay: 5000,
+    reconnectionAttempts: Infinity,
+    timeout: 10000,
+  });
+
+  _homeySocket.on('connect', () => console.log('[homey-socket] connected, id:', _homeySocket.id));
+  _homeySocket.on('disconnect', reason => console.log('[homey-socket] disconnected:', reason));
+  _homeySocket.on('connect_error', err => console.warn('[homey-socket] connect error:', err.message));
+
+  let _realtimeLogCount = 0;
+  _homeySocket.on('realtime', (type, id, data) => {
+    if (_realtimeLogCount < 10) { _realtimeLogCount++; console.log('[homey-socket] realtime:', type, id, JSON.stringify(data)?.slice(0, 120)); }
+
+    const t = String(type || '').toLowerCase();
+
+    // Presence: user present state changed
+    if (t.includes('user') && (t.includes('present') || id === 'present')) {
+      console.log('[homey-socket] presence event — refreshing who_home');
+      _wInvalidate('who_home');
+      broadcastSSE('refresh', { source: 'homey', widgets: ['who_home'] });
+      return;
+    }
+
+    // Device capability change — throttle to at most one SSE broadcast per 10s
+    if (t.includes('device') || t.includes('capability')) {
+      _wInvalidate('ha_sensors');
+      _wInvalidate('thermostat');
+      if (!_homeyDeviceBroadcastTimer) {
+        _homeyDeviceBroadcastTimer = setTimeout(() => {
+          _homeyDeviceBroadcastTimer = null;
+          broadcastSSE('refresh', { source: 'homey', widgets: ['ha_sensors', 'thermostat'] });
+        }, 10000);
+      }
+    }
+  });
+
+  // Catch-all: log unknown event names to discover Homey's format if realtime doesn't fire
+  _homeySocket.onAny((event, ...args) => {
+    if (event !== 'realtime' && event !== 'connect' && event !== 'disconnect') {
+      console.log('[homey-socket] event:', event, JSON.stringify(args)?.slice(0, 200));
+    }
+  });
+}
+
+setTimeout(homeySocketConnect, 8000); // after DB + poll init
 
 // Sync US federal holidays into the events table (runs on boot + yearly cron)
 async function syncUSHolidays() {

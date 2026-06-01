@@ -3019,6 +3019,7 @@ function homeySocketConnect() {
   if (!url || !token) return;
 
   if (_homeySocket) { try { _homeySocket.disconnect(); } catch {} _homeySocket = null; }
+  if (_homeyDeviceBroadcastTimer) { clearTimeout(_homeyDeviceBroadcastTimer); _homeyDeviceBroadcastTimer = null; }
 
   console.log('[homey-socket] connecting to', url);
   _homeySocket = socketIoClient(url, {
@@ -3061,11 +3062,11 @@ function homeySocketConnect() {
     }
   });
 
-  // Catch-all: log unknown event names to discover Homey's format if realtime doesn't fire
+  // Catch-all: log first 10 unknown events to discover Homey's format if realtime doesn't fire
+  let _anyLogCount = 0;
   _homeySocket.onAny((event, ...args) => {
-    if (event !== 'realtime' && event !== 'connect' && event !== 'disconnect') {
-      console.log('[homey-socket] event:', event, JSON.stringify(args)?.slice(0, 200));
-    }
+    if (event === 'realtime' || event === 'connect' || event === 'disconnect') return;
+    if (_anyLogCount < 10) { _anyLogCount++; console.log('[homey-socket] event:', event, JSON.stringify(args)?.slice(0, 200)); }
   });
 }
 

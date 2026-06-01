@@ -2202,16 +2202,17 @@ app.get('/api/widgets/data', async (req, res) => {
           });
         });
       }
-      // Deduplicate: first by entity_id, then by normalized name (HA + Homey can both report same person)
+      // Deduplicate: entity_id first, then first+last name (ignores middle name/initial differences)
       const seenId = new Set();
       const seenName = new Set();
       const unique = [];
       for (const p of persons) {
         if (seenId.has(p.entity_id)) continue;
-        const normName = (p.name || '').toLowerCase().trim();
-        if (normName && seenName.has(normName)) continue;
+        const parts = (p.name || '').toLowerCase().trim().split(/\s+/).filter(Boolean);
+        const nameKey = parts.length >= 2 ? `${parts[0]} ${parts[parts.length - 1]}` : parts[0] || '';
+        if (nameKey && seenName.has(nameKey)) continue;
         seenId.add(p.entity_id);
-        if (normName) seenName.add(normName);
+        if (nameKey) seenName.add(nameKey);
         unique.push(p);
       }
       if (!unique.length) return null;

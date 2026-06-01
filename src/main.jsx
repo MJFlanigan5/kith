@@ -1555,23 +1555,24 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
                       };
                       const domainIcon={lock:'🔒',locked:'🔒',alarm_motion:'🏃',alarm_contact:'🚪',alarm_smoke:'🔥',alarm_co:'💨',alarm_water:'💧',binary_sensor:'◉',light:'💡',switch:'🔌',alarm_control_panel:'🚨',climate:'🌡',cover:'🪟',sensor:'📡',camera:'📷',motion:'🏃',onoff:'💡',measure_temperature:'🌡',measure_humidity:'💧',measure_power:'⚡'};
                       const isBinary=s=>!s.unit&&['on','off','open','closed','locked','unlocked','detected','clear','motion','no_motion','leak','dry'].includes(s.state);
-                      const cols=sensors.length<=2?2:sensors.length<=6?3:4;
+                      const visible=sensors.slice(0,9); // cap at 3×3 for readability at TV distance
+                      const cols=visible.length===1?1:visible.length<=4?2:3;
                       return(
                         <div style={{flex:1,display:'flex',flexDirection:'column',minHeight:0}}>
                           <WLabel style={{marginBottom:8,flexShrink:0}}>Home</WLabel>
-                          <div style={{flex:1,display:'grid',gridTemplateColumns:`repeat(${cols},1fr)`,gap:isTV?10:7,alignContent:'center'}}>
-                            {sensors.map((s,i)=>{
+                          <div style={{flex:1,display:'grid',gridTemplateColumns:`repeat(${cols},1fr)`,gap:isTV?10:7,alignContent:'start',overflow:'hidden'}}>
+                            {visible.map((s,i)=>{
                               const icon=domainIcon[s.device_class]||domainIcon[s.domain]||'◉';
                               const color=stateColor(s.state);
                               const binary=isBinary(s);
                               return(
                                 <div key={i} style={{position:'relative',background:'rgba(255,255,255,0.07)',borderRadius:14,border:'1px solid rgba(255,255,255,0.09)',padding:isTV?'12px 12px 9px':'9px 9px 7px',display:'flex',flexDirection:'column',justifyContent:'space-between',aspectRatio:'1',overflow:'hidden'}}>
-                                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
-                                    <span style={{fontSize:isTV?26:20,lineHeight:1,opacity:0.85}}>{icon}</span>
+                                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:4}}>
+                                    <span style={{fontSize:isTV?26:20,lineHeight:1,opacity:0.85,flexShrink:0}}>{icon}</span>
                                     {binary
                                       ?<div style={{width:isTV?11:9,height:isTV?11:9,borderRadius:'50%',background:color,marginTop:2,flexShrink:0}}/>
-                                      :<div style={{textAlign:'right',lineHeight:1.15}}>
-                                        <div style={{fontSize:isTV?14:11,fontWeight:800,color:D.t1,letterSpacing:'-.02em'}}>{s.state}</div>
+                                      :<div style={{textAlign:'right',lineHeight:1.15,minWidth:0,overflow:'hidden'}}>
+                                        <div style={{fontSize:isTV?14:11,fontWeight:800,color:D.t1,letterSpacing:'-.02em',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.state}</div>
                                         {s.unit&&<div style={{fontSize:isTV?10:8,color:D.t3,fontWeight:500,marginTop:1}}>{s.unit}</div>}
                                       </div>
                                     }

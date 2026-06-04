@@ -2328,7 +2328,7 @@ app.get('/api/widgets/data', async (req, res) => {
   }
 
   // Evict stale dated cache keys (wotd: daily, compliment: hourly) to prevent unbounded memory growth
-  const _today = new Date().toISOString().slice(0, 10);
+  const _today = localDate(); // local date — avoids word changing at UTC midnight (8 PM Eastern etc.)
   const _hour  = new Date().toISOString().slice(0, 13);
   for (const k of Object.keys(_wCache)) {
     if ((k.startsWith('wotd:') && k !== `wotd:${_today}`) ||
@@ -2359,12 +2359,12 @@ app.get('/api/widgets/data', async (req, res) => {
     const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(),0,0)) / 86400000);
     const word = words[dayOfYear % words.length];
     const r = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${word}`, { signal: AbortSignal.timeout(6000) });
-    if (!r.ok) return null;
+    if (!r.ok) return { word, partOfSpeech: '', definition: '', phonetic: '', audio: '' };
     const d = await r.json();
     const entry = d[0];
     const meaning = entry?.meanings?.[0];
     const def = meaning?.definitions?.[0];
-    if (!entry?.word || !def?.definition) return null;
+    if (!entry?.word || !def?.definition) return { word, partOfSpeech: '', definition: '', phonetic: '', audio: '' };
     const phonetics = entry.phonetics || [];
     const phonetic = entry.phonetic || phonetics.find(p => p.text)?.text || '';
     const audio = phonetics.find(p => p.audio)?.audio || '';
@@ -2458,7 +2458,7 @@ app.get('/api/plex/thumb', async (req, res) => {
 
 app.get('/api/music/now-playing', requireAuth, async (req, res) => {
   try {
-    if (_lastfmCache && Date.now() - _lastfmCacheAt < 15000) return res.json(_lastfmCache);
+    if (_lastfmCache && Date.now() - _lastfmCacheAt < 8000) return res.json(_lastfmCache);
     const key  = gs('lastfm_api_key');
     const user = gs('lastfm_user');
     if (!key || !user) return res.json({ playing: false });
@@ -3033,8 +3033,13 @@ function haWsConnect() {
       const _g = k => db.prepare('SELECT value FROM settings WHERE key=?').get(k)?.value || '';
       const _personIds = new Set(_g('ha_person_entities').split(',').map(s => s.trim()).filter(Boolean));
       const _climateId = _g('ha_climate_entity').trim();
-      if (_personIds.has(entity_id)) _wInvalidate('who_home');
-      else if (entity_id === _climateId || entity_id.startsWith('climate.')) _wInvalidate('thermostat');
+      if (_personIds.has(entity_id)) {
+        _wInvalidate('who_home');
+        if (new_state?.state === 'home' && old_state?.state !== 'home') {
+          const name = (new_state?.attributes?.friendly_name || entity_id).split(' ')[0];
+          sendPushToAll({ title: `${name} is home`, body: 'Welcome home!', tag: `arrival-${entity_id}` });
+        }
+      } else if (entity_id === _climateId || entity_id.startsWith('climate.')) _wInvalidate('thermostat');
       else _wInvalidate('ha_sensors');
       broadcastSSE('refresh', { source: 'ha', entity: entity_id });
     }
@@ -3161,7 +3166,13 @@ function homeySocketConnect() {
 
     // Presence: user present state changed
     if (t.includes('user') && (t.includes('present') || id === 'present')) {
-      console.log('[homey-socket] presence event — refreshing who_home');
+      console.log('[homey-socket] presence event — refreshing who_home', id, data);
+      const nowPresent = data === true || data?.value === true || data?.present === true;
+      const wasPresent = _homeyPresence[id];
+      _homeyPresence[id] = nowPresent;
+      if (nowPresent && wasPresent === false) {
+        sendPushToAll({ title: 'Welcome home!', body: 'Someone just arrived home', tag: `arrival-homey-${id}` });
+      }
       _wInvalidate('who_home');
       broadcastSSE('refresh', { source: 'homey', widgets: ['who_home'] });
       return;

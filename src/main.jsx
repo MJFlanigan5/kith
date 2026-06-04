@@ -561,13 +561,13 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
     es.addEventListener('error',()=>setOnline(false));
     return()=>{clearInterval(fa);clearInterval(fb);clearInterval(fc);es.close();};
   },[]);
-  const allSmartEvents=useMemo(()=>[...smEvents,...haEvents].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).slice(0,10),[smEvents,haEvents]);
+  const allSmartEvents=useMemo(()=>[...smEvents,...haEvents].sort((a,b)=>new Date(b.created_at?.replace(' ','T'))-new Date(a.created_at?.replace(' ','T'))).slice(0,10),[smEvents,haEvents]);
   const [nowPlaying,setNowPlaying]=useState({playing:false});
   const [qaState,setQaState]=useState({});
   useEffect(()=>{
     const load=()=>api.get('/api/music/now-playing').then(d=>setNowPlaying(d||{playing:false})).catch(()=>{});
     load();
-    const id=setInterval(load,12000);
+    const id=setInterval(load,8000);
     return()=>clearInterval(id);
   },[]);
 
@@ -727,7 +727,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
     ...(widgetData.wotd?['w_wotd']:[]),
     ...(widgetData.sun?['w_sun']:[]),
     ...(widgetData.compliment?['w_compliment']:[]),
-    ...(widgetData.quote?['w_quote']:[]),
+    ...(widgetData.quote?.text?['w_quote']:[]),
     ...(widgetData.stocks?.length?['w_stocks']:[]),
     ...(widgetData.producthunt?.length?['w_producthunt']:[]),
     ...(widgetData.github?['w_github']:[]),
@@ -751,7 +751,8 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
     ...(uncheckedGrocery.length>0?['w_grocery']:[]),
     ...(photos.length>0?['w_photos']:[]),
     ...(packages.length>0?['w_packages']:[]),
-    ...(messages.some(m=>new Date(m.expires_at.replace(' ','T')+'Z').getTime()>Date.now())?['w_messages']:[]),
+    ...(messages.some(m=>m.expires_at&&new Date(m.expires_at.replace(' ','T')+'Z').getTime()>Date.now())?['w_messages']:[]),
+    ...(nowPlaying.playing&&nowPlaying.title?['w_music']:[]),
   ];
   const activePanelId=centerPanels[centerIdx%Math.max(1,centerPanels.length)];
   useEffect(()=>{
@@ -863,7 +864,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
                   <div style={{fontSize:13,color:D.t2,fontWeight:500,marginTop:4}}>{weather.condition}</div>
                   <div style={{fontSize:11,color:D.t3,marginTop:2,marginBottom:10}}>H:{weather.hi}° · L:{weather.lo}°</div>
                   <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:2,borderTop:`1px solid ${D.sep}`,paddingTop:8}}>
-                    {weather.forecast.slice(0,3).map(f=>(
+                    {(weather.forecast||[]).slice(0,3).map(f=>(
                       <div key={f.day} style={{textAlign:'center'}}>
                         <div style={{fontSize:9,color:D.t3,fontWeight:600,marginBottom:2}}>{f.day.slice(0,3)}</div>
                         <div style={{fontSize:14,marginBottom:2}}>{f.icon}</div>
@@ -1214,7 +1215,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
                           </div>
                           <div style={{display:'flex',gap:8}}>
                             <div style={{flex:1,background:'rgba(255,255,255,0.06)',borderRadius:8,padding:'10px',textAlign:'center'}}>
-                              <div style={{fontSize:16,fontWeight:700,color:D.t1}}>{(widgetData.youtube?.views/1000000)>=1?(widgetData.youtube.views/1000000).toFixed(1)+'M':(widgetData.youtube?.views/1000).toFixed(0)+'K'}</div>
+                              <div style={{fontSize:16,fontWeight:700,color:D.t1}}>{((widgetData.youtube?.views??0)/1000000)>=1?((widgetData.youtube?.views??0)/1000000).toFixed(1)+'M':((widgetData.youtube?.views??0)/1000).toFixed(0)+'K'}</div>
                               <div style={{fontSize:10,color:D.t4,marginTop:2}}>total views</div>
                             </div>
                           </div>
@@ -1335,7 +1336,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
                                 <div style={{fontSize:10,color:D.t4,marginTop:2}}>blocked</div>
                               </div>
                               <div style={{flex:1,background:'rgba(52,199,89,0.10)',borderRadius:8,padding:'10px',textAlign:'center'}}>
-                                <div style={{fontSize:22,fontWeight:700,color:A.green}}>{nd.pct}%</div>
+                                <div style={{fontSize:22,fontWeight:700,color:A.green}}>{nd.pct??'—'}%</div>
                                 <div style={{fontSize:10,color:D.t4,marginTop:2}}>block rate</div>
                               </div>
                             </div>
@@ -1712,9 +1713,10 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
                     })()}
                     {visiblePanelId==='w_messages'&&messages.length>0&&(()=>{
                       const now=Date.now();
-                      const liveMsgs=messages.filter(m=>new Date(m.expires_at.replace(' ','T')+'Z').getTime()>now);
+                      const liveMsgs=messages.filter(m=>m.expires_at&&new Date(m.expires_at.replace(' ','T')+'Z').getTime()>now);
                       if(!liveMsgs.length) return null;
                       const fmtTimeLeft=expiresAt=>{
+                        if(!expiresAt) return '';
                         const ms=new Date(expiresAt.replace(' ','T')+'Z').getTime()-now;
                         if(ms<=0) return 'Expired';
                         const mins=Math.floor(ms/60000);
@@ -1739,6 +1741,18 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
                         </>
                       );
                     })()}
+                    {visiblePanelId==='w_music'&&nowPlaying.playing&&(
+                      <>
+                        <WLabel>Now playing</WLabel>
+                        <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:16}}>
+                          {nowPlaying.thumb&&<img src={nowPlaying.thumb} alt="" style={{width:isTV?160:120,height:isTV?160:120,borderRadius:12,objectFit:'cover',boxShadow:'0 8px 32px rgba(0,0,0,0.4)'}}/>}
+                          <div style={{textAlign:'center'}}>
+                            <div style={{fontSize:isTV?28:22,fontWeight:700,color:D.t1,lineHeight:1.2,marginBottom:6}}>{nowPlaying.title}</div>
+                            {nowPlaying.artist&&<div style={{fontSize:isTV?18:15,color:D.t3,fontWeight:500}}>{nowPlaying.artist}</div>}
+                          </div>
+                        </div>
+                      </>
+                    )}
                     {visiblePanelId==='dinner'&&(()=>{const td=todayDinner()||'—';return(
                       <>
                         <WLabel>Dinner tonight</WLabel>
@@ -1783,7 +1797,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
                       </div>
                     </div>
                     <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:2,borderTop:`1px solid ${D.sep}`,paddingTop:8}}>
-                      {weather.forecast.map(f=>(
+                      {(weather.forecast||[]).map(f=>(
                         <div key={f.day} style={{textAlign:'center'}}>
                           <div style={{fontSize:9,color:D.t3,fontWeight:600,marginBottom:2}}>{f.day}</div>
                           <div style={{fontSize:15,marginBottom:2}}>{f.icon}</div>
@@ -1964,7 +1978,7 @@ function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weath
     es.addEventListener('refresh',()=>{loadHA();loadSm();});
     return()=>{clearInterval(fa);clearInterval(fb);es.close();};
   },[]);
-  const allSmartEvents=useMemo(()=>[...smEvents,...haEvents].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).slice(0,10),[smEvents,haEvents]);
+  const allSmartEvents=useMemo(()=>[...smEvents,...haEvents].sort((a,b)=>new Date(b.created_at?.replace(' ','T'))-new Date(a.created_at?.replace(' ','T'))).slice(0,10),[smEvents,haEvents]);
 
   useEffect(()=>{
     if(prevDueRef.current!==null&&prevDueRef.current>0&&dueChores.length===0){

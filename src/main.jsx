@@ -501,7 +501,7 @@ function PresenceBar({duration,color}){
 }
 
 /* ── Display Mode ────────────────────────────────────────────────────── */
-function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,countdowns,photos=[],weather,clockFormat='12h',nightModeStart='23:00',nightModeEnd='06:00',goals=[],notes=[],polls=[],rotationMs=10000,wifiQrData=null,quickActions=[],members=[]}){
+function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,countdowns,photos=[],weather,clockFormat='12h',nightModeStart='23:00',nightModeEnd='06:00',goals=[],notes=[],polls=[],rotationMs=10000,wifiQrData=null,quickActions=[],members=[],packages=[],setPackages,messages=[],setMessages}){
   const isMobile=useIsMobile();
   const now=useClock();
   const [liveGames,setLiveGames]=useState([]);
@@ -555,6 +555,8 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
     es.addEventListener('activity',e=>{try{const ev=JSON.parse(e.data);setSmEvents(p=>[ev,...p].slice(0,10));}catch{}});
     es.addEventListener('refresh',()=>{loadHA();loadSm();loadWidgets();});
     es.addEventListener('grocery',e=>{try{const d=JSON.parse(e.data);if(setGrocery){if(d.action==='add')setGrocery(p=>[...p,d.item]);else if(d.action==='remove')setGrocery(p=>p.filter(i=>i.id!==d.id));else if(d.action==='toggle')setGrocery(p=>p.map(i=>i.id===d.id?{...i,checked:d.checked}:i));else if(d.action==='clear_checked')setGrocery(p=>p.filter(i=>!i.checked));}}catch{}});
+    es.addEventListener('packages',()=>{api.get('/api/packages').then(d=>{if(Array.isArray(d)&&setPackages)setPackages(d);}).catch(()=>{});});
+    es.addEventListener('messages',()=>{api.get('/api/messages').then(d=>{if(Array.isArray(d)&&setMessages)setMessages(d);}).catch(()=>{});});
     es.addEventListener('open',()=>{setOnline(true);loadWidgets();});
     es.addEventListener('error',()=>setOnline(false));
     return()=>{clearInterval(fa);clearInterval(fb);clearInterval(fc);es.close();};
@@ -748,6 +750,8 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
     ...(polls.length>0?['w_polls']:[]),
     ...(uncheckedGrocery.length>0?['w_grocery']:[]),
     ...(photos.length>0?['w_photos']:[]),
+    ...(packages.length>0?['w_packages']:[]),
+    ...(messages.length>0?['w_messages']:[]),
   ];
   const activePanelId=centerPanels[centerIdx%Math.max(1,centerPanels.length)];
   useEffect(()=>{
@@ -1681,6 +1685,56 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
                         <div style={{flex:1,borderRadius:10,overflow:'hidden',margin:'-2px'}}>
                           <img key={p.id} src={`/photos/${p.filename}`} style={{width:'100%',height:'100%',objectFit:'cover',display:'block',animation:'fadeIn .8s ease'}} alt=""/>
                         </div>
+                      );
+                    })()}
+                    {visiblePanelId==='w_packages'&&packages.length>0&&(()=>{
+                      const carrierColor={UPS:'#FFB500',FedEx:'#4D148C',USPS:'#004B97',Amazon:'#FF9900',DHL:'#FFCC00',OnTrac:'#E8231A',LaserShip:'#00A3E0'};
+                      return(
+                        <>
+                          <WLabel>Packages</WLabel>
+                          <div style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:10,marginTop:4}}>
+                            {packages.map(pkg=>{
+                              const color=carrierColor[pkg.carrier]||D.t3;
+                              return(
+                                <div key={pkg.id} style={{background:'rgba(255,255,255,0.05)',borderRadius:10,padding:'12px 14px',display:'flex',flexDirection:'column',gap:4}}>
+                                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                                    <span style={{fontSize:12,fontWeight:700,color,textTransform:'uppercase',letterSpacing:'.06em'}}>{pkg.carrier||'Package'}</span>
+                                    {pkg.expected_date&&<span style={{fontSize:11,color:D.t4}}>Arriving {pkg.expected_date}</span>}
+                                  </div>
+                                  <div style={{fontSize:15,fontWeight:600,color:D.t1,lineHeight:1.3}}>{pkg.description||pkg.tracking_number||'In transit'}</div>
+                                  {pkg.tracking_number&&<div style={{fontSize:11,color:D.t4,fontFamily:'monospace'}}>{pkg.tracking_number}</div>}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </>
+                      );
+                    })()}
+                    {visiblePanelId==='w_messages'&&messages.length>0&&(()=>{
+                      const now=Date.now();
+                      const fmtTimeLeft=expiresAt=>{
+                        const ms=new Date(expiresAt+'Z').getTime()-now;
+                        if(ms<=0) return 'Expired';
+                        const mins=Math.floor(ms/60000);
+                        if(mins<60) return `${mins}m left`;
+                        const hrs=Math.floor(mins/60);
+                        return `${hrs}h left`;
+                      };
+                      return(
+                        <>
+                          <WLabel>Messages</WLabel>
+                          <div style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:10,marginTop:4}}>
+                            {messages.map(msg=>(
+                              <div key={msg.id} style={{background:'rgba(255,255,255,0.05)',borderRadius:10,padding:'14px 16px'}}>
+                                <div style={{fontSize:17,fontWeight:600,color:D.t1,lineHeight:1.4,marginBottom:6}}>{msg.text}</div>
+                                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                                  <span style={{fontSize:12,color:D.t3}}>{msg.author||'Family'}</span>
+                                  <span style={{fontSize:11,color:D.t4}}>{fmtTimeLeft(msg.expires_at)}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </>
                       );
                     })()}
                     {visiblePanelId==='dinner'&&(()=>{const td=todayDinner()||'—';return(
@@ -4863,7 +4917,174 @@ function GoalsScreen({goals,setGoals,toastAdd}){
 }
 
 
-function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocery,setGrocery,meals,setMeals,icsSources,setIcsSources,inboxCount,setInboxCount,countdowns,setCountdowns,members,setMembers,photos,setPhotos,clockFormat,setClockFormat,weather,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd,setRefreshMs,parseRefreshMs,goals,setGoals,notes,setNotes,polls,setPolls,bookmarks,setBookmarks,quickActions,setQuickActions,setRotationMs,setWifiQrData,darkMode,onDarkMode}){
+/* ── Packages Screen ─────────────────────────────────────────────────── */
+function PackagesScreen({packages,setPackages,toastAdd}){
+  const isMobile=useIsMobile();
+  const [drawerOpen,setDrawerOpen]=useState(false);
+  const [form,setForm]=useState({carrier:'',tracking_number:'',description:'',expected_date:''});
+
+  const markDelivered=async id=>{
+    const r=await api.put(`/api/packages/${id}/delivered`,{}).catch(()=>null);
+    if(r?.error){toastAdd(r.error,'red');return;}
+    setPackages(p=>p.filter(x=>x.id!==id));
+    toastAdd('Marked as delivered');
+  };
+
+  const del=async id=>{
+    await api.del(`/api/packages/${id}`);
+    setPackages(p=>p.filter(x=>x.id!==id));
+    toastAdd('Removed','blue');
+  };
+
+  const save=async()=>{
+    if(!form.description.trim()&&!form.tracking_number.trim()){toastAdd('Add a description or tracking number','red');return;}
+    const r=await api.post('/api/packages',form).catch(()=>null);
+    if(!r?.id){toastAdd(r?.error||'Failed to save','red');return;}
+    setPackages(p=>[r,...p]);
+    setDrawerOpen(false);setForm({carrier:'',tracking_number:'',description:'',expected_date:''});
+    toastAdd('Package added');
+  };
+
+  return(
+    <div>
+      <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:24}}>
+        <div>
+          <h1 style={{fontSize:isMobile?34:44,fontWeight:800,letterSpacing:'-.05em',lineHeight:1.05}}>Packages</h1>
+          <p style={{color:A.label4,fontSize:15,marginTop:6}}>Detected from shipping emails · shows on wall display</p>
+        </div>
+        <Btn onClick={()=>setDrawerOpen(true)}>+ Add</Btn>
+      </div>
+      {packages.length===0?(
+        <Card style={{padding:'52px 24px',textAlign:'center'}}>
+          <div style={{fontSize:13,fontWeight:700,color:A.label5,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:10}}>No packages</div>
+          <div style={{fontSize:15,color:A.label3,fontWeight:500}}>Shipping confirmation emails are parsed automatically. Add one manually if needed.</div>
+        </Card>
+      ):(
+        <div style={{display:'flex',flexDirection:'column',gap:12}}>
+          {packages.map(pkg=>(
+            <Card key={pkg.id} style={{padding:'18px 20px'}}>
+              <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:12}}>
+                <div style={{flex:1,minWidth:0}}>
+                  {pkg.carrier&&<div style={{fontSize:11,fontWeight:700,color:A.blue,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:4}}>{pkg.carrier}</div>}
+                  <div style={{fontSize:16,fontWeight:600,color:A.label1,lineHeight:1.3}}>{pkg.description||'Package'}</div>
+                  {pkg.tracking_number&&<div style={{fontSize:12,color:A.label4,fontFamily:'monospace',marginTop:4}}>{pkg.tracking_number}</div>}
+                  {pkg.expected_date&&<div style={{fontSize:13,color:A.label3,marginTop:4}}>Arriving {pkg.expected_date}</div>}
+                </div>
+                <div style={{display:'flex',flexDirection:'column',gap:6,flexShrink:0}}>
+                  <button onClick={()=>markDelivered(pkg.id)} style={{background:A.green,border:'none',color:'#fff',fontSize:12,fontWeight:600,borderRadius:A.rXs,padding:'6px 12px',cursor:'pointer'}}>Delivered</button>
+                  <button onClick={()=>del(pkg.id)} style={{background:'none',border:'none',color:A.red,fontSize:12,cursor:'pointer',fontWeight:500}}>Remove</button>
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+      <Drawer open={drawerOpen} onClose={()=>{setDrawerOpen(false);setForm({carrier:'',tracking_number:'',description:'',expected_date:''}); }} title="Add Package">
+        <FormGroup label="Description"><div style={{padding:'12px 16px'}}><Inp value={form.description} onChange={e=>setForm(f=>({...f,description:e.target.value}))} placeholder="Blue hoodie from Amazon"/></div></FormGroup>
+        <FormGroup label="Carrier"><div style={{padding:'12px 16px'}}><Inp value={form.carrier} onChange={e=>setForm(f=>({...f,carrier:e.target.value}))} placeholder="UPS, FedEx, USPS, Amazon…"/></div></FormGroup>
+        <FormGroup label="Tracking #"><div style={{padding:'12px 16px'}}><Inp value={form.tracking_number} onChange={e=>setForm(f=>({...f,tracking_number:e.target.value}))} placeholder="1Z999AA10123456784"/></div></FormGroup>
+        <FormGroup label="Expected date"><div style={{padding:'12px 16px'}}><Inp type="date" value={form.expected_date} onChange={e=>setForm(f=>({...f,expected_date:e.target.value}))}/></div></FormGroup>
+        <div style={{padding:'16px'}}><Btn onClick={save} full>Save Package</Btn></div>
+      </Drawer>
+    </div>
+  );
+}
+
+/* ── Messages Screen ─────────────────────────────────────────────────── */
+function MessagesScreen({messages,setMessages,members=[],toastAdd}){
+  const isMobile=useIsMobile();
+  const [drawerOpen,setDrawerOpen]=useState(false);
+  const [text,setText]=useState('');
+  const [author,setAuthor]=useState('');
+  const [memberId,setMemberId]=useState('');
+  const [expiry,setExpiry]=useState('4h');
+
+  const post=async()=>{
+    if(!text.trim()){toastAdd('Message cannot be empty','red');return;}
+    const r=await api.post('/api/messages',{text:text.trim(),author:author||undefined,member_id:memberId?Number(memberId):undefined,expiry_preset:expiry}).catch(()=>null);
+    if(!r?.id){toastAdd(r?.error||'Failed to post','red');return;}
+    setMessages(p=>[r,...p]);
+    setDrawerOpen(false);setText('');setAuthor('');setMemberId('');setExpiry('4h');
+    toastAdd('Message posted');
+  };
+
+  const del=async id=>{
+    await api.del(`/api/messages/${id}`);
+    setMessages(p=>p.filter(m=>m.id!==id));
+    toastAdd('Deleted','blue');
+  };
+
+  const fmtLeft=expiresAt=>{
+    const ms=new Date(expiresAt+'Z').getTime()-Date.now();
+    if(ms<=0) return 'Expired';
+    const mins=Math.floor(ms/60000);
+    if(mins<60) return `${mins}m left`;
+    return `${Math.floor(mins/60)}h left`;
+  };
+
+  return(
+    <div>
+      <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:24}}>
+        <div>
+          <h1 style={{fontSize:isMobile?34:44,fontWeight:800,letterSpacing:'-.05em',lineHeight:1.05}}>Messages</h1>
+          <p style={{color:A.label4,fontSize:15,marginTop:6}}>Leave a note for the family · auto-expires · shows on wall display</p>
+        </div>
+        <Btn onClick={()=>setDrawerOpen(true)}>+ Post</Btn>
+      </div>
+      {messages.length===0?(
+        <Card style={{padding:'52px 24px',textAlign:'center'}}>
+          <div style={{fontSize:13,fontWeight:700,color:A.label5,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:10}}>No active messages</div>
+          <div style={{fontSize:15,color:A.label3,fontWeight:500}}>Leave a note for the family — it shows on the wall display until it expires.</div>
+        </Card>
+      ):(
+        <div style={{display:'flex',flexDirection:'column',gap:12}}>
+          {messages.map(msg=>(
+            <Card key={msg.id} style={{padding:'18px 20px'}}>
+              <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:12}}>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:16,fontWeight:500,color:A.label1,lineHeight:1.4,marginBottom:6}}>{msg.text}</div>
+                  <div style={{display:'flex',gap:12,alignItems:'center'}}>
+                    <span style={{fontSize:13,color:A.label3}}>{msg.author||'Family'}</span>
+                    <span style={{fontSize:12,color:A.label5}}>{fmtLeft(msg.expires_at)}</span>
+                  </div>
+                </div>
+                <button onClick={()=>del(msg.id)} style={{background:'none',border:'none',color:A.red,fontSize:13,cursor:'pointer',fontWeight:500,flexShrink:0}}>Delete</button>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+      <Drawer open={drawerOpen} onClose={()=>{setDrawerOpen(false);setText('');setAuthor('');setMemberId('');setExpiry('4h');}} title="Post Message">
+        <FormGroup label="Message">
+          <div style={{padding:'12px 16px'}}>
+            <textarea value={text} onChange={e=>setText(e.target.value)} rows={3} placeholder="Don't forget to feed the dog!" style={{width:'100%',padding:'10px 14px',borderRadius:A.rXs,border:`1px solid ${A.sep}`,background:A.inputBg,fontSize:15,color:A.label1,resize:'vertical',outline:'none',lineHeight:1.5}}/>
+          </div>
+        </FormGroup>
+        {members.length>0&&(
+          <FormGroup label="From">
+            <div style={{padding:'12px 16px'}}>
+              <select value={memberId} onChange={e=>{setMemberId(e.target.value);const m=members.find(x=>x.id===Number(e.target.value));if(m)setAuthor(m.name);}}
+                style={{width:'100%',padding:'10px 14px',borderRadius:A.rXs,border:`1px solid ${A.sep}`,background:A.inputBg,fontSize:15,color:A.label1}}>
+                <option value="">Family</option>
+                {members.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+            </div>
+          </FormGroup>
+        )}
+        <FormGroup label="Expires">
+          <div style={{padding:'12px 16px',display:'flex',gap:8,flexWrap:'wrap'}}>
+            {[['1h','1 hour'],['4h','4 hours'],['eod','End of day'],['tomorrow','Tomorrow AM']].map(([v,l])=>(
+              <button key={v} onClick={()=>setExpiry(v)} style={{padding:'8px 16px',borderRadius:20,border:`1.5px solid ${expiry===v?A.blue:A.sep}`,background:expiry===v?`${A.blue}15`:'transparent',color:expiry===v?A.blue:A.label2,fontSize:13,fontWeight:500,cursor:'pointer'}}>{l}</button>
+            ))}
+          </div>
+        </FormGroup>
+        <div style={{padding:'16px'}}><Btn onClick={post} full>Post Message</Btn></div>
+      </Drawer>
+    </div>
+  );
+}
+
+function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocery,setGrocery,meals,setMeals,icsSources,setIcsSources,inboxCount,setInboxCount,countdowns,setCountdowns,members,setMembers,photos,setPhotos,clockFormat,setClockFormat,weather,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd,setRefreshMs,parseRefreshMs,goals,setGoals,notes,setNotes,polls,setPolls,bookmarks,setBookmarks,quickActions,setQuickActions,setRotationMs,setWifiQrData,darkMode,onDarkMode,packages,setPackages,messages,setMessages}){
   const isMobile=useIsMobile();
   const [screen,setScreen]=useState('dashboard');
   const {toasts,add:toastAdd}=useToast();
@@ -4887,6 +5108,8 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
     {id:'notes',label:'Notes',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="2" y="2" width="13" height="13" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M5 6h7M5 9h5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
     {id:'bookmarks',label:'Bookmarks',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><path d="M3.5 2h10a1 1 0 011 1v12l-5.5-3.5L3.5 15V3a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>},
     {id:'polls',label:'Polls',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="2" y="9" width="3" height="6" rx="1" fill="currentColor" opacity=".5"/><rect x="7" y="5" width="3" height="10" rx="1" fill="currentColor" opacity=".7"/><rect x="12" y="2" width="3" height="13" rx="1" fill="currentColor"/></svg>},
+    {id:'packages',label:'Packages',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="2" y="5" width="13" height="10" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M5.5 5V3.5a3 3 0 016 0V5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M2 8.5h13" stroke="currentColor" strokeWidth="1.5"/></svg>,badge:packages?.length||0},
+    {id:'messages',label:'Messages',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><path d="M2 3h13a1 1 0 011 1v8a1 1 0 01-1 1H5l-4 3V4a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>,badge:messages?.length||0},
     {id:'inbox',label:'Inbox',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="1.5" y="3.5" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M1.5 6.5l7 4 7-4" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>,badge:inboxCount},
     {id:'settings',label:'Settings',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><circle cx="8.5" cy="8.5" r="2.5" stroke="currentColor" strokeWidth="1.5"/><path d="M8.5 1v2M8.5 14v2M1 8.5h2M14 8.5h2M3.05 3.05l1.42 1.42M12.53 12.53l1.42 1.42M12.53 3.05l-1.42 1.42M4.47 12.53l-1.42 1.42" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
   ];
@@ -4902,6 +5125,8 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
     notes:      <NotesScreen notes={notes} setNotes={setNotes} toastAdd={toastAdd}/>,
     bookmarks:  <BookmarksScreen bookmarks={bookmarks} setBookmarks={setBookmarks} toastAdd={toastAdd}/>,
     polls:      <PollsScreen polls={polls} setPolls={setPolls} toastAdd={toastAdd}/>,
+    packages:   <PackagesScreen packages={packages} setPackages={setPackages} toastAdd={toastAdd}/>,
+    messages:   <MessagesScreen messages={messages} setMessages={setMessages} members={members} toastAdd={toastAdd}/>,
     inbox:      <InboxScreen toastAdd={toastAdd} events={events} setEvents={setEvents} setInboxCount={setInboxCount}/>,
     settings:   <SettingsScreen toastAdd={toastAdd} icsSources={icsSources} setIcsSources={setIcsSources} onDisplay={onDisplay} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} setQuickActions={setQuickActions} setRotationMs={setRotationMs} setWifiQrData={setWifiQrData} darkMode={darkMode} onDarkMode={onDarkMode}/>,
   };
@@ -5248,6 +5473,7 @@ function SetupWizard({onComplete}){
           <option value="anthropic">Claude Haiku (Anthropic)</option>
           <option value="openai">GPT-4o Mini (OpenAI)</option>
           <option value="groq">Llama 3.1 (Groq — free tier)</option>
+          <option value="deepseek">DeepSeek Chat (cost-optimized)</option>
         </Sel>
       </div>
       <Inp value={aiKey} onChange={e=>setAiKey(e.target.value)} placeholder="Paste API key" type="password"/>
@@ -5370,6 +5596,8 @@ function App(){
   const [notes,setNotes]=useState([]);
   const [polls,setPolls]=useState([]);
   const [bookmarks,setBookmarks]=useState([]);
+  const [packages,setPackages]=useState([]);
+  const [messages,setMessages]=useState([]);
   const [quickActions,setQuickActions]=useState([]);
   const [photos,setPhotos]=useState([]);
   const [clockFormat,setClockFormat]=useState('12h');
@@ -5441,7 +5669,9 @@ function App(){
       api.get('/api/polls'),
       api.get('/api/quick-actions'),
       api.get('/api/bookmarks'),
-    ]).then(([ev,ch,gr,ml,ics,inb,cd,mb,ph,st,gl,nt,pl,qa,bm])=>{
+      api.get('/api/packages'),
+      api.get('/api/messages'),
+    ]).then(([ev,ch,gr,ml,ics,inb,cd,mb,ph,st,gl,nt,pl,qa,bm,pk,ms])=>{
       if(ev.status==='fulfilled'&&Array.isArray(ev.value)) setEvents(ev.value);
       if(ch.status==='fulfilled'&&Array.isArray(ch.value)) setChores(ch.value);
       if(gr.status==='fulfilled'&&Array.isArray(gr.value)) setGrocery(gr.value);
@@ -5456,6 +5686,8 @@ function App(){
       if(pl.status==='fulfilled'&&Array.isArray(pl.value)) setPolls(pl.value);
       if(qa.status==='fulfilled'&&Array.isArray(qa.value)) setQuickActions(qa.value);
       if(bm.status==='fulfilled'&&Array.isArray(bm.value)) setBookmarks(bm.value);
+      if(pk.status==='fulfilled'&&Array.isArray(pk.value)) setPackages(pk.value);
+      if(ms.status==='fulfilled'&&Array.isArray(ms.value)) setMessages(ms.value);
       if(st.status==='fulfilled'){
         const s=st.value;
         if(s.clock_format) setClockFormat(s.clock_format);
@@ -5483,7 +5715,8 @@ function App(){
         api.get('/api/meals'),
         api.get('/api/members'),
         api.get('/api/photos'),
-      ]).then(([ev,ch,gr,cd,inb,ml,mb,ph])=>{
+        api.get('/api/messages'),
+      ]).then(([ev,ch,gr,cd,inb,ml,mb,ph,ms])=>{
         if(ev.status==='fulfilled'&&Array.isArray(ev.value)) setEvents(ev.value);
         if(ch.status==='fulfilled'&&Array.isArray(ch.value)) setChores(ch.value);
         if(gr.status==='fulfilled'&&Array.isArray(gr.value)) setGrocery(gr.value);
@@ -5492,6 +5725,7 @@ function App(){
         if(ml.status==='fulfilled'&&Array.isArray(ml.value)) setMeals(ml.value);
         if(mb.status==='fulfilled'&&Array.isArray(mb.value)) setMembers(mb.value);
         if(ph.status==='fulfilled'&&Array.isArray(ph.value)) setPhotos(ph.value);
+        if(ms.status==='fulfilled'&&Array.isArray(ms.value)) setMessages(ms.value);
       });
       api.get('/api/weather').then(w=>{if(!w.error) setWeather(w);}).catch(()=>{});
     };
@@ -5521,8 +5755,8 @@ function App(){
   const goDisplay=()=>{localStorage.setItem('kith_mode','display');setMode('display');};
   const goManage=()=>{localStorage.setItem('kith_mode','manage');setMode('manage');};
   return mode==='display'
-    ?<DisplayMode onManage={goManage} events={events} chores={chores} setChores={setChores} meals={meals} grocery={grocery} setGrocery={setGrocery} countdowns={countdowns} photos={photos} clockFormat={clockFormat} weather={weather} nightModeStart={nightModeStart} nightModeEnd={nightModeEnd} goals={goals} notes={notes} polls={polls} rotationMs={rotationMs} wifiQrData={wifiQrData} quickActions={quickActions} members={members}/>
-    :<ManageMode onDisplay={goDisplay} onLogout={handleLogout} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources} inboxCount={inboxCount} setInboxCount={setInboxCount} countdowns={countdowns} setCountdowns={setCountdowns} members={members} setMembers={setMembers} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} weather={weather} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} goals={goals} setGoals={setGoals} notes={notes} setNotes={setNotes} polls={polls} setPolls={setPolls} bookmarks={bookmarks} setBookmarks={setBookmarks} quickActions={quickActions} setQuickActions={setQuickActions} setRotationMs={setRotationMs} setWifiQrData={setWifiQrData} darkMode={darkMode} onDarkMode={handleDarkMode}/>;
+    ?<DisplayMode onManage={goManage} events={events} chores={chores} setChores={setChores} meals={meals} grocery={grocery} setGrocery={setGrocery} countdowns={countdowns} photos={photos} clockFormat={clockFormat} weather={weather} nightModeStart={nightModeStart} nightModeEnd={nightModeEnd} goals={goals} notes={notes} polls={polls} rotationMs={rotationMs} wifiQrData={wifiQrData} quickActions={quickActions} members={members} packages={packages} setPackages={setPackages} messages={messages} setMessages={setMessages}/>
+    :<ManageMode onDisplay={goDisplay} onLogout={handleLogout} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources} inboxCount={inboxCount} setInboxCount={setInboxCount} countdowns={countdowns} setCountdowns={setCountdowns} members={members} setMembers={setMembers} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} weather={weather} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} goals={goals} setGoals={setGoals} notes={notes} setNotes={setNotes} polls={polls} setPolls={setPolls} bookmarks={bookmarks} setBookmarks={setBookmarks} quickActions={quickActions} setQuickActions={setQuickActions} setRotationMs={setRotationMs} setWifiQrData={setWifiQrData} darkMode={darkMode} onDarkMode={handleDarkMode} packages={packages} setPackages={setPackages} messages={messages} setMessages={setMessages}/>;
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);

@@ -2586,9 +2586,9 @@ async function callAiForEvent(subject, body) {
         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json' } }),
       }).then(r => r.json());
       text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    } else if (provider === 'openai' || provider === 'groq') {
-      const baseUrl = provider === 'groq' ? 'https://api.groq.com/openai/v1' : 'https://api.openai.com/v1';
-      const model = provider === 'groq' ? 'llama-3.1-8b-instant' : 'gpt-4o-mini';
+    } else if (provider === 'openai' || provider === 'groq' || provider === 'deepseek') {
+      const baseUrl = provider === 'groq' ? 'https://api.groq.com/openai/v1' : provider === 'deepseek' ? 'https://api.deepseek.com/v1' : 'https://api.openai.com/v1';
+      const model = provider === 'groq' ? 'llama-3.1-8b-instant' : provider === 'deepseek' ? 'deepseek-chat' : 'gpt-4o-mini';
       const data = await fetch(`${baseUrl}/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
@@ -2635,6 +2635,44 @@ async function callAiWithMedia(imageBase64, mimeType) {
   } catch { return []; }
 }
 
+async function callAiForPackage(subject, body) {
+  const getSetting = k => db.prepare('SELECT value FROM settings WHERE key=?').get(k)?.value || '';
+  const provider = getSetting('ai_provider') || 'anthropic';
+  const apiKey = getSetting('ai_api_key') || getSetting('anthropic_api_key') || process.env.ANTHROPIC_API_KEY || '';
+  if (!apiKey) return null;
+
+  const prompt = `Extract shipping/package information from this email. Return JSON only, no other text.\n\nSubject: ${subject}\nBody: ${body.slice(0, 2000)}\n\nReturn: {"is_shipping":true,"carrier":"UPS|FedEx|USPS|Amazon|DHL|OnTrac|LaserShip|etc","tracking_number":"...","description":"brief item description","expected_date":"YYYY-MM-DD or empty"}\nIf no shipping or package delivery info is present return {"is_shipping":false}`;
+
+  try {
+    let text;
+    if (provider === 'gemini') {
+      const data = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json' } }),
+      }).then(r => r.json());
+      text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    } else if (provider === 'openai' || provider === 'groq' || provider === 'deepseek') {
+      const baseUrl = provider === 'groq' ? 'https://api.groq.com/openai/v1' : provider === 'deepseek' ? 'https://api.deepseek.com/v1' : 'https://api.openai.com/v1';
+      const model = provider === 'groq' ? 'llama-3.1-8b-instant' : provider === 'deepseek' ? 'deepseek-chat' : 'gpt-4o-mini';
+      const data = await fetch(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body: JSON.stringify({ model, max_tokens: 200, messages: [{ role: 'user', content: prompt }] }),
+      }).then(r => r.json());
+      text = data.choices?.[0]?.message?.content;
+    } else {
+      const data = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 200, messages: [{ role: 'user', content: prompt }] }),
+      }).then(r => r.json());
+      text = data.content?.[0]?.text;
+    }
+    return text ? JSON.parse(text) : null;
+  } catch { return null; }
+}
+
 app.post('/api/email/inbound', async (req, res) => {
   const secret = db.prepare('SELECT value FROM settings WHERE key=?').get('email_webhook_secret')?.value;
   if (secret && req.headers['x-kith-secret'] !== secret) {
@@ -2669,9 +2707,85 @@ app.post('/api/email/inbound', async (req, res) => {
 
   if (!event_name) event_name = subject || '(Unknown event)';
 
-  db.prepare('INSERT INTO inbox (subject,event_name,event_date,event_time,recurrence,confidence) VALUES (?,?,?,?,?,?)')
-    .run(subject || '', event_name, event_date, event_time, recurrence, confidence);
+  // run calendar event store and package detection in parallel
+  const [, pkgResult] = await Promise.allSettled([
+    Promise.resolve(
+      db.prepare('INSERT INTO inbox (subject,event_name,event_date,event_time,recurrence,confidence) VALUES (?,?,?,?,?,?)')
+        .run(subject || '', event_name, event_date, event_time, recurrence, confidence)
+    ),
+    callAiForPackage(subject || '', body || '').catch(() => null),
+  ]);
 
+  const pkg = pkgResult.status === 'fulfilled' ? pkgResult.value : null;
+  if (pkg?.is_shipping) {
+    db.prepare('INSERT INTO packages (carrier,tracking_number,description,expected_date,source_subject) VALUES (?,?,?,?,?)')
+      .run(pkg.carrier || '', pkg.tracking_number || '', pkg.description || '', pkg.expected_date || '', subject || '');
+    broadcastSSE('packages', { action: 'reload' });
+  }
+
+  res.json({ ok: true });
+});
+
+// ── Routes: Packages ─────────────────────────────────────────────────────────
+
+app.get('/api/packages', (req, res) => {
+  const rows = db.prepare("SELECT * FROM packages WHERE delivered=0 ORDER BY created_at DESC").all();
+  res.json(rows);
+});
+
+app.post('/api/packages', (req, res) => {
+  const { carrier='', tracking_number='', description='', expected_date='' } = req.body || {};
+  if (!description && !tracking_number) return res.json({ error: 'description or tracking_number required' });
+  const row = db.prepare('INSERT INTO packages (carrier,tracking_number,description,expected_date,source_subject) VALUES (?,?,?,?,?) RETURNING *')
+    .get(carrier, tracking_number, description, expected_date, '');
+  broadcastSSE({ type: 'refresh', key: 'packages' });
+  res.json(row);
+});
+
+app.put('/api/packages/:id/delivered', (req, res) => {
+  const row = db.prepare('UPDATE packages SET delivered=1, status=? WHERE id=? RETURNING *')
+    .get('delivered', Number(req.params.id));
+  if (!row) return res.json({ error: 'Not found' });
+  broadcastSSE({ type: 'refresh', key: 'packages' });
+  res.json(row);
+});
+
+app.delete('/api/packages/:id', (req, res) => {
+  const info = db.prepare('DELETE FROM packages WHERE id=?').run(Number(req.params.id));
+  if (!info.changes) return res.json({ error: 'Not found' });
+  broadcastSSE({ type: 'refresh', key: 'packages' });
+  res.json({ ok: true });
+});
+
+// ── Routes: Messages ──────────────────────────────────────────────────────────
+
+app.get('/api/messages', (req, res) => {
+  const rows = db.prepare("SELECT * FROM messages WHERE expires_at > datetime('now') ORDER BY created_at DESC").all();
+  res.json(rows);
+});
+
+app.post('/api/messages', (req, res) => {
+  const { text, author='', member_id=null, expiry_preset='4h' } = req.body || {};
+  if (!text?.trim()) return res.json({ error: 'text required' });
+  let expires_at;
+  if (expiry_preset === 'eod') {
+    expires_at = db.prepare(`SELECT datetime('now', 'start of day', '+1 day') as t`).get().t;
+  } else if (expiry_preset === 'tomorrow') {
+    expires_at = db.prepare(`SELECT datetime('now', 'start of day', '+2 days') as t`).get().t;
+  } else {
+    const offset = expiry_preset === '1h' ? '+1 hour' : '+4 hours';
+    expires_at = db.prepare(`SELECT datetime('now', ?) as t`).get(offset).t;
+  }
+  const row = db.prepare('INSERT INTO messages (text,author,member_id,expires_at) VALUES (?,?,?,?) RETURNING *')
+    .get(text.trim(), author, member_id || null, expires_at);
+  broadcastSSE('messages', { action: 'reload' });
+  res.json(row);
+});
+
+app.delete('/api/messages/:id', (req, res) => {
+  const info = db.prepare('DELETE FROM messages WHERE id=?').run(Number(req.params.id));
+  if (!info.changes) return res.json({ error: 'Not found' });
+  broadcastSSE('messages', { action: 'reload' });
   res.json({ ok: true });
 });
 
@@ -3091,5 +3205,13 @@ async function syncUSHolidays() {
 }
 syncUSHolidays();
 cron.schedule('0 3 1 1 *', syncUSHolidays); // re-sync on Jan 1st each year
+
+// ── Cleanup: expired messages + old delivered packages ────────────────────────
+cron.schedule('0 * * * *', () => {
+  try {
+    db.prepare("DELETE FROM messages WHERE expires_at <= datetime('now')").run();
+    db.prepare("DELETE FROM packages WHERE delivered=1 AND created_at < datetime('now', '-3 days')").run();
+  } catch (e) { console.error('[cleanup]', e?.message || e); }
+});
 
 app.listen(PORT, () => console.log(`Kith running → http://localhost:${PORT}`));

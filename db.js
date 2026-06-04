@@ -172,6 +172,27 @@ CREATE TABLE IF NOT EXISTS bookmarks (
   emoji TEXT DEFAULT '🔗',
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS packages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  carrier TEXT DEFAULT '',
+  tracking_number TEXT DEFAULT '',
+  description TEXT DEFAULT '',
+  expected_date TEXT DEFAULT '',
+  status TEXT DEFAULT 'in_transit',
+  delivered INTEGER DEFAULT 0,
+  source_subject TEXT DEFAULT '',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  text TEXT NOT NULL,
+  author TEXT DEFAULT '',
+  member_id INTEGER,
+  expires_at DATETIME NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
 `);
 
 // migrations — safe to run on every boot

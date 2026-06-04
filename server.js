@@ -810,6 +810,8 @@ app.get('/api/settings/integrations', requireAdmin, (req, res) => {
     homey_sensor_devices:  get('homey_sensor_devices'),
     homey_person_devices: get('homey_person_devices'),
     homey_climate_device: get('homey_climate_device'),
+    ai_provider:          get('ai_provider') || 'gemini',
+    has_ai_key:           !!get('ai_api_key'),
   });
 });
 app.put('/api/settings/integrations', requireAdmin, (req, res) => {

@@ -3414,6 +3414,10 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [homeyHasToken,setHomeyHasToken]=useState(false);
   const [homeySaving,setHomeySaving]=useState(false);
   const [smTesting,setSmTesting]=useState(false);
+  const [aiProvider,setAiProvider]=useState('gemini');
+  const [aiKey,setAiKey]=useState('');
+  const [hasAiKey,setHasAiKey]=useState(false);
+  const [aiKeySaving,setAiKeySaving]=useState(false);
   const [anthropicKey,setAnthropicKey]=useState('');
   const [hasAnthropicKey,setHasAnthropicKey]=useState(false);
   const [beehiivKey,setBeehiivKey]=useState('');
@@ -3509,7 +3513,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
     }).catch(()=>{});
     api.get('/api/ha/secret').then(d=>{if(d.secret) setHaSecret(d.secret);}).catch(()=>{});
     fetch('/api/ha/smart-home-status',{headers:{..._authHdr()}}).then(r=>r.json()).then(d=>{if(d.ha){if(d.ha.url)setHaUrl(d.ha.url);if(d.ha.hasToken)setHaHasToken(true);}if(d.homey){if(d.homey.url)setHomeyUrl(d.homey.url);if(d.homey.hasToken)setHomeyHasToken(true);}}).catch(()=>{});
-    api.get('/api/settings/integrations').then(d=>{setHasAnthropicKey(!!d.has_anthropic);setHasBeehiivKey(!!d.has_beehiiv);setHasYoutubeKey(!!d.has_youtube);setHasEtsyKey(!!d.has_etsy);setHasTeslemetryKey(!!d.has_teslemetry);setHasAviationstackKey(!!d.has_aviationstack);setHasNextdnsKey(!!d.has_nextdns);setHasBeszel(!!d.has_beszel);if(d.beszel_url)setBeszelUrl(d.beszel_url);setHasPlexKey(!!d.has_plex);if(d.plex_url)setPlexUrl(d.plex_url);setHasLastfm(!!d.has_lastfm);if(d.lastfm_user)setLastfmUser(d.lastfm_user);setHasMoen(!!d.has_moen);setHasUnifi(!!d.has_unifi);
+    api.get('/api/settings/integrations').then(d=>{if(d.ai_provider)setAiProvider(d.ai_provider);setHasAiKey(!!d.has_ai_key);setHasAnthropicKey(!!d.has_anthropic);setHasBeehiivKey(!!d.has_beehiiv);setHasYoutubeKey(!!d.has_youtube);setHasEtsyKey(!!d.has_etsy);setHasTeslemetryKey(!!d.has_teslemetry);setHasAviationstackKey(!!d.has_aviationstack);setHasNextdnsKey(!!d.has_nextdns);setHasBeszel(!!d.has_beszel);if(d.beszel_url)setBeszelUrl(d.beszel_url);setHasPlexKey(!!d.has_plex);if(d.plex_url)setPlexUrl(d.plex_url);setHasLastfm(!!d.has_lastfm);if(d.lastfm_user)setLastfmUser(d.lastfm_user);setHasMoen(!!d.has_moen);setHasUnifi(!!d.has_unifi);
       // HA entity maps
       const mm={flow:d.ha_moen_flow||'',pressure:d.ha_moen_pressure||'',daily:d.ha_moen_daily||'',mode:d.ha_moen_mode||'',alert:d.ha_moen_alert||''};
       const um={clients:d.ha_unifi_clients||'',rx:d.ha_unifi_rx||'',tx:d.ha_unifi_tx||''};
@@ -3708,7 +3712,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
 
       <FormGroup label="Email Forwarding">
         <div style={{padding:'14px 16px'}}>
-          <div style={{fontSize:14,color:A.label3,marginBottom:10}}>Forward emails with dates here. They&apos;ll appear in your Inbox for review.</div>
+          <div style={{fontSize:14,color:A.label3,marginBottom:10}}>Forward emails here. Kith automatically detects calendar events (added to your Inbox for review) and shipping confirmations (added to Package Tracking).</div>
           <Inp value={fwdAddress} onChange={e=>setFwdAddress(e.target.value)} placeholder="you@yourdomain.com"/>
           <div style={{display:'flex',gap:8,marginTop:8}}>
             <Btn sm onClick={()=>saveSetting('forwarding_address',fwdAddress)}>Save</Btn>
@@ -3720,6 +3724,33 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
             <div style={{fontSize:13,color:A.label4,marginBottom:10}}>Must match the secret in your Cloudflare Worker. Copy it here after regenerating, then paste it into Cloudflare.</div>
             <WebhookSecretPanel toastAdd={toastAdd}/>
           </div>
+        </div>
+      </FormGroup>
+
+      <FormGroup label="AI Email Parsing">
+        <div style={{padding:'14px 16px'}}>
+          <div style={{fontSize:14,color:A.label3,marginBottom:12}}>Powers automatic detection of calendar events and package tracking from forwarded emails. Choose a provider and enter your API key.</div>
+          <div style={{display:'flex',flexDirection:'column',gap:8}}>
+            <select value={aiProvider} onChange={e=>setAiProvider(e.target.value)} style={{background:'var(--input-bg,#F2F2F7)',border:'none',borderRadius:A.rSm,padding:'10px 12px',fontSize:14,color:'inherit',cursor:'pointer'}}>
+              <option value="gemini">Google Gemini (free tier available)</option>
+              <option value="anthropic">Anthropic Claude</option>
+              <option value="openai">OpenAI GPT-4o mini</option>
+              <option value="groq">Groq (fast + free)</option>
+              <option value="deepseek">DeepSeek Chat (cost-optimized)</option>
+            </select>
+            <Inp type="password" value={aiKey} onChange={e=>setAiKey(e.target.value)} placeholder={hasAiKey?'API key saved — paste to replace':'Paste API key'}/>
+            <Btn sm loading={aiKeySaving} onClick={async()=>{
+              setAiKeySaving(true);
+              try{
+                await api.put('/api/settings/ai-key',{provider:aiProvider,...(aiKey?{key:aiKey}:{})});
+                setHasAiKey(true);
+                setAiKey('');
+                toastAdd('AI parsing settings saved');
+              }catch(e){toastAdd('Save failed','red');}
+              finally{setAiKeySaving(false);}
+            }}>Save</Btn>
+          </div>
+          {hasAiKey&&<div style={{fontSize:12,color:A.label5,marginTop:8}}>Key saved. Using {aiProvider}.</div>}
         </div>
       </FormGroup>
 

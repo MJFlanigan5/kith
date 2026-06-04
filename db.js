@@ -281,6 +281,7 @@ const defaults = {
   ha_unifi_tx: '',
   ha_person_entities: '',
   ha_climate_entity: '',
+  ha_media_entity: '',
   presence_source: 'both',
   ha_sensor_entities: '',
   homey_sensor_devices: '',

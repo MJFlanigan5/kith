@@ -808,6 +808,7 @@ app.get('/api/settings/integrations', requireAdmin, (req, res) => {
     ha_unifi_ap_count: get('ha_unifi_ap_count'),
     ha_person_entities:  get('ha_person_entities'),
     ha_climate_entity:   get('ha_climate_entity'),
+    ha_media_entity:     get('ha_media_entity'),
     presence_source:     get('presence_source') || 'both',
     ha_sensor_entities:    get('ha_sensor_entities'),
     homey_sensor_devices:  get('homey_sensor_devices'),
@@ -854,6 +855,7 @@ app.put('/api/settings/integrations', requireAdmin, (req, res) => {
   if (req.body.ha_person_entities   !== undefined) { upd.run('ha_person_entities',   String(req.body.ha_person_entities));   clearPersonCache = true; }
   if (req.body.presence_source      !== undefined) { upd.run('presence_source',      String(req.body.presence_source));      clearPersonCache = true; }
   if (req.body.ha_climate_entity    !== undefined) { upd.run('ha_climate_entity',    String(req.body.ha_climate_entity));    clearClimateCache = true; }
+  if (req.body.ha_media_entity      !== undefined) { upd.run('ha_media_entity',      String(req.body.ha_media_entity));      _lastfmCache = null; _lastfmCacheAt = 0; _haWsTrackedCache = null; }
   if (req.body.ha_sensor_entities   !== undefined) { upd.run('ha_sensor_entities',   String(req.body.ha_sensor_entities));   delete _wCache['ha_sensors']; }
   if (req.body.homey_sensor_devices !== undefined) { upd.run('homey_sensor_devices', String(req.body.homey_sensor_devices)); delete _wCache['ha_sensors']; }
   if (req.body.homey_person_devices !== undefined) { upd.run('homey_person_devices', String(req.body.homey_person_devices)); clearPersonCache = true; }
@@ -1423,7 +1425,15 @@ app.post('/api/ha/discover', requireAdmin, async (req, res) => {
       friendly_name: s.attributes?.friendly_name || s.entity_id.replace('climate.', ''),
     }));
 
-  res.json({ ok: true, moen: { all: moenAll, map: moenMap }, unifi: { all: unifiLikely, map: unifiMap }, allSensors, persons, climates });
+  const mediaPlayers = states
+    .filter(s => s.entity_id.startsWith('media_player.'))
+    .map(s => ({
+      entity_id: s.entity_id,
+      state: s.state,
+      friendly_name: s.attributes?.friendly_name || s.entity_id.replace('media_player.', ''),
+    }));
+
+  res.json({ ok: true, moen: { all: moenAll, map: moenMap }, unifi: { all: unifiLikely, map: unifiMap }, allSensors, persons, climates, mediaPlayers });
 });
 
 // ── Homey device discovery — finds presence and thermostat devices ─────────
@@ -1613,7 +1623,7 @@ app.get('/api/widgets/data', async (req, res) => {
   const p = [];
 
   if (gs('widget_quote_enabled') === '1')
-    p.push(_wFetch(`quote:${new Date().toISOString().slice(0,10)}`, 86400000, async () => {
+    p.push(_wFetch(`quote:${localDate()}`, 86400000, async () => {
       const r = await fetch('https://zenquotes.io/api/random', { signal: AbortSignal.timeout(6000) });
       const d = await r.json(); return { text: d[0].q, author: d[0].a };
     }).then(d => { if (d) result.quote = d; }));
@@ -2314,6 +2324,7 @@ app.get('/api/widgets/data', async (req, res) => {
           sensors.push({
             entity_id: ids[i],
             domain: 'homey',
+            device_type: d.class || '',
             name: d.name || ids[i],
             state,
             unit,
@@ -2456,9 +2467,33 @@ app.get('/api/plex/thumb', async (req, res) => {
   } catch { res.status(502).end(); }
 });
 
-app.get('/api/music/now-playing', requireAuth, async (req, res) => {
+app.get('/api/music/now-playing', async (req, res) => {
   try {
     if (_lastfmCache && Date.now() - _lastfmCacheAt < 8000) return res.json(_lastfmCache);
+    // HA media player takes priority over Last.fm
+    const haUrl = (gs('ha_url') || '').replace(/\/$/, '');
+    const haToken = gs('ha_token') || '';
+    const mediaEntity = (gs('ha_media_entity') || '').trim();
+    if (haUrl && haToken && mediaEntity) {
+      const r = await fetch(`${haUrl}/api/states/${mediaEntity}`, {
+        headers: { Authorization: `Bearer ${haToken}` },
+        signal: AbortSignal.timeout(5000),
+      });
+      if (r.ok) {
+        const state = await r.json();
+        if (state.state === 'playing') {
+          const attrs = state.attributes || {};
+          const ep = attrs.entity_picture || '';
+          _lastfmCache = { playing: true, title: attrs.media_title || '', artist: attrs.media_artist || '', thumb: ep.startsWith('http') ? ep : '' };
+        } else {
+          _lastfmCache = { playing: false };
+        }
+        _lastfmCacheAt = Date.now();
+        return res.json(_lastfmCache);
+      }
+      // HA unreachable — fall through to Last.fm
+    }
+    // Last.fm fallback
     const key  = gs('lastfm_api_key');
     const user = gs('lastfm_user');
     if (!key || !user) return res.json({ playing: false });
@@ -2628,13 +2663,25 @@ async function callAiWithMedia(imageBase64, mimeType) {
         body: JSON.stringify({ contents: [{ parts: [{ inlineData: { mimeType, data: imageBase64 } }, { text: prompt }] }], generationConfig: { responseMimeType: 'application/json' } }),
       }).then(r => r.json());
       text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    } else {
+    } else if (provider === 'anthropic') {
       const data = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
         body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 800, messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: mimeType, data: imageBase64 } }, { type: 'text', text: prompt }] }] }),
       }).then(r => r.json());
       text = data.content?.[0]?.text;
+    } else if (provider === 'openai' || provider === 'groq') {
+      // Vision-capable OpenAI-compatible providers only — DeepSeek has no vision model
+      const baseUrl = provider === 'groq' ? 'https://api.groq.com/openai/v1' : 'https://api.openai.com/v1';
+      const model = provider === 'groq' ? 'llama-3.2-90b-vision-preview' : 'gpt-4o-mini';
+      const data = await fetch(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body: JSON.stringify({ model, max_tokens: 800, messages: [{ role: 'user', content: [{ type: 'image_url', image_url: { url: `data:${mimeType};base64,${imageBase64}` } }, { type: 'text', text: prompt }] }] }),
+      }).then(r => r.json());
+      text = data.choices?.[0]?.message?.content;
+    } else {
+      return []; // provider doesn't support vision (deepseek, etc.)
     }
     if (text) text = text.replace(/^```[^\n]*\n?/, '').replace(/\n?```$/, '').trim();
     const parsed = text ? JSON.parse(text) : null;
@@ -2896,7 +2943,8 @@ cron.schedule('* * * * *', async () => {
 
   const events = db.prepare("SELECT * FROM events WHERE date=? ORDER BY time").all(today);
   const chores = db.prepare("SELECT * FROM chores WHERE status IN ('due','overdue') AND done=0").all();
-  const meal   = db.prepare("SELECT meal FROM meals WHERE day=?").get(today)?.meal || '';
+  const dayAbbr = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][now.getDay()];
+  const meal   = db.prepare("SELECT meal FROM meals WHERE day=?").get(dayAbbr)?.meal || '';
 
   if (!events.length && !chores.length && !meal) return;
 
@@ -3002,6 +3050,7 @@ function _haWsTracked() {
     ...g('ha_person_entities').split(','),
     ...g('ha_sensor_entities').split(','),
     g('ha_climate_entity'),
+    g('ha_media_entity'),
   ].map(s => s.trim()).filter(Boolean));
   _haWsTrackedAt = Date.now();
   return _haWsTrackedCache;
@@ -3026,11 +3075,23 @@ function haWsConnect() {
     } else if (msg.type === 'event') {
       const { entity_id, new_state, old_state } = msg.event?.data || {};
       if (!entity_id || !_haWsTracked().has(entity_id)) return;
-      // Skip attribute-only changes (e.g. last_updated, latitude_accuracy) — only care about state value
-      if (new_state?.state === old_state?.state) return;
-      // Soft-invalidate: force refetch while preserving stale data as fallback if HA is momentarily slow
-      // Use configured entity IDs instead of hardcoded prefixes — supports device_tracker.* and other types
       const _g = k => db.prepare('SELECT value FROM settings WHERE key=?').get(k)?.value || '';
+      const _mediaId = _g('ha_media_entity').trim();
+      // Media player: update now-playing cache directly; track changes appear as attribute-only changes
+      // so we bypass the state-equality guard for this entity
+      if (entity_id === _mediaId) {
+        if (new_state?.state === 'playing') {
+          const attrs = new_state.attributes || {};
+          const ep = attrs.entity_picture || '';
+          _lastfmCache = { playing: true, title: attrs.media_title || '', artist: attrs.media_artist || '', thumb: ep.startsWith('http') ? ep : '' };
+        } else {
+          _lastfmCache = { playing: false };
+        }
+        _lastfmCacheAt = Date.now();
+        return;
+      }
+      // Skip attribute-only changes for all other entities
+      if (new_state?.state === old_state?.state) return;
       const _personIds = new Set(_g('ha_person_entities').split(',').map(s => s.trim()).filter(Boolean));
       const _climateId = _g('ha_climate_entity').trim();
       if (_personIds.has(entity_id)) {

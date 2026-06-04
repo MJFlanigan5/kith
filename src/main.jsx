@@ -1564,7 +1564,9 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
                         if(['off','closed','locked','clear','no_motion','dry'].includes(s)) return A.green;
                         return D.t2;
                       };
-                      const domainIcon={lock:'🔒',locked:'🔒',alarm_motion:'🏃',alarm_contact:'🚪',alarm_smoke:'🔥',alarm_co:'💨',alarm_water:'💧',binary_sensor:'◉',light:'💡',switch:'🔌',alarm_control_panel:'🚨',climate:'🌡',cover:'🪟',sensor:'📡',camera:'📷',motion:'🏃',onoff:'💡',measure_temperature:'🌡',measure_humidity:'💧',measure_power:'⚡'};
+                      const domainIcon={lock:'🔒',locked:'🔒',alarm_motion:'🏃',alarm_contact:'🚪',alarm_smoke:'🔥',alarm_co:'💨',alarm_water:'💧',binary_sensor:'◉',light:'💡',switch:'🔌',alarm_control_panel:'🚨',climate:'🌡',cover:'🪟',sensor:'📡',camera:'📷',motion:'🏃',measure_temperature:'🌡',measure_humidity:'💧',measure_power:'⚡',measure_battery:'🔋'};
+                      const deviceTypeIcon={light:'💡',socket:'🔌',lock:'🔒',thermostat:'🌡',camera:'📷',doorbell:'🔔',windowcoverings:'🪟',fan:'🌀',sensor:'📡',button:'🔘',remote:'🎮'};
+                      const nameIcon=n=>{const l=n.toLowerCase();if(/motion|pir/.test(l))return'🏃';if(/door|contact|entry/.test(l))return'🚪';if(/smoke/.test(l))return'🔥';if(/leak|water|flood/.test(l))return'💧';if(/window|blind|curtain|shade/.test(l))return'🪟';if(/lock/.test(l))return'🔒';if(/temp/.test(l))return'🌡';if(/humid/.test(l))return'💧';if(/power|energy|watt/.test(l))return'⚡';if(/light|lamp|bulb/.test(l))return'💡';if(/plug|socket|outlet/.test(l))return'🔌';if(/camera/.test(l))return'📷';if(/bell|doorbell/.test(l))return'🔔';if(/fan/.test(l))return'🌀';return null;};
                       const isBinary=s=>!s.unit&&['on','off','open','closed','locked','unlocked','detected','clear','motion','no_motion','leak','dry'].includes(String(s.state||''));
                       const visible=sensors.slice(0,9);
                       const hidden=sensors.length-visible.length;
@@ -1575,7 +1577,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
                           <div style={{flex:1,display:'grid',gridTemplateColumns:`repeat(${cols},1fr)`,gap:isTV?10:7,alignContent:'start',overflow:'hidden'}}>
                             {visible.map((s,i)=>{
                               const st=s.state!=null?String(s.state):'unknown';
-                              const icon=domainIcon[s.device_class]||domainIcon[s.domain]||'◉';
+                              const icon=nameIcon(s.name||'')||domainIcon[s.device_class]||deviceTypeIcon[s.device_type]||domainIcon[s.domain]||'◉';
                               const color=stateColor(st);
                               const binary=isBinary(s);
                               return(
@@ -3417,6 +3419,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [haUnifiSource,setHaUnifiSource]=useState('direct');
   const [haPersonIds,setHaPersonIds]=useState([]);
   const [haClimateEntity,setHaClimateEntity]=useState('');
+  const [haMediaEntity,setHaMediaEntity]=useState('');
   const [haSensorEntities,setHaSensorEntities]=useState('');
   const [presenceSource,setPresenceSource]=useState('both');
   const [homeyDiscovering,setHomeyDiscovering]=useState(false);
@@ -3539,6 +3542,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
       const personStr=d.ha_person_entities||'';
       setHaPersonIds(personStr?personStr.split(',').map(s=>s.trim()).filter(Boolean):[]);
       setHaClimateEntity(d.ha_climate_entity||'');
+      setHaMediaEntity(d.ha_media_entity||'');
       setHaSensorEntities(d.ha_sensor_entities||'');
       setPresenceSource(d.presence_source||'both');
       const homeyPersonStr=d.homey_person_devices||'';
@@ -4068,6 +4072,9 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
               if(r.persons?.length&&haPersonIds.length===0) setHaPersonIds(r.persons.map(p=>p.entity_id));
               // Auto-select first climate entity if only one found
               if(r.climates?.length===1) setHaClimateEntity(r.climates[0].entity_id);
+              // Auto-select Spotify media player if found
+              const spotifyPlayer=r.mediaPlayers?.find(p=>p.entity_id.includes('spotify'));
+              if(spotifyPlayer&&!haMediaEntity) setHaMediaEntity(spotifyPlayer.entity_id);
               const moenFound=Object.values(r.moen?.map||{}).filter(Boolean).length;
               const unifiFound=Object.values(r.unifi?.map||{}).filter(Boolean).length;
               toastAdd(`Found ${r.moen?.all?.length||0} Moen, ${r.unifi?.all?.length||0} UniFi, ${r.persons?.length||0} persons, ${r.climates?.length||0} thermostats — ${moenFound+unifiFound} auto-mapped`);
@@ -4080,6 +4087,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
               {haUnifiMap.clients&&<div style={{color:A.label4,fontFamily:'monospace',fontSize:11}}>UniFi clients: {haUnifiMap.clients}</div>}
               {haPersonIds.length>0&&<div style={{color:A.label4,fontFamily:'monospace',fontSize:11}}>Who's home (HA): {haPersonIds.join(', ')}</div>}
               {haClimateEntity&&<div style={{color:A.label4,fontFamily:'monospace',fontSize:11}}>Thermostat (HA): {haClimateEntity}</div>}
+              {haMediaEntity&&<div style={{color:A.label4,fontFamily:'monospace',fontSize:11}}>Now playing (HA): {haMediaEntity}</div>}
               {haSensorEntities&&<div style={{color:A.label4,fontFamily:'monospace',fontSize:11}}>Home tiles: {haSensorEntities}</div>}
             </div>
           )}
@@ -4135,6 +4143,16 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
                   </select>
                 </div>
               }
+              <div style={{fontSize:12,fontWeight:600,color:A.label2,marginTop:12,marginBottom:8}}>Now Playing (Media Player)</div>
+              {(haDiscovered.mediaPlayers||[]).length===0
+                ?<div style={{fontSize:11,color:A.label5,marginBottom:4}}>No media_player.* entities found in HA</div>
+                :<div style={{marginBottom:6}}>
+                  <select value={haMediaEntity} onChange={e=>setHaMediaEntity(e.target.value)} style={{width:'100%',background:A.inputBg,border:`1px solid ${A.sep}`,borderRadius:A.rSm,padding:'5px 8px',fontSize:12,color:A.label1}}>
+                    <option value="">— not mapped —</option>
+                    {(haDiscovered.mediaPlayers||[]).map(s=><option key={s.entity_id} value={s.entity_id}>{s.friendly_name} ({s.state})</option>)}
+                  </select>
+                </div>
+              }
               <div style={{fontSize:12,fontWeight:600,color:A.label2,marginTop:12,marginBottom:6}}>Home Tile Entities</div>
               <div style={{fontSize:11,color:A.label5,marginBottom:6}}>Pick up to 6 entities to show as live tiles (security, lights, locks, sensors…)</div>
               {(()=>{
@@ -4160,7 +4178,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
                 );
               })()}
               <Btn sm style={{marginTop:8}} onClick={async()=>{
-                const payload={ha_moen_flow:haMoenMap.flow,ha_moen_pressure:haMoenMap.pressure,ha_moen_daily:haMoenMap.daily,ha_moen_mode:haMoenMap.mode,ha_moen_alert:haMoenMap.alert,ha_unifi_clients:haUnifiMap.clients,ha_unifi_rx:haUnifiMap.rx,ha_unifi_tx:haUnifiMap.tx,ha_person_entities:haPersonIds.join(','),ha_climate_entity:haClimateEntity,ha_sensor_entities:haSensorEntities,presence_source:presenceSource};
+                const payload={ha_moen_flow:haMoenMap.flow,ha_moen_pressure:haMoenMap.pressure,ha_moen_daily:haMoenMap.daily,ha_moen_mode:haMoenMap.mode,ha_moen_alert:haMoenMap.alert,ha_unifi_clients:haUnifiMap.clients,ha_unifi_rx:haUnifiMap.rx,ha_unifi_tx:haUnifiMap.tx,ha_person_entities:haPersonIds.join(','),ha_climate_entity:haClimateEntity,ha_media_entity:haMediaEntity,ha_sensor_entities:haSensorEntities,presence_source:presenceSource};
                 await fetch('/api/settings/integrations',{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify(payload)});
                 if(haMoenMap.flow) setHaMoenSource('ha'); else setHaMoenSource('direct');
                 if(haUnifiMap.clients||haUnifiMap.rx||haUnifiMap.tx) setHaUnifiSource('ha'); else setHaUnifiSource('direct');

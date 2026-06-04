@@ -5084,7 +5084,7 @@ function MessagesScreen({messages,setMessages,members=[],toastAdd}){
   );
 }
 
-function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocery,setGrocery,meals,setMeals,icsSources,setIcsSources,inboxCount,setInboxCount,countdowns,setCountdowns,members,setMembers,photos,setPhotos,clockFormat,setClockFormat,weather,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd,setRefreshMs,parseRefreshMs,goals,setGoals,notes,setNotes,polls,setPolls,bookmarks,setBookmarks,quickActions,setQuickActions,setRotationMs,setWifiQrData,darkMode,onDarkMode,packages,setPackages,messages,setMessages}){
+function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocery,setGrocery,meals,setMeals,icsSources,setIcsSources,inboxCount,setInboxCount,countdowns,setCountdowns,members,setMembers,photos,setPhotos,clockFormat,setClockFormat,weather,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd,setRefreshMs,parseRefreshMs,goals,setGoals,notes,setNotes,polls,setPolls,bookmarks,setBookmarks,quickActions,setQuickActions,setRotationMs,setWifiQrData,darkMode,onDarkMode,packages,setPackages,messages,setMessages,isAdmin=false}){
   const isMobile=useIsMobile();
   const [screen,setScreen]=useState('dashboard');
   const {toasts,add:toastAdd}=useToast();
@@ -5159,7 +5159,7 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
             );
           })}
         </div>
-        <QuickAddFAB screen={screen} setGrocery={setGrocery} setChores={setChores} toastAdd={toastAdd} isAdmin={!!auth&&!currentMember&&!kiosk}/>
+        <QuickAddFAB screen={screen} setGrocery={setGrocery} setChores={setChores} toastAdd={toastAdd} isAdmin={isAdmin}/>
         <ToastStack toasts={toasts}/>
       </div>
     );
@@ -5758,7 +5758,7 @@ function App(){
   const goManage=()=>{localStorage.setItem('kith_mode','manage');setMode('manage');};
   return mode==='display'
     ?<DisplayMode onManage={goManage} events={events} chores={chores} setChores={setChores} meals={meals} grocery={grocery} setGrocery={setGrocery} countdowns={countdowns} photos={photos} clockFormat={clockFormat} weather={weather} nightModeStart={nightModeStart} nightModeEnd={nightModeEnd} goals={goals} notes={notes} polls={polls} rotationMs={rotationMs} wifiQrData={wifiQrData} quickActions={quickActions} members={members} packages={packages} setPackages={setPackages} messages={messages} setMessages={setMessages}/>
-    :<ManageMode onDisplay={goDisplay} onLogout={handleLogout} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources} inboxCount={inboxCount} setInboxCount={setInboxCount} countdowns={countdowns} setCountdowns={setCountdowns} members={members} setMembers={setMembers} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} weather={weather} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} goals={goals} setGoals={setGoals} notes={notes} setNotes={setNotes} polls={polls} setPolls={setPolls} bookmarks={bookmarks} setBookmarks={setBookmarks} quickActions={quickActions} setQuickActions={setQuickActions} setRotationMs={setRotationMs} setWifiQrData={setWifiQrData} darkMode={darkMode} onDarkMode={handleDarkMode} packages={packages} setPackages={setPackages} messages={messages} setMessages={setMessages}/>;
+    :<ManageMode onDisplay={goDisplay} onLogout={handleLogout} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources} inboxCount={inboxCount} setInboxCount={setInboxCount} countdowns={countdowns} setCountdowns={setCountdowns} members={members} setMembers={setMembers} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} weather={weather} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} goals={goals} setGoals={setGoals} notes={notes} setNotes={setNotes} polls={polls} setPolls={setPolls} bookmarks={bookmarks} setBookmarks={setBookmarks} quickActions={quickActions} setQuickActions={setQuickActions} setRotationMs={setRotationMs} setWifiQrData={setWifiQrData} darkMode={darkMode} onDarkMode={handleDarkMode} packages={packages} setPackages={setPackages} messages={messages} setMessages={setMessages} isAdmin={!!auth&&!currentMember&&!kiosk}/>;
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);

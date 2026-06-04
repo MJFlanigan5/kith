@@ -273,9 +273,12 @@ function CountdownsScreen({countdowns,setCountdowns,toastAdd}){
     toastAdd('Updated');
   };
   const del=async id=>{
-    await api.del(`/api/countdowns/${id}`);
-    setCountdowns(p=>p.filter(c=>c.id!==id));
-    toastAdd('Deleted','blue');
+    try{
+      const r=await api.del(`/api/countdowns/${id}`);
+      if(r?.error){toastAdd('Failed to delete','red');return;}
+      setCountdowns(p=>p.filter(c=>c.id!==id));
+      toastAdd('Deleted','blue');
+    }catch{toastAdd('Failed to delete','red');}
   };
   const clearPast=async()=>{
     const past=countdowns.filter(c=>daysUntil(c.date)<0);
@@ -388,9 +391,12 @@ function FamilyScreen({members,setMembers,toastAdd}){
     toastAdd('Updated');
   };
   const del=async id=>{
-    await api.del(`/api/members/${id}`);
-    setMembers(p=>p.filter(m=>m.id!==id));
-    toastAdd('Removed','blue');
+    try{
+      const r=await api.del(`/api/members/${id}`);
+      if(r?.error){toastAdd('Failed to remove','red');return;}
+      setMembers(p=>p.filter(m=>m.id!==id));
+      toastAdd('Removed','blue');
+    }catch{toastAdd('Failed to remove','red');}
   };
   const savePin=async()=>{
     if(!String(pinInput||'').match(/^\d{4,8}$/)){toastAdd('PIN must be 4–8 digits','red');return;}
@@ -1554,16 +1560,18 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
                         return D.t2;
                       };
                       const domainIcon={lock:'🔒',locked:'🔒',alarm_motion:'🏃',alarm_contact:'🚪',alarm_smoke:'🔥',alarm_co:'💨',alarm_water:'💧',binary_sensor:'◉',light:'💡',switch:'🔌',alarm_control_panel:'🚨',climate:'🌡',cover:'🪟',sensor:'📡',camera:'📷',motion:'🏃',onoff:'💡',measure_temperature:'🌡',measure_humidity:'💧',measure_power:'⚡'};
-                      const isBinary=s=>!s.unit&&['on','off','open','closed','locked','unlocked','detected','clear','motion','no_motion','leak','dry'].includes(s.state);
-                      const visible=sensors.slice(0,9); // cap at 3×3 for readability at TV distance
+                      const isBinary=s=>!s.unit&&['on','off','open','closed','locked','unlocked','detected','clear','motion','no_motion','leak','dry'].includes(String(s.state||''));
+                      const visible=sensors.slice(0,9);
+                      const hidden=sensors.length-visible.length;
                       const cols=visible.length===1?1:visible.length<=4?2:3;
                       return(
                         <div style={{flex:1,display:'flex',flexDirection:'column',minHeight:0}}>
                           <WLabel style={{marginBottom:8,flexShrink:0}}>Home</WLabel>
                           <div style={{flex:1,display:'grid',gridTemplateColumns:`repeat(${cols},1fr)`,gap:isTV?10:7,alignContent:'start',overflow:'hidden'}}>
                             {visible.map((s,i)=>{
+                              const st=s.state!=null?String(s.state):'unknown';
                               const icon=domainIcon[s.device_class]||domainIcon[s.domain]||'◉';
-                              const color=stateColor(s.state);
+                              const color=stateColor(st);
                               const binary=isBinary(s);
                               return(
                                 <div key={i} style={{position:'relative',background:'rgba(255,255,255,0.07)',borderRadius:14,border:'1px solid rgba(255,255,255,0.09)',padding:isTV?'12px 12px 9px':'9px 9px 7px',display:'flex',flexDirection:'column',justifyContent:'space-between',aspectRatio:'1',overflow:'hidden'}}>
@@ -1572,16 +1580,17 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
                                     {binary
                                       ?<div style={{width:isTV?11:9,height:isTV?11:9,borderRadius:'50%',background:color,marginTop:2,flexShrink:0}}/>
                                       :<div style={{textAlign:'right',lineHeight:1.15,minWidth:0,overflow:'hidden'}}>
-                                        <div style={{fontSize:isTV?14:11,fontWeight:800,color:D.t1,letterSpacing:'-.02em',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.state}</div>
+                                        <div style={{fontSize:isTV?14:11,fontWeight:800,color:D.t1,letterSpacing:'-.02em',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{st}</div>
                                         {s.unit&&<div style={{fontSize:isTV?10:8,color:D.t3,fontWeight:500,marginTop:1}}>{s.unit}</div>}
                                       </div>
                                     }
                                   </div>
-                                  <div style={{fontSize:isTV?11:9,fontWeight:500,color:D.t3,lineHeight:1.2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name}</div>
+                                  <div style={{fontSize:isTV?11:9,fontWeight:500,color:D.t3,lineHeight:1.2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name||'—'}</div>
                                 </div>
                               );
                             })}
                           </div>
+                          {hidden>0&&<div style={{fontSize:isTV?10:8,color:D.t4,textAlign:'right',marginTop:4,flexShrink:0}}>+{hidden} more</div>}
                         </div>
                       );
                     })()}
@@ -3098,7 +3107,10 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,toastAdd}){
     }catch{toastAdd('Failed to add item','red');}
   };
   const toggle=async id=>{
-    const result=await api.put(`/api/grocery/${id}/toggle`);
+    let result;
+    try{result=await api.put(`/api/grocery/${id}/toggle`);}
+    catch{toastAdd('Failed to update item','red');return;}
+    if(result?.error){toastAdd('Failed to update item','red');return;}
     setGrocery(p=>p.map(i=>i.id===id?{...i,checked:result.checked}:i));
     if(result.checked){
       // Start removal countdown — item fades then deletes after 1.2s

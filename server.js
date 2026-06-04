@@ -2731,27 +2731,27 @@ app.get('/api/packages', (req, res) => {
   res.json(rows);
 });
 
-app.post('/api/packages', (req, res) => {
+app.post('/api/packages', requireAuth, (req, res) => {
   const { carrier='', tracking_number='', description='', expected_date='' } = req.body || {};
-  if (!description && !tracking_number) return res.json({ error: 'description or tracking_number required' });
+  if (!description && !tracking_number) return res.status(400).json({ error: 'description or tracking_number required' });
   const row = db.prepare('INSERT INTO packages (carrier,tracking_number,description,expected_date,source_subject) VALUES (?,?,?,?,?) RETURNING *')
     .get(carrier, tracking_number, description, expected_date, '');
-  broadcastSSE({ type: 'refresh', key: 'packages' });
+  broadcastSSE('packages', { action: 'reload' });
   res.json(row);
 });
 
-app.put('/api/packages/:id/delivered', (req, res) => {
+app.put('/api/packages/:id/delivered', requireAuth, (req, res) => {
   const row = db.prepare('UPDATE packages SET delivered=1, status=? WHERE id=? RETURNING *')
     .get('delivered', Number(req.params.id));
-  if (!row) return res.json({ error: 'Not found' });
-  broadcastSSE({ type: 'refresh', key: 'packages' });
+  if (!row) return res.status(404).json({ error: 'Not found' });
+  broadcastSSE('packages', { action: 'reload' });
   res.json(row);
 });
 
-app.delete('/api/packages/:id', (req, res) => {
+app.delete('/api/packages/:id', requireAuth, (req, res) => {
   const info = db.prepare('DELETE FROM packages WHERE id=?').run(Number(req.params.id));
-  if (!info.changes) return res.json({ error: 'Not found' });
-  broadcastSSE({ type: 'refresh', key: 'packages' });
+  if (!info.changes) return res.status(404).json({ error: 'Not found' });
+  broadcastSSE('packages', { action: 'reload' });
   res.json({ ok: true });
 });
 
@@ -2762,7 +2762,7 @@ app.get('/api/messages', (req, res) => {
   res.json(rows);
 });
 
-app.post('/api/messages', (req, res) => {
+app.post('/api/messages', requireAuth, (req, res) => {
   const { text, author='', member_id=null, expiry_preset='4h' } = req.body || {};
   if (!text?.trim()) return res.json({ error: 'text required' });
   let expires_at;
@@ -2780,7 +2780,7 @@ app.post('/api/messages', (req, res) => {
   res.json(row);
 });
 
-app.delete('/api/messages/:id', (req, res) => {
+app.delete('/api/messages/:id', requireAuth, (req, res) => {
   const info = db.prepare('DELETE FROM messages WHERE id=?').run(Number(req.params.id));
   if (!info.changes) return res.json({ error: 'Not found' });
   broadcastSSE('messages', { action: 'reload' });

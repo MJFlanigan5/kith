@@ -751,7 +751,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
     ...(uncheckedGrocery.length>0?['w_grocery']:[]),
     ...(photos.length>0?['w_photos']:[]),
     ...(packages.length>0?['w_packages']:[]),
-    ...(messages.length>0?['w_messages']:[]),
+    ...(messages.some(m=>new Date(m.expires_at.replace(' ','T')+'Z').getTime()>Date.now())?['w_messages']:[]),
   ];
   const activePanelId=centerPanels[centerIdx%Math.max(1,centerPanels.length)];
   useEffect(()=>{
@@ -1712,6 +1712,8 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
                     })()}
                     {visiblePanelId==='w_messages'&&messages.length>0&&(()=>{
                       const now=Date.now();
+                      const liveMsgs=messages.filter(m=>new Date(m.expires_at.replace(' ','T')+'Z').getTime()>now);
+                      if(!liveMsgs.length) return null;
                       const fmtTimeLeft=expiresAt=>{
                         const ms=new Date(expiresAt.replace(' ','T')+'Z').getTime()-now;
                         if(ms<=0) return 'Expired';
@@ -1724,7 +1726,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
                         <>
                           <WLabel>Messages</WLabel>
                           <div style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:10,marginTop:4}}>
-                            {messages.map(msg=>(
+                            {liveMsgs.map(msg=>(
                               <div key={msg.id} style={{background:'rgba(255,255,255,0.05)',borderRadius:10,padding:'14px 16px'}}>
                                 <div style={{fontSize:17,fontWeight:600,color:D.t1,lineHeight:1.4,marginBottom:6}}>{msg.text}</div>
                                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>

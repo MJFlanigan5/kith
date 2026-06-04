@@ -3342,11 +3342,11 @@ function WebhookSecretPanel({toastAdd}){
   };
 
   const regen=async()=>{
-    if(!confirm('Generate a new webhook secret? You will need to update Cloudflare with the new value.')) return;
+    if(!confirm('Generate a new webhook secret? You will need to update your forwarding service with the new value.')) return;
     setLoading(true);
     const r=await api.put('/api/settings/webhook-secret',{});
     setLoading(false);
-    if(r?.secret){setSecret(r.secret);setRevealed(true);toastAdd('New secret generated — copy it and update Cloudflare','blue');}
+    if(r?.secret){setSecret(r.secret);setRevealed(true);toastAdd('New secret generated — update your forwarding service','blue');}
     else toastAdd('Failed to generate','red');
   };
 
@@ -3363,7 +3363,7 @@ function WebhookSecretPanel({toastAdd}){
         <Btn sm variant="ghost" onClick={copy}>Copy</Btn>
       </div>
       <Btn sm variant="ghost" onClick={regen} disabled={loading}>{loading?'Generating…':'Regenerate'}</Btn>
-      <div style={{fontSize:12,color:A.label5,marginTop:8}}>After regenerating, paste the new value into your Cloudflare Worker as <code>HEARTH_WEBHOOK_SECRET</code>.</div>
+      <div style={{fontSize:12,color:A.label5,marginTop:8}}>After regenerating, update your forwarding service with the new value.</div>
     </div>
   );
 }
@@ -3714,17 +3714,28 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
 
       <FormGroup label="Email Forwarding">
         <div style={{padding:'14px 16px'}}>
-          <div style={{fontSize:14,color:A.label3,marginBottom:10}}>Forward emails here. Kith automatically detects calendar events (added to your Inbox for review) and shipping confirmations (added to Package Tracking).</div>
-          <Inp value={fwdAddress} onChange={e=>setFwdAddress(e.target.value)} placeholder="you@yourdomain.com"/>
-          <div style={{display:'flex',gap:8,marginTop:8}}>
-            <Btn sm onClick={()=>saveSetting('forwarding_address',fwdAddress)}>Save</Btn>
-            <Btn sm variant="ghost" onClick={()=>{navigator.clipboard.writeText(fwdAddress);toastAdd('Copied','blue');}}>Copy</Btn>
+          <div style={{fontSize:14,color:A.label3,marginBottom:12}}>Point an email forwarding service at this webhook URL. Kith parses the email with AI and auto-detects calendar events (Inbox) and shipping confirmations (Packages).</div>
+          <div style={{marginBottom:12}}>
+            <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:6}}>Webhook URL</div>
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <code style={{flex:1,fontSize:12,background:A.inputBg,padding:'8px 12px',borderRadius:A.rXs,border:`1px solid ${A.sep}`,color:A.label2,wordBreak:'break-all'}}>{window.location.origin}/api/email/inbound</code>
+              <Btn sm variant="ghost" onClick={()=>{navigator.clipboard.writeText(`${window.location.origin}/api/email/inbound`);toastAdd('Copied','blue');}}>Copy</Btn>
+            </div>
+            <div style={{fontSize:12,color:A.label5,marginTop:6}}>Recommended: Gmail filter → forward to Postmark Inbound → set Postmark to POST here. Or use Zapier, Make, or a Cloudflare Email Worker.</div>
           </div>
-          <div style={{fontSize:12,color:A.label5,marginTop:8}}>Changing this address requires updating your email routing rules.</div>
-          <div style={{borderTop:`1px solid ${A.sep}`,marginTop:14,paddingTop:14}}>
+          <div style={{borderTop:`1px solid ${A.sep}`,marginTop:4,paddingTop:14}}>
             <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:4}}>Webhook secret</div>
-            <div style={{fontSize:13,color:A.label4,marginBottom:10}}>Must match the secret in your Cloudflare Worker. Copy it here after regenerating, then paste it into Cloudflare.</div>
+            <div style={{fontSize:13,color:A.label4,marginBottom:10}}>Your forwarding service must send this as an <code style={{fontSize:11,background:A.inputBg,padding:'1px 5px',borderRadius:4}}>x-kith-secret</code> header. Requests without it are rejected.</div>
             <WebhookSecretPanel toastAdd={toastAdd}/>
+          </div>
+          <div style={{borderTop:`1px solid ${A.sep}`,marginTop:14,paddingTop:14}}>
+            <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:4}}>Forwarding address (optional)</div>
+            <div style={{fontSize:13,color:A.label4,marginBottom:8}}>Record the email address you set up — this is just a reminder for yourself.</div>
+            <Inp value={fwdAddress} onChange={e=>setFwdAddress(e.target.value)} placeholder="kith@yourdomain.com or postmark address"/>
+            <div style={{display:'flex',gap:8,marginTop:8}}>
+              <Btn sm onClick={()=>saveSetting('forwarding_address',fwdAddress)}>Save</Btn>
+              {fwdAddress&&<Btn sm variant="ghost" onClick={()=>{navigator.clipboard.writeText(fwdAddress);toastAdd('Copied','blue');}}>Copy</Btn>}
+            </div>
           </div>
         </div>
       </FormGroup>

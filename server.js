@@ -1433,7 +1433,16 @@ app.post('/api/ha/discover', requireAdmin, async (req, res) => {
       friendly_name: s.attributes?.friendly_name || s.entity_id.replace('media_player.', ''),
     }));
 
-  res.json({ ok: true, moen: { all: moenAll, map: moenMap }, unifi: { all: unifiLikely, map: unifiMap }, allSensors, persons, climates, mediaPlayers });
+  // Auto-save Spotify media player if found and not already configured
+  const existingMedia = get('ha_media_entity');
+  const spotifyPlayer = mediaPlayers.find(p => p.entity_id.includes('spotify'));
+  const autoMediaEntity = spotifyPlayer?.entity_id || (mediaPlayers.length === 1 ? mediaPlayers[0].entity_id : '');
+  if (autoMediaEntity && !existingMedia) {
+    db.prepare('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)').run('ha_media_entity', autoMediaEntity);
+    _lastfmCache = null; _lastfmCacheAt = 0; _haWsTrackedCache = null;
+  }
+
+  res.json({ ok: true, moen: { all: moenAll, map: moenMap }, unifi: { all: unifiLikely, map: unifiMap }, allSensors, persons, climates, mediaPlayers, ha_media_entity: get('ha_media_entity') });
 });
 
 // ── Homey device discovery — finds presence and thermostat devices ─────────

@@ -4073,8 +4073,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
               // Auto-select first climate entity if only one found
               if(r.climates?.length===1) setHaClimateEntity(r.climates[0].entity_id);
               // Auto-select Spotify media player if found
-              const spotifyPlayer=r.mediaPlayers?.find(p=>p.entity_id.includes('spotify'));
-              if(spotifyPlayer&&!haMediaEntity) setHaMediaEntity(spotifyPlayer.entity_id);
+              if(r.ha_media_entity) setHaMediaEntity(r.ha_media_entity);
               const moenFound=Object.values(r.moen?.map||{}).filter(Boolean).length;
               const unifiFound=Object.values(r.unifi?.map||{}).filter(Boolean).length;
               toastAdd(`Found ${r.moen?.all?.length||0} Moen, ${r.unifi?.all?.length||0} UniFi, ${r.persons?.length||0} persons, ${r.climates?.length||0} thermostats — ${moenFound+unifiFound} auto-mapped`);

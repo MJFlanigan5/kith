@@ -436,7 +436,10 @@ app.delete('/api/events/:id', requireAuth, (req, res) => {
     if (scope === 'all') {
       db.prepare('DELETE FROM events WHERE id=? OR external_id=?').run(seriesId, seriesId);
     } else if (scope === 'future') {
-      db.prepare('DELETE FROM events WHERE (id=? OR external_id=?) AND date>=?').run(seriesId, seriesId, ev.date);
+      // Don't include id=seriesId — that would delete the root event even when deleting from a later child
+      db.prepare('DELETE FROM events WHERE external_id=? AND date>=?').run(seriesId, ev.date);
+      // Also delete the root if it's the selected event itself
+      if (ev.id === seriesId) db.prepare('DELETE FROM events WHERE id=?').run(seriesId);
     }
   }
   res.json({ ok: true });
@@ -519,7 +522,7 @@ app.put('/api/chores/:id/done', requireAuth, (req, res) => {
   // Recurring chores: reset done=0 immediately after logging — they advance to next cycle
   const storedDone = isRecurring ? 0 : done;
   db.prepare('UPDATE chores SET done=?,last_done=?,next_due=?,streak=? WHERE id=?').run(storedDone, lastDone, nextDue, newStreak, c.id);
-  if (done && req.user.role !== 'admin') {
+  if (done) {
     const member = db.prepare('SELECT * FROM family_members WHERE id=?').get(Number(req.user.sub));
     if (member) {
       db.prepare('INSERT INTO chore_completions (chore_id,member_id,member_name,points) VALUES (?,?,?,?)')
@@ -2605,6 +2608,7 @@ async function callAiForEvent(subject, body) {
       }).then(r => r.json());
       text = data.content?.[0]?.text;
     }
+    if (text) text = text.replace(/^```[^\n]*\n?/, '').replace(/\n?```$/, '').trim();
     return text ? JSON.parse(text) : null;
   } catch { return null; }
 }
@@ -2632,6 +2636,7 @@ async function callAiWithMedia(imageBase64, mimeType) {
       }).then(r => r.json());
       text = data.content?.[0]?.text;
     }
+    if (text) text = text.replace(/^```[^\n]*\n?/, '').replace(/\n?```$/, '').trim();
     const parsed = text ? JSON.parse(text) : null;
     return Array.isArray(parsed?.events) ? parsed.events : [];
   } catch { return []; }
@@ -2671,6 +2676,7 @@ async function callAiForPackage(subject, body) {
       }).then(r => r.json());
       text = data.content?.[0]?.text;
     }
+    if (text) text = text.replace(/^```[^\n]*\n?/, '').replace(/\n?```$/, '').trim();
     return text ? JSON.parse(text) : null;
   } catch { return null; }
 }
@@ -2764,7 +2770,7 @@ app.get('/api/messages', (req, res) => {
 
 app.post('/api/messages', requireAuth, (req, res) => {
   const { text, author='', member_id=null, expiry_preset='4h' } = req.body || {};
-  if (!text?.trim()) return res.json({ error: 'text required' });
+  if (!text?.trim()) return res.status(400).json({ error: 'text required' });
   let expires_at;
   if (expiry_preset === 'eod') {
     expires_at = db.prepare(`SELECT datetime('now', 'start of day', '+1 day') as t`).get().t;
@@ -2782,7 +2788,7 @@ app.post('/api/messages', requireAuth, (req, res) => {
 
 app.delete('/api/messages/:id', requireAuth, (req, res) => {
   const info = db.prepare('DELETE FROM messages WHERE id=?').run(Number(req.params.id));
-  if (!info.changes) return res.json({ error: 'Not found' });
+  if (!info.changes) return res.status(404).json({ error: 'Not found' });
   broadcastSSE('messages', { action: 'reload' });
   res.json({ ok: true });
 });

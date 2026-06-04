@@ -1713,7 +1713,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
                     {visiblePanelId==='w_messages'&&messages.length>0&&(()=>{
                       const now=Date.now();
                       const fmtTimeLeft=expiresAt=>{
-                        const ms=new Date(expiresAt+'Z').getTime()-now;
+                        const ms=new Date(expiresAt.replace(' ','T')+'Z').getTime()-now;
                         if(ms<=0) return 'Expired';
                         const mins=Math.floor(ms/60000);
                         if(mins<60) return `${mins}m left`;
@@ -5015,7 +5015,7 @@ function MessagesScreen({messages,setMessages,members=[],toastAdd}){
   };
 
   const fmtLeft=expiresAt=>{
-    const ms=new Date(expiresAt+'Z').getTime()-Date.now();
+    const ms=new Date(expiresAt.replace(' ','T')+'Z').getTime()-Date.now();
     if(ms<=0) return 'Expired';
     const mins=Math.floor(ms/60000);
     if(mins<60) return `${mins}m left`;
@@ -5716,7 +5716,8 @@ function App(){
         api.get('/api/members'),
         api.get('/api/photos'),
         api.get('/api/messages'),
-      ]).then(([ev,ch,gr,cd,inb,ml,mb,ph,ms])=>{
+        api.get('/api/packages'),
+      ]).then(([ev,ch,gr,cd,inb,ml,mb,ph,ms,pk])=>{
         if(ev.status==='fulfilled'&&Array.isArray(ev.value)) setEvents(ev.value);
         if(ch.status==='fulfilled'&&Array.isArray(ch.value)) setChores(ch.value);
         if(gr.status==='fulfilled'&&Array.isArray(gr.value)) setGrocery(gr.value);
@@ -5726,6 +5727,7 @@ function App(){
         if(mb.status==='fulfilled'&&Array.isArray(mb.value)) setMembers(mb.value);
         if(ph.status==='fulfilled'&&Array.isArray(ph.value)) setPhotos(ph.value);
         if(ms.status==='fulfilled'&&Array.isArray(ms.value)) setMessages(ms.value);
+        if(pk.status==='fulfilled'&&Array.isArray(pk.value)) setPackages(pk.value);
       });
       api.get('/api/weather').then(w=>{if(!w.error) setWeather(w);}).catch(()=>{});
     };

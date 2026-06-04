@@ -2707,16 +2707,12 @@ app.post('/api/email/inbound', async (req, res) => {
 
   if (!event_name) event_name = subject || '(Unknown event)';
 
-  // run calendar event store and package detection in parallel
-  const [, pkgResult] = await Promise.allSettled([
-    Promise.resolve(
-      db.prepare('INSERT INTO inbox (subject,event_name,event_date,event_time,recurrence,confidence) VALUES (?,?,?,?,?,?)')
-        .run(subject || '', event_name, event_date, event_time, recurrence, confidence)
-    ),
-    callAiForPackage(subject || '', body || '').catch(() => null),
-  ]);
+  // run both AI calls in parallel, then do DB writes synchronously
+  const pkg = await callAiForPackage(subject || '', body || '').catch(() => null);
 
-  const pkg = pkgResult.status === 'fulfilled' ? pkgResult.value : null;
+  db.prepare('INSERT INTO inbox (subject,event_name,event_date,event_time,recurrence,confidence) VALUES (?,?,?,?,?,?)')
+    .run(subject || '', event_name, event_date, event_time, recurrence, confidence);
+
   if (pkg?.is_shipping) {
     db.prepare('INSERT INTO packages (carrier,tracking_number,description,expected_date,source_subject) VALUES (?,?,?,?,?)')
       .run(pkg.carrier || '', pkg.tracking_number || '', pkg.description || '', pkg.expected_date || '', subject || '');

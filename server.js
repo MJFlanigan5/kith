@@ -3108,6 +3108,7 @@ function haWsConnect() {
         if (new_state?.state === 'home' && old_state?.state !== 'home') {
           const name = (new_state?.attributes?.friendly_name || entity_id).split(' ')[0];
           sendPushToAll({ title: `${name} is home`, body: 'Welcome home!', tag: `arrival-${entity_id}` });
+          broadcastSSE('arrival', { name, entity_id, source: 'ha' });
         }
       } else if (entity_id === _climateId || entity_id.startsWith('climate.')) _wInvalidate('thermostat');
       else _wInvalidate('ha_sensors');
@@ -3134,6 +3135,7 @@ setTimeout(haWsConnect, 3000); // wait for DB init
 // ── Homey background poller — real-time timeline + presence ───────────────────
 let _homeyTlKey = null;   // newest timeline entry key (to detect new ones)
 let _homeyPresence = {};  // userId → present boolean
+let _homeyNames = {};    // userId → display name
 
 async function homeyPoll() {
   const g = k => db.prepare('SELECT value FROM settings WHERE key=?').get(k)?.value || '';
@@ -3189,7 +3191,17 @@ async function homeyPoll() {
     let changed = false;
     for (const uid of uids) {
       const u = usersMap[uid]; if (!u) continue;
-      if (_homeyPresence[uid] !== u.present) { changed = true; _homeyPresence[uid] = u.present; }
+      const name = (u.name || uid).split(' ')[0];
+      _homeyNames[uid] = name;
+      if (_homeyPresence[uid] !== u.present) {
+        const wasPresent = _homeyPresence[uid];
+        _homeyPresence[uid] = u.present;
+        changed = true;
+        if (u.present === true && wasPresent !== true) {
+          sendPushToAll({ title: `${name} is home`, body: 'Welcome home!', tag: `arrival-homey-${uid}` });
+          broadcastSSE('arrival', { name, entity_id: uid, source: 'homey' });
+        }
+      }
     }
     if (changed) {
       _wInvalidate('who_home');
@@ -3240,8 +3252,10 @@ function homeySocketConnect() {
       const nowPresent = data === true || data?.value === true || data?.present === true;
       const wasPresent = _homeyPresence[id];
       _homeyPresence[id] = nowPresent;
-      if (nowPresent && wasPresent === false) {
-        sendPushToAll({ title: 'Welcome home!', body: 'Someone just arrived home', tag: `arrival-homey-${id}` });
+      if (nowPresent && wasPresent !== true) {
+        const arrivedName = _homeyNames[id] || id;
+        sendPushToAll({ title: `${arrivedName} is home`, body: 'Welcome home!', tag: `arrival-homey-${id}` });
+        broadcastSSE('arrival', { name: arrivedName, entity_id: id, source: 'homey' });
       }
       _wInvalidate('who_home');
       broadcastSSE('refresh', { source: 'homey', widgets: ['who_home'] });

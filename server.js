@@ -3188,6 +3188,7 @@ async function homeyPoll() {
     const usersMap = Array.isArray(usersData)
       ? Object.fromEntries(usersData.map(u => [u.id, u]))
       : usersData;
+    const firstRun = Object.keys(_homeyPresence).length === 0;
     let changed = false;
     for (const uid of uids) {
       const u = usersMap[uid]; if (!u) continue;
@@ -3197,7 +3198,7 @@ async function homeyPoll() {
         const wasPresent = _homeyPresence[uid];
         _homeyPresence[uid] = u.present;
         changed = true;
-        if (u.present === true && wasPresent !== true) {
+        if (!firstRun && u.present === true && wasPresent !== true) {
           sendPushToAll({ title: `${name} is home`, body: 'Welcome home!', tag: `arrival-homey-${uid}` });
           broadcastSSE('arrival', { name, entity_id: uid, source: 'homey' });
         }
@@ -3248,6 +3249,9 @@ function homeySocketConnect() {
 
     // Presence: user present state changed
     if (t.includes('user') && (t.includes('present') || id === 'present')) {
+      // Only process UIDs that are explicitly configured
+      const _configuredUids = g('homey_person_devices').split(',').map(s => s.trim()).filter(Boolean);
+      if (!_configuredUids.includes(id)) return;
       console.log('[homey-socket] presence event — refreshing who_home', id, data);
       const nowPresent = data === true || data?.value === true || data?.present === true;
       const wasPresent = _homeyPresence[id];

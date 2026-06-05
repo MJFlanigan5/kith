@@ -537,6 +537,10 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
     const id=setInterval(load,30000);
     return()=>clearInterval(id);
   },[]);
+
+  // Keep a ref to members so the SSE arrival closure always sees current data
+  const membersRef=useRef(members);
+  useEffect(()=>{membersRef.current=members;},[members]);
   const [haEvents,setHaEvents]=useState([]);
   const [smEvents,setSmEvents]=useState([]);
   const [widgetData,setWidgetData]=useState({});
@@ -558,7 +562,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
       try{
         const d=JSON.parse(e.data);
         const first=(d.name||'').toLowerCase();
-        const m=members.find(x=>x.name.toLowerCase()===first||x.name.toLowerCase().startsWith(first+' '));
+        const m=membersRef.current.find(x=>x.name.toLowerCase()===first||x.name.toLowerCase().startsWith(first+' '));
         const color=m?.color||'#34C759';
         setPresenceOverlay({type:'arrival',name:d.name,entity_id:d.entity_id,color,ts:Date.now()});
         if(presenceTimerRef.current)clearTimeout(presenceTimerRef.current);

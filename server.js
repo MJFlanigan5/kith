@@ -1609,20 +1609,27 @@ app.post('/api/quick-actions/trigger', requireAuth, async (req, res) => {
 // ── Routes: Widgets ───────────────────────────────────────────────────────────
 const _wCache = {};
 const _wErrors = {};
+const _wInflight = {};
 // Soft-invalidate: force a refetch next call while preserving stale data as fallback
 function _wInvalidate(key) { if (_wCache[key]) _wCache[key].at = 0; }
 async function _wFetch(key, ttlMs, fn) {
   if (_wCache[key] && Date.now() - _wCache[key].at < ttlMs) return _wCache[key].data;
-  try {
-    const data = await fn();
-    const cacheable = data !== null && data !== undefined;
-    if (cacheable) { _wCache[key] = { data, at: Date.now() }; delete _wErrors[key]; }
-    return data;
-  } catch(e) {
-    _wErrors[key] = e?.message || String(e);
-    console.error(`[widget:${key}]`, e?.message || e);
-    return _wCache[key]?.data ?? null;
-  }
+  if (_wInflight[key]) return _wInflight[key];
+  _wInflight[key] = (async () => {
+    try {
+      const data = await fn();
+      const cacheable = data !== null && data !== undefined;
+      if (cacheable) { _wCache[key] = { data, at: Date.now() }; delete _wErrors[key]; }
+      return data;
+    } catch(e) {
+      _wErrors[key] = e?.message || String(e);
+      console.error(`[widget:${key}]`, e?.message || e);
+      return _wCache[key]?.data ?? null;
+    } finally {
+      delete _wInflight[key];
+    }
+  })();
+  return _wInflight[key];
 }
 const gs = k => db.prepare('SELECT value FROM settings WHERE key=?').get(k)?.value || '';
 

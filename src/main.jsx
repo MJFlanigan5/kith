@@ -604,7 +604,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
     prevPersonsRef.current=persons;
     if(!ev)return;
     const first=ev.name.toLowerCase();
-    const m=members.find(x=>x.name.toLowerCase()===first||x.name.toLowerCase().startsWith(first+' '));
+    const m=membersRef.current.find(x=>x.name.toLowerCase()===first||x.name.toLowerCase().startsWith(first+' '));
     const color=m?.color||(ev.type==='arrival'?'#34C759':'#8E8E93');
     if(presenceTimerRef.current)clearTimeout(presenceTimerRef.current);
     setPresenceOverlay({...ev,color,ts:Date.now()});

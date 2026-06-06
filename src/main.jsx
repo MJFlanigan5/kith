@@ -3452,6 +3452,13 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [aiKey,setAiKey]=useState('');
   const [hasAiKey,setHasAiKey]=useState(false);
   const [aiKeySaving,setAiKeySaving]=useState(false);
+  const [imapHost,setImapHost]=useState('imap.gmail.com');
+  const [imapPort,setImapPort]=useState('993');
+  const [imapUser,setImapUser]=useState('');
+  const [imapPass,setImapPass]=useState('');
+  const [imapEnabled,setImapEnabled]=useState(false);
+  const [imapSaving,setImapSaving]=useState(false);
+  const [imapTesting,setImapTesting]=useState(false);
   const [anthropicKey,setAnthropicKey]=useState('');
   const [hasAnthropicKey,setHasAnthropicKey]=useState(false);
   const [beehiivKey,setBeehiivKey]=useState('');
@@ -3540,6 +3547,10 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
       if(st.uptime_kuma_slug) setKumaSlug(st.uptime_kuma_slug);
       if(st.custom_sport_paths) setCustomSportPath(st.custom_sport_paths);
       if(st.wifi_ssid) setWifiSsid(st.wifi_ssid);
+      if(st.imap_host) setImapHost(st.imap_host);
+      if(st.imap_port) setImapPort(st.imap_port);
+      if(st.imap_user) setImapUser(st.imap_user);
+      setImapEnabled(st.imap_enabled==='1');
       if(st.sports_leagues){
         const active=st.sports_leagues.split(',').map(s=>s.trim().toLowerCase());
         setSportsLeagues({nfl:active.includes('nfl'),nba:active.includes('nba'),mlb:active.includes('mlb'),nhl:active.includes('nhl'),wnba:active.includes('wnba'),mls:active.includes('mls'),epl:active.includes('epl'),ucl:active.includes('ucl'),wc:active.includes('wc'),wwc:active.includes('wwc'),ncaaf:active.includes('ncaaf'),ncaab:active.includes('ncaab'),pga:active.includes('pga'),atp:active.includes('atp'),nascar:active.includes('nascar'),f1:active.includes('f1')});
@@ -3742,6 +3753,49 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
               {pushStatus==='requesting'?'Requesting…':pushStatus==='error'?'Retry':'Enable Notifications'}
             </Btn>
           )}
+        </div>
+      </FormGroup>
+
+      <FormGroup label="Gmail Polling (IMAP)">
+        <div style={{padding:'14px 16px'}}>
+          <div style={{fontSize:14,color:A.label3,marginBottom:12}}>Kith polls your Gmail inbox every 15 minutes and automatically detects shipping emails. Requires a Gmail App Password — generate one at <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener noreferrer" style={{color:A.blue}}>myaccount.google.com/apppasswords</a> (needs Google 2FA enabled).</div>
+          <div style={{display:'flex',flexDirection:'column',gap:8}}>
+            <Inp value={imapUser} onChange={e=>setImapUser(e.target.value)} placeholder="your@gmail.com"/>
+            <Inp type="password" value={imapPass} onChange={e=>setImapPass(e.target.value)} placeholder="App password (16 chars, no spaces)"/>
+            <div style={{display:'flex',gap:8,alignItems:'center'}}>
+              <Inp value={imapHost} onChange={e=>setImapHost(e.target.value)} placeholder="imap.gmail.com" style={{flex:2}}/>
+              <Inp value={imapPort} onChange={e=>setImapPort(e.target.value)} placeholder="993" style={{flex:1}}/>
+            </div>
+            <div style={{display:'flex',gap:8,alignItems:'center',marginTop:2}}>
+              <label style={{display:'flex',alignItems:'center',gap:6,fontSize:13,color:A.label3,cursor:'pointer'}}>
+                <input type="checkbox" checked={imapEnabled} onChange={e=>setImapEnabled(e.target.checked)} style={{width:15,height:15}}/>
+                Enable polling
+              </label>
+              <div style={{flex:1}}/>
+              <Btn sm variant="ghost" loading={imapTesting} onClick={async()=>{
+                setImapTesting(true);
+                try{
+                  await api.post('/api/imap/test',{host:imapHost,port:imapPort,user:imapUser,pass:imapPass});
+                  toastAdd('Connection successful','green');
+                }catch(e){toastAdd(e?.message||'Connection failed','red');}
+                finally{setImapTesting(false);}
+              }}>Test</Btn>
+              <Btn sm loading={imapSaving} onClick={async()=>{
+                setImapSaving(true);
+                try{
+                  await Promise.all([
+                    saveSetting('imap_host',imapHost),
+                    saveSetting('imap_port',imapPort),
+                    saveSetting('imap_user',imapUser),
+                    ...(imapPass?[saveSetting('imap_pass',imapPass)]:[]),
+                    saveSetting('imap_enabled',imapEnabled?'1':'0'),
+                  ]);
+                  toastAdd('IMAP settings saved');
+                }catch(e){toastAdd('Save failed','red');}
+                finally{setImapSaving(false);}
+              }}>Save</Btn>
+            </div>
+          </div>
         </div>
       </FormGroup>
 

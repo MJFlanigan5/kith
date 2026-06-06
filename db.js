@@ -249,6 +249,7 @@ const defaults = {
   clock_format: '12h', temperature_unit: 'F', refresh_interval: '1min',
   smtp_host: '', smtp_port: '587', smtp_user: '', smtp_pass: '',
   forwarding_address: '',
+  imap_host: 'imap.gmail.com', imap_port: '993', imap_user: '', imap_pass: '', imap_enabled: '0',
   email_webhook_secret: require('crypto').randomBytes(24).toString('hex'),
   anthropic_api_key: '',
   ai_provider: 'gemini',

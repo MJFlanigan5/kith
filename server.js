@@ -362,7 +362,23 @@ app.get('/api/auth/me', requireAuth, (req, res) => res.json(req.user));
 
 // ── Routes: Events ────────────────────────────────────────────────────────────
 app.get('/api/events', (req, res) => {
-  res.json(db.prepare('SELECT * FROM events ORDER BY date, time').all());
+  const events = db.prepare('SELECT * FROM events ORDER BY date, time').all();
+  const pkgs = db.prepare("SELECT * FROM packages WHERE delivered=0 AND expected_date != '' ORDER BY expected_date").all();
+  const pkgEvents = pkgs.map(p => ({
+    id: `pkg_${p.id}`,
+    title: `Delivery: ${p.description || p.carrier || 'Package'}`,
+    date: p.expected_date,
+    time: 'All day',
+    end_time: '',
+    duration: '1h',
+    calendar: 'packages',
+    color: '#A0522D',
+    notes: p.tracking_number ? `${p.carrier} ${p.tracking_number}`.trim() : '',
+    source: 'package',
+    member_id: null,
+    recurring_rule: '',
+  }));
+  res.json([...events, ...pkgEvents]);
 });
 
 app.post('/api/events', requireAuth, (req, res) => {
@@ -3338,6 +3354,77 @@ cron.schedule('0 * * * *', () => {
     db.prepare("DELETE FROM messages WHERE expires_at <= datetime('now')").run();
     db.prepare("DELETE FROM packages WHERE delivered=1 AND created_at < datetime('now', '-3 days')").run();
   } catch (e) { console.error('[cleanup]', e?.message || e); }
+});
+
+// ── IMAP email polling ────────────────────────────────────────────────────────
+const SHIPPING_RE = /ship|track|deliver|order|package|dispatch|arrival|transit/i;
+
+async function pollImap() {
+  if (g('imap_enabled') !== '1') return;
+  const host = g('imap_host'), port = parseInt(g('imap_port') || '993');
+  const user = g('imap_user'), pass = g('imap_pass');
+  if (!host || !user || !pass) return;
+
+  const { ImapFlow } = require('imapflow');
+  const { simpleParser } = require('mailparser');
+  const client = new ImapFlow({ host, port, secure: port === 993, auth: { user, pass }, logger: false });
+
+  try {
+    await client.connect();
+    const lock = await client.getMailboxLock('INBOX');
+    const since = new Date(Date.now() - 48 * 60 * 60 * 1000);
+    try {
+      for await (const msg of client.fetch({ seen: false, since }, { uid: true, source: true, envelope: true })) {
+        const subject = msg.envelope?.subject || '';
+        const from = msg.envelope?.from?.[0]?.address || '';
+        if (!SHIPPING_RE.test(subject)) {
+          await client.messageFlagsAdd(msg.uid, ['\\Seen'], { uid: true });
+          continue;
+        }
+        let body = '';
+        try {
+          const parsed = await simpleParser(msg.source);
+          body = parsed.text || parsed.html || '';
+        } catch {}
+
+        await client.messageFlagsAdd(msg.uid, ['\\Seen'], { uid: true });
+
+        // reuse the same logic as /api/email/inbound
+        const pkg = await callAiForPackage(subject, body).catch(() => null);
+        const result = await callAiForEvent(subject, body).catch(() => null);
+        const event_name = result?.event_name || subject || '(Unknown)';
+        db.prepare('INSERT INTO inbox (subject,event_name,event_date,event_time,recurrence,confidence) VALUES (?,?,?,?,?,?)')
+          .run(subject, event_name, result?.event_date || '', result?.event_time || 'All day', result?.recurrence || 'One-time', result?.confidence || 'medium');
+        if (pkg?.is_shipping) {
+          db.prepare('INSERT INTO packages (carrier,tracking_number,description,expected_date,source_subject) VALUES (?,?,?,?,?)')
+            .run(pkg.carrier || '', pkg.tracking_number || '', pkg.description || '', pkg.expected_date || '', subject);
+          broadcastSSE('packages', { action: 'reload' });
+        }
+        broadcastSSE('inbox', { action: 'reload' });
+        console.log(`[imap] processed: ${subject}`);
+      }
+    } finally {
+      lock.release();
+    }
+    await client.logout();
+  } catch (e) {
+    console.error('[imap]', e?.message || e);
+  }
+}
+
+cron.schedule('*/15 * * * *', () => pollImap().catch(() => {}));
+
+app.post('/api/imap/test', requireAuth, async (req, res) => {
+  const { host, port, user, pass } = req.body;
+  const { ImapFlow } = require('imapflow');
+  const client = new ImapFlow({ host, port: parseInt(port || '993'), secure: parseInt(port || '993') === 993, auth: { user, pass }, logger: false, connectionTimeout: 8000 });
+  try {
+    await client.connect();
+    await client.logout();
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(400).json({ error: e?.message || 'Connection failed' });
+  }
 });
 
 app.listen(PORT, () => console.log(`Kith running → http://localhost:${PORT}`));

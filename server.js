@@ -2681,42 +2681,8 @@ app.get('/api/nextdns/test', requireAdmin, async (req, res) => {
 // ── Routes: Email inbound (Cloudflare Email Worker webhook) ───────────────────
 
 async function callAiForEvent(subject, body) {
-  const getSetting = k => db.prepare('SELECT value FROM settings WHERE key=?').get(k)?.value || '';
-  const provider = getSetting('ai_provider') || 'anthropic';
-  const apiKey = getSetting('ai_api_key') || getSetting('anthropic_api_key') || process.env.ANTHROPIC_API_KEY || '';
-  if (!apiKey) return null;
-
-  const prompt = `Extract calendar event details from this email. Return JSON only, no other text.\n\nSubject: ${subject}\nBody: ${body.slice(0, 4000)}\n\nReturn: {"event_name":"...","event_date":"YYYY-MM-DD or description","event_time":"H:MM AM/PM or All day","recurrence":"One-time|Weekly|Monthly|etc","confidence":"high|medium|low"}\nIf no event is found return {"event_name":"","confidence":"low"}`;
-
-  try {
-    let text;
-    if (provider === 'gemini') {
-      const data = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json' } }),
-      }).then(r => r.json());
-      text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    } else if (provider === 'openai' || provider === 'groq' || provider === 'deepseek') {
-      const baseUrl = provider === 'groq' ? 'https://api.groq.com/openai/v1' : provider === 'deepseek' ? 'https://api.deepseek.com/v1' : 'https://api.openai.com/v1';
-      const model = provider === 'groq' ? 'llama-3.1-8b-instant' : provider === 'deepseek' ? 'deepseek-chat' : 'gpt-4o-mini';
-      const data = await fetch(`${baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-        body: JSON.stringify({ model, max_tokens: 200, messages: [{ role: 'user', content: prompt }] }),
-      }).then(r => r.json());
-      text = data.choices?.[0]?.message?.content;
-    } else {
-      const data = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-        body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 200, messages: [{ role: 'user', content: prompt }] }),
-      }).then(r => r.json());
-      text = data.content?.[0]?.text;
-    }
-    if (text) text = text.replace(/^```[^\n]*\n?/, '').replace(/\n?```$/, '').trim();
-    return text ? JSON.parse(text) : null;
-  } catch { return null; }
+  const sys = 'You extract calendar event details from emails. Respond with JSON only — no explanation, no markdown.\nSchema: {"event_name":"...","event_date":"YYYY-MM-DD","event_time":"H:MM AM/PM or All day","recurrence":"One-time|Weekly|Monthly|Annual","confidence":"high|medium|low"}\nIf no specific calendar event with a date is present, respond: {"event_name":"","confidence":"low"}';
+  return callAi(sys, `Subject: ${subject}\nBody: ${body.slice(0, 3000)}`);
 }
 
 async function callAiWithMedia(imageBase64, mimeType) {
@@ -2760,79 +2726,53 @@ async function callAiWithMedia(imageBase64, mimeType) {
   } catch { return []; }
 }
 
-async function callAiForPackage(subject, body) {
+// Shared AI caller — system prompt + user content, returns parsed JSON or null
+async function callAi(systemPrompt, userContent) {
   const getSetting = k => db.prepare('SELECT value FROM settings WHERE key=?').get(k)?.value || '';
   const provider = getSetting('ai_provider') || 'anthropic';
   const apiKey = getSetting('ai_api_key') || getSetting('anthropic_api_key') || process.env.ANTHROPIC_API_KEY || '';
-  if (!apiKey) { console.warn('[imap] no AI API key — package extraction skipped'); return null; }
-
-  const prompt = `Extract shipping/package information from this email. Return JSON only, no other text.\n\nSubject: ${subject}\nBody: ${body.slice(0, 4000)}\n\nReturn: {"is_shipping":true,"carrier":"UPS|FedEx|USPS|Amazon|DHL|OnTrac|LaserShip|etc","tracking_number":"...","description":"brief item description","expected_date":"YYYY-MM-DD or empty"}\nIf no shipping or package delivery info is present return {"is_shipping":false}`;
-
-  try {
-    let text;
-    if (provider === 'gemini') {
-      const data = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json' } }),
-      }).then(r => r.json());
-      text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    } else if (provider === 'openai' || provider === 'groq' || provider === 'deepseek') {
-      const baseUrl = provider === 'groq' ? 'https://api.groq.com/openai/v1' : provider === 'deepseek' ? 'https://api.deepseek.com/v1' : 'https://api.openai.com/v1';
-      const model = provider === 'groq' ? 'llama-3.1-8b-instant' : provider === 'deepseek' ? 'deepseek-chat' : 'gpt-4o-mini';
-      const data = await fetch(`${baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-        body: JSON.stringify({ model, max_tokens: 200, messages: [{ role: 'user', content: prompt }] }),
-      }).then(r => r.json());
-      text = data.choices?.[0]?.message?.content;
-    } else {
-      const data = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-        body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 200, messages: [{ role: 'user', content: prompt }] }),
-      }).then(r => r.json());
-      text = data.content?.[0]?.text;
-    }
-    if (text) text = text.replace(/^```[^\n]*\n?/, '').replace(/\n?```$/, '').trim();
-    return text ? JSON.parse(text) : null;
-  } catch { return null; }
-}
-
-async function callAiForBill(subject, body) {
-  const getSetting = k => db.prepare('SELECT value FROM settings WHERE key=?').get(k)?.value || '';
-  const provider = getSetting('ai_provider') || 'anthropic';
-  const apiKey = getSetting('ai_api_key') || getSetting('anthropic_api_key') || process.env.ANTHROPIC_API_KEY || '';
-  if (!apiKey) return null;
-
-  const prompt = `Extract billing/payment information from this email. Return JSON only, no other text.\n\nSubject: ${subject}\nBody: ${body.slice(0, 4000)}\n\nReturn: {"is_bill":true,"payee":"company or service name","amount":0.00,"due_date":"YYYY-MM-DD or empty string","recurrence":"monthly|annual|one-time"}\nIf this is not a bill, statement, or payment notice, return {"is_bill":false}`;
-
+  if (!apiKey) { console.warn('[ai] no API key configured'); return null; }
   try {
     let text;
     if (provider === 'gemini') {
       const data = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json' } }),
+        body: JSON.stringify({ contents: [{ parts: [{ text: systemPrompt + '\n\n' + userContent }] }], generationConfig: { responseMimeType: 'application/json' } }),
       }).then(r => r.json());
       text = data.candidates?.[0]?.content?.parts?.[0]?.text;
     } else if (provider === 'openai' || provider === 'groq' || provider === 'deepseek') {
       const baseUrl = provider === 'groq' ? 'https://api.groq.com/openai/v1' : provider === 'deepseek' ? 'https://api.deepseek.com/v1' : 'https://api.openai.com/v1';
-      const model = provider === 'groq' ? 'llama-3.1-8b-instant' : provider === 'deepseek' ? 'deepseek-chat' : 'gpt-4o-mini';
+      const model = provider === 'groq' ? 'llama-3.3-70b-versatile' : provider === 'deepseek' ? 'deepseek-chat' : 'gpt-4o-mini';
+      const supportsJsonMode = provider === 'openai' || provider === 'deepseek';
+      const reqBody = { model, max_tokens: 256, messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userContent }] };
+      if (supportsJsonMode) reqBody.response_format = { type: 'json_object' };
       const data = await fetch(`${baseUrl}/chat/completions`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-        body: JSON.stringify({ model, max_tokens: 200, messages: [{ role: 'user', content: prompt }] }),
+        body: JSON.stringify(reqBody),
       }).then(r => r.json());
       text = data.choices?.[0]?.message?.content;
     } else {
       const data = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-        body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 200, messages: [{ role: 'user', content: prompt }] }),
+        body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 256, system: systemPrompt, messages: [{ role: 'user', content: userContent }] }),
       }).then(r => r.json());
       text = data.content?.[0]?.text;
     }
     if (text) text = text.replace(/^```[^\n]*\n?/, '').replace(/\n?```$/, '').trim();
     return text ? JSON.parse(text) : null;
-  } catch { return null; }
+  } catch (e) { console.error('[ai] error:', e?.message); return null; }
+}
+
+async function callAiForPackage(subject, body) {
+  const sys = 'You extract shipping and package delivery information from emails. Respond with JSON only — no explanation, no markdown.\nSchema: {"is_shipping":true,"carrier":"UPS|FedEx|USPS|Amazon|DHL|OnTrac|LaserShip|Pitney Bowes|other","tracking_number":"tracking number or empty string","description":"brief item description","expected_date":"YYYY-MM-DD or empty string"}\nIf the email is not about a package shipment or delivery, respond: {"is_shipping":false}';
+  const result = await callAi(sys, `Subject: ${subject}\nBody: ${body.slice(0, 3000)}`);
+  if (!result) console.warn('[imap] package AI returned null — check API key/provider');
+  return result;
+}
+
+async function callAiForBill(subject, body) {
+  const sys = 'You extract billing and payment information from emails. Respond with JSON only — no explanation, no markdown.\nSchema: {"is_bill":true,"payee":"company or service name","amount":0.00,"due_date":"YYYY-MM-DD or empty string","recurrence":"monthly|annual|one-time"}\nIf the email is not a bill, statement, or payment notice, respond: {"is_bill":false}';
+  return callAi(sys, `Subject: ${subject}\nBody: ${body.slice(0, 3000)}`);
 }
 
 app.post('/api/email/inbound', async (req, res) => {

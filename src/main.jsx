@@ -25,6 +25,8 @@ function localDate(d=new Date()){
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 
+function ordinal(n){const s=['th','st','nd','rd'],v=n%100;return n+(s[(v-20)%10]||s[v]||s[0]);}
+
 function daysUntil(dateStr){
   const t=new Date(); t.setHours(0,0,0,0);
   return Math.round((new Date(dateStr+'T00:00:00')-t)/86400000);
@@ -572,6 +574,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
     es.addEventListener('grocery',e=>{try{const d=JSON.parse(e.data);if(setGrocery){if(d.action==='add')setGrocery(p=>[...p,d.item]);else if(d.action==='remove')setGrocery(p=>p.filter(i=>i.id!==d.id));else if(d.action==='toggle')setGrocery(p=>p.map(i=>i.id===d.id?{...i,checked:d.checked}:i));else if(d.action==='clear_checked')setGrocery(p=>p.filter(i=>!i.checked));}}catch{}});
     es.addEventListener('packages',()=>{api.get('/api/packages').then(d=>{if(Array.isArray(d)&&setPackages)setPackages(d);}).catch(()=>{});});
     es.addEventListener('messages',()=>{api.get('/api/messages').then(d=>{if(Array.isArray(d)&&setMessages)setMessages(d);}).catch(()=>{});});
+    es.addEventListener('bills',()=>{api.get('/api/bills').then(d=>{if(d.bills){setBills(d.bills);setPayments(d.payments||[]);}}).catch(()=>{});});
     es.addEventListener('open',()=>{setOnline(true);loadWidgets();});
     es.addEventListener('error',()=>setOnline(false));
     return()=>{clearInterval(fa);clearInterval(fb);clearInterval(fc);es.close();};
@@ -2283,16 +2286,16 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
   const [selectedEvent,setSelectedEvent]=useState(null);
   const [deleteConfirm,setDeleteConfirm]=useState(false);
 
-  const calMap={kith:A.green,packages:'#A0522D'};
+  const calMap={kith:A.green,packages:'#A0522D',bills:'#3B82F6'};
   icsSources.forEach(s=>{calMap[`ics:${s.name}`]=s.color;});
   useEffect(()=>{
     setCalFilters(prev=>{
-      const next={kith:prev.kith??true,packages:prev.packages??true};
+      const next={kith:prev.kith??true,packages:prev.packages??true,bills:prev.bills??true};
       icsSources.forEach(s=>{const k=`ics:${s.name}`;next[k]=prev[k]??true;});
       return next;
     });
   },[icsSources]);
-  const calLabels={kith:'Kith',packages:'Packages'};
+  const calLabels={kith:'Kith',packages:'Packages',bills:'Bills'};
   icsSources.forEach(s=>{calLabels[`ics:${s.name}`]=s.name;});
 
   const weekStart=useMemo(()=>{
@@ -2567,6 +2570,8 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
             <div style={{paddingTop:16,borderTop:`1px solid ${A.sep}`}}>
               {selectedEvent.source==='package'?(
                 <div style={{fontSize:13,color:A.label4,textAlign:'center'}}>Manage this in the Packages section</div>
+              ):selectedEvent.source==='bill'?(
+                <div style={{fontSize:13,color:A.label4,textAlign:'center'}}>Manage this in the Bills section</div>
               ):deleteConfirm?(
                 <div>
                   <div style={{fontSize:13,color:A.label3,marginBottom:10,fontWeight:500}}>Delete recurring event:</div>
@@ -5241,6 +5246,154 @@ function MessagesScreen({messages,setMessages,members=[],toastAdd}){
   );
 }
 
+/* ── Bills Screen ────────────────────────────────────────────────────────── */
+const BILL_CATEGORIES=['Housing','Utilities','Subscriptions','Insurance','Auto','Health','Other'];
+
+function BillsScreen({bills,setBills,payments,setPayments,toastAdd}){
+  const isMobile=useIsMobile();
+  const [drawerOpen,setDrawerOpen]=useState(false);
+  const [editBill,setEditBill]=useState(null);
+  const blankForm={name:'',amount:'',due_day:1,due_date:'',recurrence:'monthly',category:'Other',color:'#3B82F6',notes:''};
+  const [form,setForm]=useState(blankForm);
+
+  const now=new Date();
+  const currentPeriod=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const currentYear=String(now.getFullYear());
+  const monthName=['January','February','March','April','May','June','July','August','September','October','November','December'][now.getMonth()];
+
+  const getPeriod=b=>b.recurrence==='monthly'?currentPeriod:b.recurrence==='annual'?currentYear:b.due_date;
+  const paidSet=new Set(payments.map(p=>`${p.bill_id}_${p.period}`));
+  const isPaid=b=>paidSet.has(`${b.id}_${getPeriod(b)}`);
+
+  const monthTotal=bills.filter(b=>b.recurrence==='monthly').reduce((s,b)=>s+(Number(b.amount)||0),0);
+  const paidCount=bills.filter(b=>isPaid(b)).length;
+
+  const togglePaid=async b=>{
+    const period=getPeriod(b);
+    if(isPaid(b)){
+      await api.del(`/api/bills/${b.id}/pay/${period}`).catch(()=>{});
+      setPayments(p=>p.filter(x=>!(x.bill_id===b.id&&x.period===period)));
+    }else{
+      await api.post(`/api/bills/${b.id}/pay`,{period}).catch(()=>{});
+      setPayments(p=>[...p,{bill_id:b.id,period,paid_at:new Date().toISOString()}]);
+    }
+  };
+
+  const openNew=()=>{setEditBill(null);setForm(blankForm);setDrawerOpen(true);};
+  const openEdit=b=>{setEditBill(b);setForm({name:b.name,amount:b.amount>0?String(b.amount):'',due_day:b.due_day||1,due_date:b.due_date||'',recurrence:b.recurrence||'monthly',category:b.category||'Other',color:b.color||'#3B82F6',notes:b.notes||''});setDrawerOpen(true);};
+
+  const save=async()=>{
+    if(!form.name.trim()){toastAdd('Name required','red');return;}
+    const payload={name:form.name.trim(),amount:parseFloat(form.amount)||0,due_day:parseInt(form.due_day)||1,due_date:form.due_date,recurrence:form.recurrence,category:form.category,color:form.color,notes:form.notes};
+    if(editBill){
+      const r=await api.put(`/api/bills/${editBill.id}`,payload).catch(()=>null);
+      if(!r?.id){toastAdd('Failed to save','red');return;}
+      setBills(p=>p.map(x=>x.id===r.id?r:x));
+    }else{
+      const r=await api.post('/api/bills',payload).catch(()=>null);
+      if(!r?.id){toastAdd('Failed to save','red');return;}
+      setBills(p=>[...p,r].sort((a,b)=>a.category.localeCompare(b.category)||a.name.localeCompare(b.name)));
+    }
+    setDrawerOpen(false);setEditBill(null);
+    toastAdd(editBill?'Bill updated':'Bill added');
+  };
+
+  const del=async id=>{
+    await api.del(`/api/bills/${id}`).catch(()=>{});
+    setBills(p=>p.filter(x=>x.id!==id));
+    setDrawerOpen(false);setEditBill(null);
+    toastAdd('Bill removed','blue');
+  };
+
+  const grouped=BILL_CATEGORIES.map(cat=>({cat,items:bills.filter(b=>b.category===cat)})).filter(g=>g.items.length>0);
+
+  const dueLabel=b=>b.recurrence==='monthly'?`Due the ${ordinal(b.due_day||1)}`:b.recurrence==='annual'?`Annual · ${b.due_date}`:`One-time · ${b.due_date}`;
+
+  return(
+    <div>
+      <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:24}}>
+        <div>
+          <h1 style={{fontSize:isMobile?34:44,fontWeight:800,letterSpacing:'-.05em',lineHeight:1.05}}>Bills</h1>
+          <p style={{color:A.label4,fontSize:15,marginTop:6}}>
+            {monthName} · {paidCount} of {bills.length} paid
+            {monthTotal>0&&` · $${monthTotal.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})} / mo`}
+          </p>
+        </div>
+        <Btn onClick={openNew}>+ Add</Btn>
+      </div>
+
+      {bills.length===0?(
+        <Card style={{padding:'52px 24px',textAlign:'center'}}>
+          <div style={{fontSize:13,fontWeight:700,color:A.label5,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:10}}>No bills yet</div>
+          <div style={{fontSize:15,color:A.label3,fontWeight:500}}>Add recurring bills to get calendar reminders on due dates. Billing emails are detected automatically.</div>
+        </Card>
+      ):(
+        <div style={{display:'flex',flexDirection:'column',gap:16}}>
+          {grouped.map(({cat,items})=>(
+            <div key={cat}>
+              <div style={{fontSize:11,fontWeight:700,color:A.label5,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:8}}>{cat}</div>
+              <Card style={{overflow:'hidden',padding:0}}>
+                {items.map((b,i)=>{
+                  const paid=isPaid(b);
+                  return(
+                    <div key={b.id} style={{display:'flex',alignItems:'center',gap:12,padding:'14px 18px',borderTop:i>0?`1px solid ${A.sep}`:'none'}}>
+                      <div style={{width:10,height:10,borderRadius:'50%',background:b.color||'#3B82F6',flexShrink:0}}/>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:15,fontWeight:600,color:paid?A.label4:A.label1,textDecoration:paid?'line-through':'none',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.name}</div>
+                        <div style={{fontSize:12,color:A.label5,marginTop:2}}>{dueLabel(b)}{Number(b.amount)>0?` · $${Number(b.amount).toFixed(2)}`:''}</div>
+                      </div>
+                      <button onClick={()=>togglePaid(b)} style={{background:paid?A.green:A.inputBg,border:`1.5px solid ${paid?A.green:A.sep}`,borderRadius:20,padding:'5px 14px',fontSize:12,fontWeight:600,color:paid?'#fff':A.label3,cursor:'pointer',flexShrink:0,transition:'all .15s',whiteSpace:'nowrap'}}>
+                        {paid?'✓ Paid':'Mark paid'}
+                      </button>
+                      <button onClick={()=>openEdit(b)} style={{background:'none',border:'none',color:A.label4,cursor:'pointer',fontSize:13,padding:'0 4px',flexShrink:0}}>Edit</button>
+                    </div>
+                  );
+                })}
+              </Card>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <Drawer open={drawerOpen} onClose={()=>{setDrawerOpen(false);setEditBill(null);setForm(blankForm);}} title={editBill?'Edit Bill':'New Bill'}>
+        <FormGroup label="Name"><div style={{padding:'12px 16px'}}><Inp value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} placeholder="Rent, Electric, Netflix…"/></div></FormGroup>
+        <FormGroup label="Amount (optional)"><div style={{padding:'12px 16px'}}><Inp type="number" value={form.amount} onChange={e=>setForm(f=>({...f,amount:e.target.value}))} placeholder="0.00"/></div></FormGroup>
+        <FormGroup label="Recurrence">
+          <div style={{padding:'12px 16px'}}>
+            <SegControl value={form.recurrence} onChange={v=>setForm(f=>({...f,recurrence:v}))} options={['monthly','annual','one-time']}/>
+          </div>
+        </FormGroup>
+        {form.recurrence==='monthly'&&(
+          <FormGroup label="Due day"><div style={{padding:'12px 16px'}}>
+            <select value={form.due_day} onChange={e=>setForm(f=>({...f,due_day:parseInt(e.target.value)}))} style={{background:'var(--input-bg,#F2F2F7)',border:'none',borderRadius:A.rSm,padding:'10px 12px',fontSize:14,color:'inherit',cursor:'pointer',width:'100%'}}>
+              {Array.from({length:28},(_,i)=>i+1).map(d=><option key={d} value={d}>{ordinal(d)} of the month</option>)}
+            </select>
+          </div></FormGroup>
+        )}
+        {(form.recurrence==='annual'||form.recurrence==='one-time')&&(
+          <FormGroup label="Due date"><div style={{padding:'12px 16px'}}><Inp type="date" value={form.due_date} onChange={e=>setForm(f=>({...f,due_date:e.target.value}))}/></div></FormGroup>
+        )}
+        <FormGroup label="Category"><div style={{padding:'12px 16px'}}>
+          <select value={form.category} onChange={e=>setForm(f=>({...f,category:e.target.value}))} style={{background:'var(--input-bg,#F2F2F7)',border:'none',borderRadius:A.rSm,padding:'10px 12px',fontSize:14,color:'inherit',cursor:'pointer',width:'100%'}}>
+            {BILL_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
+          </select>
+        </div></FormGroup>
+        <FormGroup label="Color">
+          <div style={{padding:'12px 16px',display:'flex',alignItems:'center',gap:10}}>
+            <input type="color" value={form.color} onChange={e=>setForm(f=>({...f,color:e.target.value}))} style={{width:36,height:36,border:'none',borderRadius:6,cursor:'pointer',background:'transparent'}}/>
+            <span style={{fontSize:13,color:A.label3}}>Shows as this color on calendar</span>
+          </div>
+        </FormGroup>
+        <FormGroup label="Notes (optional)"><div style={{padding:'12px 16px'}}><Inp value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))} placeholder="Account number, website, etc."/></div></FormGroup>
+        <div style={{padding:'12px 16px',display:'flex',gap:8}}>
+          <Btn onClick={save} full>Save</Btn>
+          {editBill&&<Btn variant="ghost" onClick={()=>del(editBill.id)} full>Delete</Btn>}
+        </div>
+      </Drawer>
+    </div>
+  );
+}
+
 /* ── Recipes Screen ───────────────────────────────────────────────────────── */
 function RecipesScreen({recipes,setRecipes,toastAdd}){
   const isMobile=useIsMobile();
@@ -5402,7 +5555,7 @@ function RecipesScreen({recipes,setRecipes,toastAdd}){
   );
 }
 
-function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocery,setGrocery,meals,setMeals,icsSources,setIcsSources,inboxCount,setInboxCount,countdowns,setCountdowns,members,setMembers,photos,setPhotos,clockFormat,setClockFormat,weather,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd,setRefreshMs,parseRefreshMs,goals,setGoals,notes,setNotes,polls,setPolls,bookmarks,setBookmarks,quickActions,setQuickActions,setRotationMs,setWifiQrData,darkMode,onDarkMode,packages,setPackages,messages,setMessages,recipes,setRecipes,isAdmin=false}){
+function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocery,setGrocery,meals,setMeals,icsSources,setIcsSources,inboxCount,setInboxCount,countdowns,setCountdowns,members,setMembers,photos,setPhotos,clockFormat,setClockFormat,weather,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd,setRefreshMs,parseRefreshMs,goals,setGoals,notes,setNotes,polls,setPolls,bookmarks,setBookmarks,quickActions,setQuickActions,setRotationMs,setWifiQrData,darkMode,onDarkMode,packages,setPackages,messages,setMessages,recipes,setRecipes,bills,setBills,payments,setPayments,isAdmin=false}){
   const isMobile=useIsMobile();
   const [screen,setScreen]=useState('dashboard');
   const {toasts,add:toastAdd}=useToast();
@@ -5426,6 +5579,7 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
     {id:'notes',label:'Notes',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="2" y="2" width="13" height="13" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M5 6h7M5 9h5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
     {id:'bookmarks',label:'Bookmarks',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><path d="M3.5 2h10a1 1 0 011 1v12l-5.5-3.5L3.5 15V3a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>},
     {id:'polls',label:'Polls',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="2" y="9" width="3" height="6" rx="1" fill="currentColor" opacity=".5"/><rect x="7" y="5" width="3" height="10" rx="1" fill="currentColor" opacity=".7"/><rect x="12" y="2" width="3" height="13" rx="1" fill="currentColor"/></svg>},
+    {id:'bills',label:'Bills',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="1.5" y="3" width="14" height="11" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M5 8h4M5 11h2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M11.5 6.5v4M9.5 8.5h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
     {id:'packages',label:'Packages',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="2" y="5" width="13" height="10" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M5.5 5V3.5a3 3 0 016 0V5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M2 8.5h13" stroke="currentColor" strokeWidth="1.5"/></svg>,badge:packages?.length||0},
     {id:'messages',label:'Messages',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><path d="M2 3h13a1 1 0 011 1v8a1 1 0 01-1 1H5l-4 3V4a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>,badge:messages?.length||0},
     {id:'recipes',label:'Recipes',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><path d="M3 2h11a1 1 0 011 1v11a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.5"/><path d="M5 6h7M5 9h5M5 12h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
@@ -5444,6 +5598,7 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
     notes:      <NotesScreen notes={notes} setNotes={setNotes} toastAdd={toastAdd}/>,
     bookmarks:  <BookmarksScreen bookmarks={bookmarks} setBookmarks={setBookmarks} toastAdd={toastAdd}/>,
     polls:      <PollsScreen polls={polls} setPolls={setPolls} toastAdd={toastAdd}/>,
+    bills:      <BillsScreen bills={bills} setBills={setBills} payments={payments} setPayments={setPayments} toastAdd={toastAdd}/>,
     packages:   <PackagesScreen packages={packages} setPackages={setPackages} toastAdd={toastAdd}/>,
     messages:   <MessagesScreen messages={messages} setMessages={setMessages} members={members} toastAdd={toastAdd}/>,
     recipes:    <RecipesScreen recipes={recipes} setRecipes={setRecipes} toastAdd={toastAdd}/>,
@@ -5919,6 +6074,8 @@ function App(){
   const [packages,setPackages]=useState([]);
   const [messages,setMessages]=useState([]);
   const [recipes,setRecipes]=useState([]);
+  const [bills,setBills]=useState([]);
+  const [payments,setPayments]=useState([]);
   const [quickActions,setQuickActions]=useState([]);
   const [photos,setPhotos]=useState([]);
   const [clockFormat,setClockFormat]=useState('12h');
@@ -5993,7 +6150,8 @@ function App(){
       api.get('/api/packages'),
       api.get('/api/messages'),
       api.get('/api/recipes'),
-    ]).then(([ev,ch,gr,ml,ics,inb,cd,mb,ph,st,gl,nt,pl,qa,bm,pk,ms,rc])=>{
+      api.get('/api/bills'),
+    ]).then(([ev,ch,gr,ml,ics,inb,cd,mb,ph,st,gl,nt,pl,qa,bm,pk,ms,rc,bl])=>{
       if(ev.status==='fulfilled'&&Array.isArray(ev.value)) setEvents(ev.value);
       if(ch.status==='fulfilled'&&Array.isArray(ch.value)) setChores(ch.value);
       if(gr.status==='fulfilled'&&Array.isArray(gr.value)) setGrocery(gr.value);
@@ -6011,6 +6169,7 @@ function App(){
       if(pk.status==='fulfilled'&&Array.isArray(pk.value)) setPackages(pk.value);
       if(ms.status==='fulfilled'&&Array.isArray(ms.value)) setMessages(ms.value);
       if(rc.status==='fulfilled'&&Array.isArray(rc.value)) setRecipes(rc.value);
+      if(bl.status==='fulfilled'&&bl.value?.bills){setBills(bl.value.bills);setPayments(bl.value.payments||[]);}
       if(st.status==='fulfilled'){
         const s=st.value;
         if(s.clock_format) setClockFormat(s.clock_format);
@@ -6081,7 +6240,7 @@ function App(){
   const goManage=()=>{localStorage.setItem('kith_mode','manage');setMode('manage');};
   return mode==='display'
     ?<DisplayMode onManage={goManage} events={events} chores={chores} setChores={setChores} meals={meals} grocery={grocery} setGrocery={setGrocery} countdowns={countdowns} photos={photos} clockFormat={clockFormat} weather={weather} nightModeStart={nightModeStart} nightModeEnd={nightModeEnd} goals={goals} notes={notes} polls={polls} rotationMs={rotationMs} wifiQrData={wifiQrData} quickActions={quickActions} members={members} packages={packages} setPackages={setPackages} messages={messages} setMessages={setMessages}/>
-    :<ManageMode onDisplay={goDisplay} onLogout={handleLogout} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources} inboxCount={inboxCount} setInboxCount={setInboxCount} countdowns={countdowns} setCountdowns={setCountdowns} members={members} setMembers={setMembers} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} weather={weather} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} goals={goals} setGoals={setGoals} notes={notes} setNotes={setNotes} polls={polls} setPolls={setPolls} bookmarks={bookmarks} setBookmarks={setBookmarks} quickActions={quickActions} setQuickActions={setQuickActions} setRotationMs={setRotationMs} setWifiQrData={setWifiQrData} darkMode={darkMode} onDarkMode={handleDarkMode} packages={packages} setPackages={setPackages} messages={messages} setMessages={setMessages} recipes={recipes} setRecipes={setRecipes} isAdmin={!!auth&&!currentMember&&!kiosk}/>;
+    :<ManageMode onDisplay={goDisplay} onLogout={handleLogout} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources} inboxCount={inboxCount} setInboxCount={setInboxCount} countdowns={countdowns} setCountdowns={setCountdowns} members={members} setMembers={setMembers} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} weather={weather} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} goals={goals} setGoals={setGoals} notes={notes} setNotes={setNotes} polls={polls} setPolls={setPolls} bookmarks={bookmarks} setBookmarks={setBookmarks} quickActions={quickActions} setQuickActions={setQuickActions} setRotationMs={setRotationMs} setWifiQrData={setWifiQrData} darkMode={darkMode} onDarkMode={handleDarkMode} packages={packages} setPackages={setPackages} messages={messages} setMessages={setMessages} recipes={recipes} setRecipes={setRecipes} bills={bills} setBills={setBills} payments={payments} setPayments={setPayments} isAdmin={!!auth&&!currentMember&&!kiosk}/>;
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);

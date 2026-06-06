@@ -206,6 +206,28 @@ CREATE TABLE IF NOT EXISTS recipes (
   source_url TEXT DEFAULT '',
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS bills (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  amount REAL DEFAULT 0,
+  due_day INTEGER DEFAULT 1,
+  due_date TEXT DEFAULT '',
+  recurrence TEXT DEFAULT 'monthly',
+  category TEXT DEFAULT 'Other',
+  color TEXT DEFAULT '#3B82F6',
+  notes TEXT DEFAULT '',
+  active INTEGER DEFAULT 1,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS bill_payments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  bill_id INTEGER NOT NULL,
+  period TEXT NOT NULL,
+  paid_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(bill_id, period)
+);
 `);
 
 // migrations — safe to run on every boot

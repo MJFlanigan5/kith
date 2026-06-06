@@ -378,7 +378,25 @@ app.get('/api/events', (req, res) => {
     member_id: null,
     recurring_rule: '',
   }));
-  res.json([...events, ...pkgEvents]);
+  const today = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const billRows = db.prepare('SELECT * FROM bills WHERE active=1').all();
+  const billEvents = [];
+  for (const b of billRows) {
+    if (b.recurrence === 'monthly') {
+      for (let m = 0; m < 3; m++) {
+        const d = new Date(today.getFullYear(), today.getMonth() + m, Math.min(b.due_day || 1, 28));
+        const ds = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+        billEvents.push({ id:`bill_${b.id}_${ds}`, title:b.name, date:ds, time:'All day', end_time:'', duration:'1h', calendar:'bills', color:b.color||'#3B82F6', notes:b.amount>0?`$${Number(b.amount).toFixed(2)}`:'', source:'bill', member_id:null, recurring_rule:'' });
+      }
+    } else if (b.due_date) {
+      const dueMs = new Date(b.due_date + 'T00:00:00').getTime();
+      if (dueMs >= new Date(today.getFullYear(), today.getMonth(), 1).getTime()) {
+        billEvents.push({ id:`bill_${b.id}_${b.due_date}`, title:b.name, date:b.due_date, time:'All day', end_time:'', duration:'1h', calendar:'bills', color:b.color||'#3B82F6', notes:b.amount>0?`$${Number(b.amount).toFixed(2)}`:'', source:'bill', member_id:null, recurring_rule:'' });
+      }
+    }
+  }
+  res.json([...events, ...pkgEvents, ...billEvents]);
 });
 
 app.post('/api/events', requireAuth, (req, res) => {
@@ -2767,6 +2785,42 @@ async function callAiForPackage(subject, body) {
   } catch { return null; }
 }
 
+async function callAiForBill(subject, body) {
+  const getSetting = k => db.prepare('SELECT value FROM settings WHERE key=?').get(k)?.value || '';
+  const provider = getSetting('ai_provider') || 'anthropic';
+  const apiKey = getSetting('ai_api_key') || getSetting('anthropic_api_key') || process.env.ANTHROPIC_API_KEY || '';
+  if (!apiKey) return null;
+
+  const prompt = `Extract billing/payment information from this email. Return JSON only, no other text.\n\nSubject: ${subject}\nBody: ${body.slice(0, 2000)}\n\nReturn: {"is_bill":true,"payee":"company or service name","amount":0.00,"due_date":"YYYY-MM-DD or empty string","recurrence":"monthly|annual|one-time"}\nIf this is not a bill, statement, or payment notice, return {"is_bill":false}`;
+
+  try {
+    let text;
+    if (provider === 'gemini') {
+      const data = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json' } }),
+      }).then(r => r.json());
+      text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    } else if (provider === 'openai' || provider === 'groq' || provider === 'deepseek') {
+      const baseUrl = provider === 'groq' ? 'https://api.groq.com/openai/v1' : provider === 'deepseek' ? 'https://api.deepseek.com/v1' : 'https://api.openai.com/v1';
+      const model = provider === 'groq' ? 'llama-3.1-8b-instant' : provider === 'deepseek' ? 'deepseek-chat' : 'gpt-4o-mini';
+      const data = await fetch(`${baseUrl}/chat/completions`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body: JSON.stringify({ model, max_tokens: 200, messages: [{ role: 'user', content: prompt }] }),
+      }).then(r => r.json());
+      text = data.choices?.[0]?.message?.content;
+    } else {
+      const data = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 200, messages: [{ role: 'user', content: prompt }] }),
+      }).then(r => r.json());
+      text = data.content?.[0]?.text;
+    }
+    if (text) text = text.replace(/^```[^\n]*\n?/, '').replace(/\n?```$/, '').trim();
+    return text ? JSON.parse(text) : null;
+  } catch { return null; }
+}
+
 app.post('/api/email/inbound', async (req, res) => {
   const secret = db.prepare('SELECT value FROM settings WHERE key=?').get('email_webhook_secret')?.value;
   if (secret && req.headers['x-kith-secret'] !== secret) {
@@ -2802,7 +2856,10 @@ app.post('/api/email/inbound', async (req, res) => {
   if (!event_name) event_name = subject || '(Unknown event)';
 
   // run both AI calls in parallel, then do DB writes synchronously
-  const pkg = await callAiForPackage(subject || '', body || '').catch(() => null);
+  const [pkg, bill] = await Promise.all([
+    callAiForPackage(subject || '', body || '').catch(() => null),
+    callAiForBill(subject || '', body || '').catch(() => null),
+  ]);
 
   db.prepare('INSERT INTO inbox (subject,event_name,event_date,event_time,recurrence,confidence) VALUES (?,?,?,?,?,?)')
     .run(subject || '', event_name, event_date, event_time, recurrence, confidence);
@@ -2811,6 +2868,12 @@ app.post('/api/email/inbound', async (req, res) => {
     db.prepare('INSERT INTO packages (carrier,tracking_number,description,expected_date,source_subject) VALUES (?,?,?,?,?)')
       .run(pkg.carrier || '', pkg.tracking_number || '', pkg.description || '', pkg.expected_date || '', subject || '');
     broadcastSSE('packages', { action: 'reload' });
+  }
+
+  if (bill?.is_bill && bill.payee) {
+    db.prepare('INSERT INTO bills (name,amount,due_date,recurrence) VALUES (?,?,?,?)')
+      .run(bill.payee, Number(bill.amount) || 0, bill.due_date || '', bill.recurrence || 'monthly');
+    broadcastSSE('bills', { action: 'reload' });
   }
 
   res.json({ ok: true });
@@ -2882,6 +2945,50 @@ app.put('/api/recipes/:id', requireAuth, (req, res) => {
 app.delete('/api/recipes/:id', requireAuth, (req, res) => {
   const info = db.prepare('DELETE FROM recipes WHERE id=?').run(Number(req.params.id));
   if (!info.changes) return res.status(404).json({ error: 'Not found' });
+  res.json({ ok: true });
+});
+
+// ── Routes: Bills ─────────────────────────────────────────────────────────────
+
+app.get('/api/bills', requireAuth, (req, res) => {
+  const bills = db.prepare('SELECT * FROM bills WHERE active=1 ORDER BY category, due_day, name').all();
+  const now = new Date();
+  const yearStr = String(now.getFullYear());
+  const payments = db.prepare("SELECT * FROM bill_payments WHERE period LIKE ?").all(`${yearStr}%`);
+  res.json({ bills, payments });
+});
+
+app.post('/api/bills', requireAuth, (req, res) => {
+  const { name, amount=0, due_day=1, due_date='', recurrence='monthly', category='Other', color='#3B82F6', notes='' } = req.body || {};
+  if (!name?.trim()) return res.status(400).json({ error: 'Name required' });
+  const row = db.prepare('INSERT INTO bills (name,amount,due_day,due_date,recurrence,category,color,notes) VALUES (?,?,?,?,?,?,?,?) RETURNING *')
+    .get(name.trim(), Number(amount)||0, Number(due_day)||1, due_date, recurrence, category, color, notes);
+  res.json(row);
+});
+
+app.put('/api/bills/:id', requireAuth, (req, res) => {
+  const { name, amount=0, due_day=1, due_date='', recurrence='monthly', category='Other', color='#3B82F6', notes='' } = req.body || {};
+  if (!name?.trim()) return res.status(400).json({ error: 'Name required' });
+  const row = db.prepare('UPDATE bills SET name=?,amount=?,due_day=?,due_date=?,recurrence=?,category=?,color=?,notes=? WHERE id=? RETURNING *')
+    .get(name.trim(), Number(amount)||0, Number(due_day)||1, due_date, recurrence, category, color, notes, Number(req.params.id));
+  if (!row) return res.status(404).json({ error: 'Not found' });
+  res.json(row);
+});
+
+app.delete('/api/bills/:id', requireAuth, (req, res) => {
+  db.prepare('UPDATE bills SET active=0 WHERE id=?').run(Number(req.params.id));
+  res.json({ ok: true });
+});
+
+app.post('/api/bills/:id/pay', requireAuth, (req, res) => {
+  const { period } = req.body || {};
+  if (!period) return res.status(400).json({ error: 'Period required' });
+  db.prepare('INSERT OR IGNORE INTO bill_payments (bill_id, period) VALUES (?, ?)').run(Number(req.params.id), period);
+  res.json({ ok: true });
+});
+
+app.delete('/api/bills/:id/pay/:period', requireAuth, (req, res) => {
+  db.prepare('DELETE FROM bill_payments WHERE bill_id=? AND period=?').run(Number(req.params.id), req.params.period);
   res.json({ ok: true });
 });
 
@@ -3396,6 +3503,7 @@ cron.schedule('0 * * * *', () => {
 
 // ── IMAP email polling ────────────────────────────────────────────────────────
 const SHIPPING_RE = /ship|track|deliver|order|package|dispatch|arrival|transit/i;
+const BILL_RE = /bill|statement|invoice|payment due|amount due|minimum payment|your balance|autopay/i;
 
 async function pollImap() {
   if (g('imap_enabled') !== '1') return;
@@ -3414,8 +3522,9 @@ async function pollImap() {
     try {
       for await (const msg of client.fetch({ unseen: true, since }, { uid: true, source: true, envelope: true })) {
         const subject = msg.envelope?.subject || '';
-        const from = msg.envelope?.from?.[0]?.address || '';
-        if (!SHIPPING_RE.test(subject)) continue;
+        const isShipping = SHIPPING_RE.test(subject);
+        const isBill = !isShipping && BILL_RE.test(subject);
+        if (!isShipping && !isBill) continue;
         let body = '';
         try {
           const parsed = await simpleParser(msg.source);
@@ -3425,18 +3534,26 @@ async function pollImap() {
         // mark seen before AI calls so a crash mid-process doesn't cause infinite reprocessing
         await client.messageFlagsAdd(msg.uid, ['\\Seen'], { uid: true });
 
-        // reuse the same logic as /api/email/inbound
-        const pkg = await callAiForPackage(subject, body).catch(() => null);
-        const result = await callAiForEvent(subject, body).catch(() => null);
-        const event_name = result?.event_name || subject || '(Unknown)';
-        db.prepare('INSERT INTO inbox (subject,event_name,event_date,event_time,recurrence,confidence) VALUES (?,?,?,?,?,?)')
-          .run(subject, event_name, result?.event_date || '', result?.event_time || 'All day', result?.recurrence || 'One-time', result?.confidence || 'medium');
-        if (pkg?.is_shipping) {
-          db.prepare('INSERT INTO packages (carrier,tracking_number,description,expected_date,source_subject) VALUES (?,?,?,?,?)')
-            .run(pkg.carrier || '', pkg.tracking_number || '', pkg.description || '', pkg.expected_date || '', subject);
-          broadcastSSE('packages', { action: 'reload' });
+        if (isShipping) {
+          const pkg = await callAiForPackage(subject, body).catch(() => null);
+          const result = await callAiForEvent(subject, body).catch(() => null);
+          const event_name = result?.event_name || subject || '(Unknown)';
+          db.prepare('INSERT INTO inbox (subject,event_name,event_date,event_time,recurrence,confidence) VALUES (?,?,?,?,?,?)')
+            .run(subject, event_name, result?.event_date || '', result?.event_time || 'All day', result?.recurrence || 'One-time', result?.confidence || 'medium');
+          if (pkg?.is_shipping) {
+            db.prepare('INSERT INTO packages (carrier,tracking_number,description,expected_date,source_subject) VALUES (?,?,?,?,?)')
+              .run(pkg.carrier || '', pkg.tracking_number || '', pkg.description || '', pkg.expected_date || '', subject);
+            broadcastSSE('packages', { action: 'reload' });
+          }
+          broadcastSSE('inbox', { action: 'reload' });
+        } else {
+          const bill = await callAiForBill(subject, body).catch(() => null);
+          if (bill?.is_bill && bill.payee) {
+            db.prepare('INSERT INTO bills (name,amount,due_date,recurrence) VALUES (?,?,?,?)')
+              .run(bill.payee, Number(bill.amount) || 0, bill.due_date || '', bill.recurrence || 'monthly');
+            broadcastSSE('bills', { action: 'reload' });
+          }
         }
-        broadcastSSE('inbox', { action: 'reload' });
         console.log(`[imap] processed: ${subject}`);
       }
     } finally {

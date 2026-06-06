@@ -3384,6 +3384,9 @@ async function pollImap() {
           body = parsed.text || parsed.html || '';
         } catch {}
 
+        // mark seen before AI calls so a crash mid-process doesn't cause infinite reprocessing
+        await client.messageFlagsAdd(msg.uid, ['\\Seen'], { uid: true });
+
         // reuse the same logic as /api/email/inbound
         const pkg = await callAiForPackage(subject, body).catch(() => null);
         const result = await callAiForEvent(subject, body).catch(() => null);

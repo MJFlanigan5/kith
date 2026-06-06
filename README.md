@@ -1,8 +1,10 @@
 # Kith
 
-Self-hosted family dashboard. Calendar, chores, meals, grocery list, and a TV display mode for wall screens.
+Self-hosted family dashboard. Runs on any machine with Docker. Designed for a wall-mounted TV or tablet but works great on desktop and mobile too.
 
-**Features:** Google/iCloud/ICS calendar sync, recurring chores with points leaderboard, grocery list, meal planner, AI email inbox for event parsing, PDF/image event import, email reminders via Resend, full-screen display mode, PIN auth, browser push notifications, weather.
+**Features:** Calendar with ICS sync (Google, iCloud, Outlook), recurring chores with points and streaks, grocery list, meal planner, package tracking, AI email parsing (Gmail IMAP polling or Cloudflare Email Worker), PDF/image event import, email reminders, full-screen display mode, Home Assistant + Homey integration, weather, sports, news, and more.
+
+→ **[Full feature guide and setup instructions](GUIDE.md)**
 
 ## Install
 

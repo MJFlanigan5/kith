@@ -2283,16 +2283,16 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
   const [selectedEvent,setSelectedEvent]=useState(null);
   const [deleteConfirm,setDeleteConfirm]=useState(false);
 
-  const calMap={kith:A.green};
+  const calMap={kith:A.green,packages:'#A0522D'};
   icsSources.forEach(s=>{calMap[`ics:${s.name}`]=s.color;});
   useEffect(()=>{
     setCalFilters(prev=>{
-      const next={kith:prev.kith??true};
+      const next={kith:prev.kith??true,packages:prev.packages??true};
       icsSources.forEach(s=>{const k=`ics:${s.name}`;next[k]=prev[k]??true;});
       return next;
     });
   },[icsSources]);
-  const calLabels={kith:'Kith'};
+  const calLabels={kith:'Kith',packages:'Packages'};
   icsSources.forEach(s=>{calLabels[`ics:${s.name}`]=s.name;});
 
   const weekStart=useMemo(()=>{
@@ -2311,6 +2311,7 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
   const miniDIM=new Date(refDate.getFullYear(),refDate.getMonth()+1,0).getDate();
   const miniCal=[...Array(miniFirstDay).fill(null),...Array.from({length:miniDIM},(_,i)=>i+1)];
   const filteredEvents=events.filter(e=>{const cal=calMap[e.calendar]!==undefined?e.calendar:'kith';return calFilters[cal]!==false;});
+
 
   const navBtnStyle={background:A.inputBg,border:'none',borderRadius:A.rXs,color:A.label2,padding:'5px 11px',fontSize:16,cursor:'pointer'};
   const goBack=()=>calView==='month'?setMonthOffset(p=>p-1):setWeekOffset(p=>p-1);
@@ -5067,6 +5068,7 @@ function GoalsScreen({goals,setGoals,toastAdd}){
 function PackagesScreen({packages,setPackages,toastAdd}){
   const isMobile=useIsMobile();
   const [drawerOpen,setDrawerOpen]=useState(false);
+  const [editPkg,setEditPkg]=useState(null);
   const [form,setForm]=useState({carrier:'',tracking_number:'',description:'',expected_date:''});
 
   const markDelivered=async id=>{
@@ -5084,12 +5086,19 @@ function PackagesScreen({packages,setPackages,toastAdd}){
 
   const save=async()=>{
     if(!form.description.trim()&&!form.tracking_number.trim()){toastAdd('Add a description or tracking number','red');return;}
-    const r=await api.post('/api/packages',form).catch(()=>null);
-    if(!r?.id){toastAdd(r?.error||'Failed to save','red');return;}
-    setPackages(p=>[r,...p]);
-    setDrawerOpen(false);setForm({carrier:'',tracking_number:'',description:'',expected_date:''});
-    toastAdd('Package added');
+    if(editPkg){
+      const r=await api.put(`/api/packages/${editPkg.id}`,form).catch(()=>null);
+      if(!r?.id){toastAdd(r?.error||'Failed to save','red');return;}
+      setPackages(p=>p.map(x=>x.id===r.id?r:x));
+    }else{
+      const r=await api.post('/api/packages',form).catch(()=>null);
+      if(!r?.id){toastAdd(r?.error||'Failed to save','red');return;}
+      setPackages(p=>[r,...p]);
+    }
+    setDrawerOpen(false);setEditPkg(null);setForm({carrier:'',tracking_number:'',description:'',expected_date:''});
+    toastAdd(editPkg?'Package updated':'Package added');
   };
+  const openEdit=pkg=>{setEditPkg(pkg);setForm({carrier:pkg.carrier||'',tracking_number:pkg.tracking_number||'',description:pkg.description||'',expected_date:pkg.expected_date||''});setDrawerOpen(true);};
 
   return(
     <div>
@@ -5118,6 +5127,7 @@ function PackagesScreen({packages,setPackages,toastAdd}){
                 </div>
                 <div style={{display:'flex',flexDirection:'column',gap:6,flexShrink:0}}>
                   <button onClick={()=>markDelivered(pkg.id)} style={{background:A.green,border:'none',color:'#fff',fontSize:12,fontWeight:600,borderRadius:A.rXs,padding:'6px 12px',cursor:'pointer'}}>Delivered</button>
+                  <button onClick={()=>openEdit(pkg)} style={{background:'none',border:'none',color:A.blue,fontSize:12,cursor:'pointer',fontWeight:500}}>Edit</button>
                   <button onClick={()=>del(pkg.id)} style={{background:'none',border:'none',color:A.red,fontSize:12,cursor:'pointer',fontWeight:500}}>Remove</button>
                 </div>
               </div>
@@ -5125,7 +5135,7 @@ function PackagesScreen({packages,setPackages,toastAdd}){
           ))}
         </div>
       )}
-      <Drawer open={drawerOpen} onClose={()=>{setDrawerOpen(false);setForm({carrier:'',tracking_number:'',description:'',expected_date:''}); }} title="Add Package">
+      <Drawer open={drawerOpen} onClose={()=>{setDrawerOpen(false);setEditPkg(null);setForm({carrier:'',tracking_number:'',description:'',expected_date:''});}} title={editPkg?'Edit Package':'Add Package'}>
         <FormGroup label="Description"><div style={{padding:'12px 16px'}}><Inp value={form.description} onChange={e=>setForm(f=>({...f,description:e.target.value}))} placeholder="Blue hoodie from Amazon"/></div></FormGroup>
         <FormGroup label="Carrier"><div style={{padding:'12px 16px'}}><Inp value={form.carrier} onChange={e=>setForm(f=>({...f,carrier:e.target.value}))} placeholder="UPS, FedEx, USPS, Amazon…"/></div></FormGroup>
         <FormGroup label="Tracking #"><div style={{padding:'12px 16px'}}><Inp value={form.tracking_number} onChange={e=>setForm(f=>({...f,tracking_number:e.target.value}))} placeholder="1Z999AA10123456784"/></div></FormGroup>
@@ -5230,7 +5240,167 @@ function MessagesScreen({messages,setMessages,members=[],toastAdd}){
   );
 }
 
-function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocery,setGrocery,meals,setMeals,icsSources,setIcsSources,inboxCount,setInboxCount,countdowns,setCountdowns,members,setMembers,photos,setPhotos,clockFormat,setClockFormat,weather,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd,setRefreshMs,parseRefreshMs,goals,setGoals,notes,setNotes,polls,setPolls,bookmarks,setBookmarks,quickActions,setQuickActions,setRotationMs,setWifiQrData,darkMode,onDarkMode,packages,setPackages,messages,setMessages,isAdmin=false}){
+/* ── Recipes Screen ───────────────────────────────────────────────────────── */
+function RecipesScreen({recipes,setRecipes,toastAdd}){
+  const isMobile=useIsMobile();
+  const [drawerOpen,setDrawerOpen]=useState(false);
+  const [editRecipe,setEditRecipe]=useState(null);
+  const [viewRecipe,setViewRecipe]=useState(null);
+  const [form,setForm]=useState({name:'',description:'',servings:4,prep_time:0,cook_time:0,ingredients:[],steps:'',source_url:''});
+  const [ingLine,setIngLine]=useState('');
+
+  const blankForm={name:'',description:'',servings:4,prep_time:0,cook_time:0,ingredients:[],steps:'',source_url:''};
+
+  const openNew=()=>{setEditRecipe(null);setForm(blankForm);setIngLine('');setDrawerOpen(true);};
+  const openEdit=r=>{
+    setEditRecipe(r);
+    const ings=typeof r.ingredients==='string'?JSON.parse(r.ingredients||'[]'):r.ingredients||[];
+    setForm({name:r.name,description:r.description||'',servings:r.servings||4,prep_time:r.prep_time||0,cook_time:r.cook_time||0,ingredients:ings,steps:r.steps||'',source_url:r.source_url||''});
+    setIngLine('');setDrawerOpen(true);
+  };
+
+  const addIng=()=>{
+    const t=ingLine.trim();
+    if(!t) return;
+    setForm(f=>({...f,ingredients:[...f.ingredients,{name:t,qty:'',unit:''}]}));
+    setIngLine('');
+  };
+  const removeIng=i=>setForm(f=>({...f,ingredients:f.ingredients.filter((_,j)=>j!==i)}));
+
+  const save=async()=>{
+    if(!form.name.trim()){toastAdd('Recipe name required','red');return;}
+    const payload={...form,ingredients:JSON.stringify(form.ingredients)};
+    if(editRecipe){
+      const r=await api.put(`/api/recipes/${editRecipe.id}`,payload).catch(()=>null);
+      if(!r?.id){toastAdd('Failed to save','red');return;}
+      setRecipes(p=>p.map(x=>x.id===r.id?r:x));
+    }else{
+      const r=await api.post('/api/recipes',payload).catch(()=>null);
+      if(!r?.id){toastAdd('Failed to save','red');return;}
+      setRecipes(p=>[...p,r].sort((a,b)=>a.name.localeCompare(b.name)));
+    }
+    setDrawerOpen(false);setEditRecipe(null);
+    toastAdd(editRecipe?'Recipe updated':'Recipe saved');
+  };
+
+  const del=async id=>{
+    await api.del(`/api/recipes/${id}`).catch(()=>{});
+    setRecipes(p=>p.filter(x=>x.id!==id));
+    setViewRecipe(null);
+    toastAdd('Recipe deleted','blue');
+  };
+
+  const parsedView=viewRecipe?{...viewRecipe,ingredients:typeof viewRecipe.ingredients==='string'?JSON.parse(viewRecipe.ingredients||'[]'):viewRecipe.ingredients||[]}:null;
+
+  return(
+    <div>
+      <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:24}}>
+        <div>
+          <h1 style={{fontSize:isMobile?34:44,fontWeight:800,letterSpacing:'-.05em',lineHeight:1.05}}>Recipes</h1>
+          <p style={{color:A.label4,fontSize:15,marginTop:6}}>Save recipes · link to meal planner</p>
+        </div>
+        <Btn onClick={openNew}>+ Add</Btn>
+      </div>
+
+      {recipes.length===0?(
+        <Card style={{padding:'52px 24px',textAlign:'center'}}>
+          <div style={{fontSize:13,fontWeight:700,color:A.label5,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:10}}>No recipes yet</div>
+          <div style={{fontSize:15,color:A.label3,fontWeight:500}}>Add your family favorites and link them to the meal planner.</div>
+        </Card>
+      ):(
+        <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'repeat(auto-fill,minmax(260px,1fr))',gap:12}}>
+          {recipes.map(r=>{
+            const totalMin=(r.prep_time||0)+(r.cook_time||0);
+            const timeStr=totalMin?`${totalMin} min`:'';
+            return(
+              <Card key={r.id} style={{padding:'18px 20px',cursor:'pointer'}} onClick={()=>setViewRecipe(r)}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:16,fontWeight:700,color:A.label1,lineHeight:1.3,marginBottom:4}}>{r.name}</div>
+                    {r.description&&<div style={{fontSize:13,color:A.label4,lineHeight:1.4,overflow:'hidden',textOverflow:'ellipsis',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical'}}>{r.description}</div>}
+                  </div>
+                </div>
+                <div style={{display:'flex',gap:12,marginTop:10,fontSize:12,color:A.label5}}>
+                  {timeStr&&<span>{timeStr}</span>}
+                  <span>{r.servings||4} servings</span>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      {/* View modal */}
+      <Modal open={!!viewRecipe} onClose={()=>setViewRecipe(null)} title={viewRecipe?.name||''} width={600}>
+        {parsedView&&(
+          <div style={{padding:'0 24px 24px'}}>
+            {parsedView.description&&<p style={{fontSize:14,color:A.label3,marginBottom:16,lineHeight:1.5}}>{parsedView.description}</p>}
+            <div style={{display:'flex',gap:16,marginBottom:20,fontSize:13,color:A.label4}}>
+              {(parsedView.prep_time||0)+(parsedView.cook_time||0)>0&&<span>{(parsedView.prep_time||0)+(parsedView.cook_time||0)} min total</span>}
+              <span>{parsedView.servings||4} servings</span>
+              {parsedView.source_url&&<a href={parsedView.source_url} target="_blank" rel="noopener noreferrer" style={{color:A.blue}}>Source</a>}
+            </div>
+            {parsedView.ingredients.length>0&&(
+              <div style={{marginBottom:20}}>
+                <div style={{fontSize:13,fontWeight:700,color:A.label2,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:10}}>Ingredients</div>
+                <ul style={{margin:0,padding:'0 0 0 18px',display:'flex',flexDirection:'column',gap:4}}>
+                  {parsedView.ingredients.map((ing,i)=>(
+                    <li key={i} style={{fontSize:14,color:A.label2}}>
+                      {ing.qty&&<span style={{fontWeight:600}}>{ing.qty}{ing.unit?' '+ing.unit:''} </span>}{ing.name}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {parsedView.steps&&(
+              <div style={{marginBottom:20}}>
+                <div style={{fontSize:13,fontWeight:700,color:A.label2,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:10}}>Instructions</div>
+                <div style={{fontSize:14,color:A.label2,lineHeight:1.7,whiteSpace:'pre-wrap'}}>{parsedView.steps}</div>
+              </div>
+            )}
+            <div style={{display:'flex',gap:8,paddingTop:12,borderTop:`1px solid ${A.sep}`}}>
+              <Btn sm onClick={()=>{setViewRecipe(null);openEdit(viewRecipe);}}>Edit</Btn>
+              <Btn sm variant="ghost" onClick={()=>del(parsedView.id)}>Delete</Btn>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Add/Edit drawer */}
+      <Drawer open={drawerOpen} onClose={()=>{setDrawerOpen(false);setEditRecipe(null);}} title={editRecipe?'Edit Recipe':'New Recipe'}>
+        <FormGroup label="Name"><div style={{padding:'12px 16px'}}><Inp value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} placeholder="Grandma's lasagna"/></div></FormGroup>
+        <FormGroup label="Description"><div style={{padding:'12px 16px'}}><Inp value={form.description} onChange={e=>setForm(f=>({...f,description:e.target.value}))} placeholder="Short description"/></div></FormGroup>
+        <FormGroup label="Servings &amp; time">
+          <div style={{padding:'12px 16px',display:'flex',gap:8}}>
+            <div style={{flex:1}}><div style={{fontSize:11,color:A.label5,marginBottom:4}}>Servings</div><Inp type="number" value={form.servings} onChange={e=>setForm(f=>({...f,servings:parseInt(e.target.value)||4}))}/></div>
+            <div style={{flex:1}}><div style={{fontSize:11,color:A.label5,marginBottom:4}}>Prep (min)</div><Inp type="number" value={form.prep_time} onChange={e=>setForm(f=>({...f,prep_time:parseInt(e.target.value)||0}))}/></div>
+            <div style={{flex:1}}><div style={{fontSize:11,color:A.label5,marginBottom:4}}>Cook (min)</div><Inp type="number" value={form.cook_time} onChange={e=>setForm(f=>({...f,cook_time:parseInt(e.target.value)||0}))}/></div>
+          </div>
+        </FormGroup>
+        <FormGroup label="Ingredients">
+          <div style={{padding:'12px 16px',display:'flex',flexDirection:'column',gap:8}}>
+            {form.ingredients.map((ing,i)=>(
+              <div key={i} style={{display:'flex',alignItems:'center',gap:6,fontSize:13,color:A.label2}}>
+                <div style={{flex:1}}>{ing.qty&&<span style={{fontWeight:600}}>{ing.qty}{ing.unit?' '+ing.unit:''} </span>}{ing.name}</div>
+                <button onClick={()=>removeIng(i)} style={{background:'none',border:'none',color:A.red,cursor:'pointer',fontSize:16,lineHeight:1}}>×</button>
+              </div>
+            ))}
+            <div style={{display:'flex',gap:6}}>
+              <Inp value={ingLine} onChange={e=>setIngLine(e.target.value)} placeholder="2 cups flour" onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addIng();}}} style={{flex:1}}/>
+              <Btn sm variant="ghost" onClick={addIng}>Add</Btn>
+            </div>
+            <div style={{fontSize:11,color:A.label5}}>Type ingredient and press Enter or Add. Example: "2 cups flour"</div>
+          </div>
+        </FormGroup>
+        <FormGroup label="Instructions"><div style={{padding:'12px 16px'}}><textarea value={form.steps} onChange={e=>setForm(f=>({...f,steps:e.target.value}))} placeholder="Step by step instructions..." rows={8} style={{width:'100%',background:A.inputBg,border:'none',borderRadius:A.rSm,padding:'10px 12px',fontSize:14,color:'inherit',resize:'vertical',fontFamily:'inherit',lineHeight:1.6}}/></div></FormGroup>
+        <FormGroup label="Source URL (optional)"><div style={{padding:'12px 16px'}}><Inp value={form.source_url} onChange={e=>setForm(f=>({...f,source_url:e.target.value}))} placeholder="https://..."/></div></FormGroup>
+        <div style={{padding:'16px'}}><Btn onClick={save} full>Save Recipe</Btn></div>
+      </Drawer>
+    </div>
+  );
+}
+
+function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocery,setGrocery,meals,setMeals,icsSources,setIcsSources,inboxCount,setInboxCount,countdowns,setCountdowns,members,setMembers,photos,setPhotos,clockFormat,setClockFormat,weather,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd,setRefreshMs,parseRefreshMs,goals,setGoals,notes,setNotes,polls,setPolls,bookmarks,setBookmarks,quickActions,setQuickActions,setRotationMs,setWifiQrData,darkMode,onDarkMode,packages,setPackages,messages,setMessages,recipes,setRecipes,isAdmin=false}){
   const isMobile=useIsMobile();
   const [screen,setScreen]=useState('dashboard');
   const {toasts,add:toastAdd}=useToast();
@@ -5256,6 +5426,7 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
     {id:'polls',label:'Polls',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="2" y="9" width="3" height="6" rx="1" fill="currentColor" opacity=".5"/><rect x="7" y="5" width="3" height="10" rx="1" fill="currentColor" opacity=".7"/><rect x="12" y="2" width="3" height="13" rx="1" fill="currentColor"/></svg>},
     {id:'packages',label:'Packages',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="2" y="5" width="13" height="10" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M5.5 5V3.5a3 3 0 016 0V5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M2 8.5h13" stroke="currentColor" strokeWidth="1.5"/></svg>,badge:packages?.length||0},
     {id:'messages',label:'Messages',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><path d="M2 3h13a1 1 0 011 1v8a1 1 0 01-1 1H5l-4 3V4a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>,badge:messages?.length||0},
+    {id:'recipes',label:'Recipes',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><path d="M3 2h11a1 1 0 011 1v11a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.5"/><path d="M5 6h7M5 9h5M5 12h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
     {id:'inbox',label:'Inbox',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="1.5" y="3.5" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M1.5 6.5l7 4 7-4" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>,badge:inboxCount},
     {id:'settings',label:'Settings',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><circle cx="8.5" cy="8.5" r="2.5" stroke="currentColor" strokeWidth="1.5"/><path d="M8.5 1v2M8.5 14v2M1 8.5h2M14 8.5h2M3.05 3.05l1.42 1.42M12.53 12.53l1.42 1.42M12.53 3.05l-1.42 1.42M4.47 12.53l-1.42 1.42" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
   ];
@@ -5273,6 +5444,7 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
     polls:      <PollsScreen polls={polls} setPolls={setPolls} toastAdd={toastAdd}/>,
     packages:   <PackagesScreen packages={packages} setPackages={setPackages} toastAdd={toastAdd}/>,
     messages:   <MessagesScreen messages={messages} setMessages={setMessages} members={members} toastAdd={toastAdd}/>,
+    recipes:    <RecipesScreen recipes={recipes} setRecipes={setRecipes} toastAdd={toastAdd}/>,
     inbox:      <InboxScreen toastAdd={toastAdd} events={events} setEvents={setEvents} setInboxCount={setInboxCount}/>,
     settings:   <SettingsScreen toastAdd={toastAdd} icsSources={icsSources} setIcsSources={setIcsSources} onDisplay={onDisplay} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} setQuickActions={setQuickActions} setRotationMs={setRotationMs} setWifiQrData={setWifiQrData} darkMode={darkMode} onDarkMode={onDarkMode}/>,
   };
@@ -5744,6 +5916,7 @@ function App(){
   const [bookmarks,setBookmarks]=useState([]);
   const [packages,setPackages]=useState([]);
   const [messages,setMessages]=useState([]);
+  const [recipes,setRecipes]=useState([]);
   const [quickActions,setQuickActions]=useState([]);
   const [photos,setPhotos]=useState([]);
   const [clockFormat,setClockFormat]=useState('12h');
@@ -5817,7 +5990,8 @@ function App(){
       api.get('/api/bookmarks'),
       api.get('/api/packages'),
       api.get('/api/messages'),
-    ]).then(([ev,ch,gr,ml,ics,inb,cd,mb,ph,st,gl,nt,pl,qa,bm,pk,ms])=>{
+      api.get('/api/recipes'),
+    ]).then(([ev,ch,gr,ml,ics,inb,cd,mb,ph,st,gl,nt,pl,qa,bm,pk,ms,rc])=>{
       if(ev.status==='fulfilled'&&Array.isArray(ev.value)) setEvents(ev.value);
       if(ch.status==='fulfilled'&&Array.isArray(ch.value)) setChores(ch.value);
       if(gr.status==='fulfilled'&&Array.isArray(gr.value)) setGrocery(gr.value);
@@ -5834,6 +6008,7 @@ function App(){
       if(bm.status==='fulfilled'&&Array.isArray(bm.value)) setBookmarks(bm.value);
       if(pk.status==='fulfilled'&&Array.isArray(pk.value)) setPackages(pk.value);
       if(ms.status==='fulfilled'&&Array.isArray(ms.value)) setMessages(ms.value);
+      if(rc.status==='fulfilled'&&Array.isArray(rc.value)) setRecipes(rc.value);
       if(st.status==='fulfilled'){
         const s=st.value;
         if(s.clock_format) setClockFormat(s.clock_format);
@@ -5904,7 +6079,7 @@ function App(){
   const goManage=()=>{localStorage.setItem('kith_mode','manage');setMode('manage');};
   return mode==='display'
     ?<DisplayMode onManage={goManage} events={events} chores={chores} setChores={setChores} meals={meals} grocery={grocery} setGrocery={setGrocery} countdowns={countdowns} photos={photos} clockFormat={clockFormat} weather={weather} nightModeStart={nightModeStart} nightModeEnd={nightModeEnd} goals={goals} notes={notes} polls={polls} rotationMs={rotationMs} wifiQrData={wifiQrData} quickActions={quickActions} members={members} packages={packages} setPackages={setPackages} messages={messages} setMessages={setMessages}/>
-    :<ManageMode onDisplay={goDisplay} onLogout={handleLogout} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources} inboxCount={inboxCount} setInboxCount={setInboxCount} countdowns={countdowns} setCountdowns={setCountdowns} members={members} setMembers={setMembers} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} weather={weather} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} goals={goals} setGoals={setGoals} notes={notes} setNotes={setNotes} polls={polls} setPolls={setPolls} bookmarks={bookmarks} setBookmarks={setBookmarks} quickActions={quickActions} setQuickActions={setQuickActions} setRotationMs={setRotationMs} setWifiQrData={setWifiQrData} darkMode={darkMode} onDarkMode={handleDarkMode} packages={packages} setPackages={setPackages} messages={messages} setMessages={setMessages} isAdmin={!!auth&&!currentMember&&!kiosk}/>;
+    :<ManageMode onDisplay={goDisplay} onLogout={handleLogout} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources} inboxCount={inboxCount} setInboxCount={setInboxCount} countdowns={countdowns} setCountdowns={setCountdowns} members={members} setMembers={setMembers} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} weather={weather} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} goals={goals} setGoals={setGoals} notes={notes} setNotes={setNotes} polls={polls} setPolls={setPolls} bookmarks={bookmarks} setBookmarks={setBookmarks} quickActions={quickActions} setQuickActions={setQuickActions} setRotationMs={setRotationMs} setWifiQrData={setWifiQrData} darkMode={darkMode} onDarkMode={handleDarkMode} packages={packages} setPackages={setPackages} messages={messages} setMessages={setMessages} recipes={recipes} setRecipes={setRecipes} isAdmin={!!auth&&!currentMember&&!kiosk}/>;
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);

@@ -2832,6 +2832,15 @@ app.post('/api/packages', requireAuth, (req, res) => {
   res.json(row);
 });
 
+app.put('/api/packages/:id', requireAuth, (req, res) => {
+  const { carrier='', tracking_number='', description='', expected_date='' } = req.body || {};
+  const row = db.prepare('UPDATE packages SET carrier=?,tracking_number=?,description=?,expected_date=? WHERE id=? RETURNING *')
+    .get(carrier, tracking_number, description, expected_date, Number(req.params.id));
+  if (!row) return res.status(404).json({ error: 'Not found' });
+  broadcastSSE('packages', { action: 'reload' });
+  res.json(row);
+});
+
 app.put('/api/packages/:id/delivered', requireAuth, (req, res) => {
   const row = db.prepare('UPDATE packages SET delivered=1, status=? WHERE id=? RETURNING *')
     .get('delivered', Number(req.params.id));
@@ -2844,6 +2853,35 @@ app.delete('/api/packages/:id', requireAuth, (req, res) => {
   const info = db.prepare('DELETE FROM packages WHERE id=?').run(Number(req.params.id));
   if (!info.changes) return res.status(404).json({ error: 'Not found' });
   broadcastSSE('packages', { action: 'reload' });
+  res.json({ ok: true });
+});
+
+// ── Routes: Recipes ───────────────────────────────────────────────────────────
+
+app.get('/api/recipes', (req, res) => {
+  res.json(db.prepare('SELECT * FROM recipes ORDER BY name').all());
+});
+
+app.post('/api/recipes', requireAuth, (req, res) => {
+  const { name, description='', servings=4, prep_time=0, cook_time=0, ingredients='[]', steps='', source_url='' } = req.body || {};
+  if (!name?.trim()) return res.status(400).json({ error: 'Name required' });
+  const row = db.prepare('INSERT INTO recipes (name,description,servings,prep_time,cook_time,ingredients,steps,source_url) VALUES (?,?,?,?,?,?,?,?) RETURNING *')
+    .get(name.trim(), description, Number(servings)||4, Number(prep_time)||0, Number(cook_time)||0, typeof ingredients==='string'?ingredients:JSON.stringify(ingredients), steps, source_url);
+  res.json(row);
+});
+
+app.put('/api/recipes/:id', requireAuth, (req, res) => {
+  const { name, description='', servings=4, prep_time=0, cook_time=0, ingredients='[]', steps='', source_url='' } = req.body || {};
+  if (!name?.trim()) return res.status(400).json({ error: 'Name required' });
+  const row = db.prepare('UPDATE recipes SET name=?,description=?,servings=?,prep_time=?,cook_time=?,ingredients=?,steps=?,source_url=? WHERE id=? RETURNING *')
+    .get(name.trim(), description, Number(servings)||4, Number(prep_time)||0, Number(cook_time)||0, typeof ingredients==='string'?ingredients:JSON.stringify(ingredients), steps, source_url, Number(req.params.id));
+  if (!row) return res.status(404).json({ error: 'Not found' });
+  res.json(row);
+});
+
+app.delete('/api/recipes/:id', requireAuth, (req, res) => {
+  const info = db.prepare('DELETE FROM recipes WHERE id=?').run(Number(req.params.id));
+  if (!info.changes) return res.status(404).json({ error: 'Not found' });
   res.json({ ok: true });
 });
 

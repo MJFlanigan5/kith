@@ -193,6 +193,19 @@ CREATE TABLE IF NOT EXISTS messages (
   expires_at DATETIME NOT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS recipes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  description TEXT DEFAULT '',
+  servings INTEGER DEFAULT 4,
+  prep_time INTEGER DEFAULT 0,
+  cook_time INTEGER DEFAULT 0,
+  ingredients TEXT DEFAULT '[]',
+  steps TEXT DEFAULT '',
+  source_url TEXT DEFAULT '',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
 `);
 
 // migrations — safe to run on every boot

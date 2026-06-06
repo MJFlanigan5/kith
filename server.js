@@ -3374,20 +3374,15 @@ async function pollImap() {
     const lock = await client.getMailboxLock('INBOX');
     const since = new Date(Date.now() - 48 * 60 * 60 * 1000);
     try {
-      for await (const msg of client.fetch({ seen: false, since }, { uid: true, source: true, envelope: true })) {
+      for await (const msg of client.fetch({ unseen: true, since }, { uid: true, source: true, envelope: true })) {
         const subject = msg.envelope?.subject || '';
         const from = msg.envelope?.from?.[0]?.address || '';
-        if (!SHIPPING_RE.test(subject)) {
-          await client.messageFlagsAdd(msg.uid, ['\\Seen'], { uid: true });
-          continue;
-        }
+        if (!SHIPPING_RE.test(subject)) continue;
         let body = '';
         try {
           const parsed = await simpleParser(msg.source);
           body = parsed.text || parsed.html || '';
         } catch {}
-
-        await client.messageFlagsAdd(msg.uid, ['\\Seen'], { uid: true });
 
         // reuse the same logic as /api/email/inbound
         const pkg = await callAiForPackage(subject, body).catch(() => null);

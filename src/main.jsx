@@ -2564,7 +2564,9 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
               {selectedEvent.notes&&<div style={{fontSize:14,color:A.label2,background:A.systemBg,borderRadius:A.rXs,padding:'10px 12px'}}>{selectedEvent.notes}</div>}
             </div>
             <div style={{paddingTop:16,borderTop:`1px solid ${A.sep}`}}>
-              {deleteConfirm?(
+              {selectedEvent.source==='package'?(
+                <div style={{fontSize:13,color:A.label4,textAlign:'center'}}>Manage this in the Packages section</div>
+              ):deleteConfirm?(
                 <div>
                   <div style={{fontSize:13,color:A.label3,marginBottom:10,fontWeight:500}}>Delete recurring event:</div>
                   <div style={{display:'flex',flexDirection:'column',gap:8}}>

@@ -3601,9 +3601,11 @@ cron.schedule('0 * * * *', () => {
 // ── IMAP email polling ────────────────────────────────────────────────────────
 const SHIPPING_RE = /ship|track|deliver|order|package|dispatch|arrival|transit/i;
 const BILL_RE = /bill|statement|invoice|payment due|amount due|minimum payment|your balance|autopay/i;
+const APPT_RE = /reservation|booking|confirm|appointment|itinerary|check.in|boarding pass|flight|hotel|restaurant|ticket|rsvp|reminder|your trip|your stay|your reservation|your booking|your order confirmation/i;
 
 async function pollImap() {
   if (g('imap_enabled') !== '1') return;
+  if (_scanInProgress) return; // don't overlap with manual 30-day scan
   const host = g('imap_host'), port = parseInt(g('imap_port') || '993');
   const user = g('imap_user'), pass = g('imap_pass');
   if (!host || !user || !pass) return;
@@ -3621,7 +3623,8 @@ async function pollImap() {
         const subject = msg.envelope?.subject || '';
         const isShipping = SHIPPING_RE.test(subject);
         const isBill = !isShipping && BILL_RE.test(subject);
-        if (!isShipping && !isBill) continue;
+        const isAppt = !isShipping && !isBill && APPT_RE.test(subject);
+        if (!isShipping && !isBill && !isAppt) continue;
         let body = '';
         try {
           const parsed = await simpleParser(msg.source);
@@ -3632,23 +3635,46 @@ async function pollImap() {
         await client.messageFlagsAdd(msg.uid, ['\\Seen'], { uid: true });
 
         if (isShipping) {
-          const pkg = await callAiForPackage(subject, body).catch(() => null);
-          const result = await callAiForEvent(subject, body).catch(() => null);
-          const event_name = result?.event_name || subject || '(Unknown)';
-          db.prepare('INSERT INTO inbox (subject,event_name,event_date,event_time,recurrence,confidence) VALUES (?,?,?,?,?,?)')
-            .run(subject, event_name, result?.event_date || '', result?.event_time || 'All day', result?.recurrence || 'One-time', result?.confidence || 'medium');
-          if (pkg?.is_shipping) {
-            db.prepare('INSERT INTO packages (carrier,tracking_number,description,expected_date,source_subject) VALUES (?,?,?,?,?)')
-              .run(pkg.carrier || '', pkg.tracking_number || '', pkg.description || '', pkg.expected_date || '', subject);
-            broadcastSSE('packages', { action: 'reload' });
+          const [pkg, result] = await Promise.all([
+            callAiForPackage(subject, body).catch(() => null),
+            callAiForEvent(subject, body).catch(() => null),
+          ]);
+          if (pkg?.is_shipping && pkg.tracking_number) {
+            const exists = db.prepare('SELECT id FROM packages WHERE tracking_number=?').get(pkg.tracking_number);
+            if (!exists) {
+              db.prepare('INSERT INTO packages (carrier,tracking_number,description,expected_date,source_subject) VALUES (?,?,?,?,?)')
+                .run(pkg.carrier || '', pkg.tracking_number, pkg.description || '', pkg.expected_date || '', subject);
+              broadcastSSE('packages', { action: 'reload' });
+            }
           }
-          broadcastSSE('inbox', { action: 'reload' });
-        } else {
+          // only add to inbox if AI found an actual calendar event (not just a shipping update)
+          if (result?.event_name && result?.event_date) {
+            const dupInbox = db.prepare('SELECT id FROM inbox WHERE subject=?').get(subject);
+            if (!dupInbox) {
+              db.prepare('INSERT INTO inbox (subject,event_name,event_date,event_time,recurrence,confidence) VALUES (?,?,?,?,?,?)')
+                .run(subject, result.event_name, result.event_date, result.event_time || 'All day', result.recurrence || 'One-time', result.confidence || 'medium');
+              broadcastSSE('inbox', { action: 'reload' });
+            }
+          }
+        } else if (isBill) {
           const bill = await callAiForBill(subject, body).catch(() => null);
           if (bill?.is_bill && bill.payee) {
-            db.prepare('INSERT INTO bills (name,amount,due_date,recurrence) VALUES (?,?,?,?)')
-              .run(bill.payee, Number(bill.amount) || 0, bill.due_date || '', bill.recurrence || 'monthly');
-            broadcastSSE('bills', { action: 'reload' });
+            const exists = db.prepare('SELECT id FROM bills WHERE name=? AND active=1').get(bill.payee);
+            if (!exists) {
+              db.prepare('INSERT INTO bills (name,amount,due_date,recurrence) VALUES (?,?,?,?)')
+                .run(bill.payee, Number(bill.amount) || 0, bill.due_date || '', bill.recurrence || 'monthly');
+              broadcastSSE('bills', { action: 'reload' });
+            }
+          }
+        } else if (isAppt) {
+          const result = await callAiForEvent(subject, body).catch(() => null);
+          if (result?.event_name && result?.event_date) {
+            const dupInbox = db.prepare('SELECT id FROM inbox WHERE subject=?').get(subject);
+            if (!dupInbox) {
+              db.prepare('INSERT INTO inbox (subject,event_name,event_date,event_time,recurrence,confidence) VALUES (?,?,?,?,?,?)')
+                .run(subject, result.event_name, result.event_date, result.event_time || 'All day', result.recurrence || 'One-time', result.confidence || 'high');
+              broadcastSSE('inbox', { action: 'reload' });
+            }
           }
         }
         console.log(`[imap] processed: ${subject}`);
@@ -3669,7 +3695,7 @@ let _scanInProgress = false;
 async function scanImap30Days() {
   if (_scanInProgress) return;
   _scanInProgress = true;
-  const summary = { packages: 0, bills: 0, events: 0 };
+  const summary = { packages: 0, bills: 0, events: 0, appointments: 0 };
   try {
     const host = g('imap_host'), port = parseInt(g('imap_port') || '993');
     const user = g('imap_user'), pass = g('imap_pass');
@@ -3689,16 +3715,17 @@ async function scanImap30Days() {
         const subject = msg.envelope?.subject || '';
         const isShipping = SHIPPING_RE.test(subject);
         const isBill = !isShipping && BILL_RE.test(subject);
-        if (!isShipping && !isBill) continue;
+        const isAppt = !isShipping && !isBill && APPT_RE.test(subject);
+        if (!isShipping && !isBill && !isAppt) continue;
         let body = '';
         try { const p = await simpleParser(msg.source); body = p.text || p.html || ''; } catch {}
-        batch.push({ subject, isShipping, body });
-        if (batch.length >= 30) break;
+        batch.push({ subject, isShipping, isBill, isAppt, body });
+        if (batch.length >= 50) break;
       }
     } finally { lock.release(); }
     try { await client.logout(); } catch {}
 
-    for (const { subject, isShipping, body } of batch) {
+    for (const { subject, isShipping, isBill, isAppt, body } of batch) {
       if (isShipping) {
         const [pkg, evt] = await Promise.all([
           callAiForPackage(subject, body).catch(() => null),
@@ -3712,12 +3739,16 @@ async function scanImap30Days() {
             summary.packages++;
           }
         }
-        if (evt?.event_name) {
-          db.prepare('INSERT INTO inbox (subject,event_name,event_date,event_time,recurrence,confidence) VALUES (?,?,?,?,?,?)')
-            .run(subject, evt.event_name, evt.event_date || '', evt.event_time || 'All day', evt.recurrence || 'One-time', evt.confidence || 'medium');
-          summary.events++;
+        // only add shipping emails to inbox if there's an actual calendar event (e.g. a delivery date confirmation)
+        if (evt?.event_name && evt?.event_date) {
+          const dup = db.prepare('SELECT id FROM inbox WHERE subject=?').get(subject);
+          if (!dup) {
+            db.prepare('INSERT INTO inbox (subject,event_name,event_date,event_time,recurrence,confidence) VALUES (?,?,?,?,?,?)')
+              .run(subject, evt.event_name, evt.event_date, evt.event_time || 'All day', evt.recurrence || 'One-time', evt.confidence || 'medium');
+            summary.events++;
+          }
         }
-      } else {
+      } else if (isBill) {
         const bill = await callAiForBill(subject, body).catch(() => null);
         if (bill?.is_bill && bill.payee) {
           const exists = db.prepare('SELECT id FROM bills WHERE name=? AND active=1').get(bill.payee);
@@ -3727,13 +3758,23 @@ async function scanImap30Days() {
             summary.bills++;
           }
         }
+      } else if (isAppt) {
+        const result = await callAiForEvent(subject, body).catch(() => null);
+        if (result?.event_name && result?.event_date) {
+          const dup = db.prepare('SELECT id FROM inbox WHERE subject=?').get(subject);
+          if (!dup) {
+            db.prepare('INSERT INTO inbox (subject,event_name,event_date,event_time,recurrence,confidence) VALUES (?,?,?,?,?,?)')
+              .run(subject, result.event_name, result.event_date, result.event_time || 'All day', result.recurrence || 'One-time', result.confidence || 'high');
+            summary.appointments++;
+          }
+        }
       }
     }
 
     if (summary.packages > 0) broadcastSSE('packages', { action: 'reload' });
     if (summary.bills > 0) broadcastSSE('bills', { action: 'reload' });
-    if (summary.events > 0) broadcastSSE('inbox', { action: 'reload' });
-    console.log(`[imap scan] done — packages:${summary.packages} bills:${summary.bills} events:${summary.events}`);
+    if (summary.events + summary.appointments > 0) broadcastSSE('inbox', { action: 'reload' });
+    console.log(`[imap scan] done — packages:${summary.packages} bills:${summary.bills} events:${summary.events} appointments:${summary.appointments}`);
   } catch (e) {
     console.error('[imap scan]', e?.message || e);
   } finally {

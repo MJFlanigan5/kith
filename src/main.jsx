@@ -577,6 +577,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
       api.get('/api/events').then(d=>{if(Array.isArray(d))setEvents(d);}).catch(()=>{});
     });
     es.addEventListener('messages',()=>{api.get('/api/messages').then(d=>{if(Array.isArray(d)&&setMessages)setMessages(d);}).catch(()=>{});});
+    es.addEventListener('inbox',()=>{api.get('/api/inbox').then(d=>{if(d&&Array.isArray(d.pending))setInboxCount(d.pending.length);}).catch(()=>{});});
     es.addEventListener('bills',()=>{
       api.get('/api/bills').then(d=>{if(d.bills){setBills(d.bills);setPayments(d.payments||[]);}}).catch(()=>{});
       api.get('/api/events').then(d=>{if(Array.isArray(d))setEvents(d);}).catch(()=>{});
@@ -2895,7 +2896,7 @@ function InboxScreen({toastAdd,events,setEvents,setInboxCount}){
       <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:24}}>
         <div>
           <h1 style={{fontSize:28,fontWeight:800,letterSpacing:'-.04em'}}>Inbox</h1>
-          <p style={{color:A.label4,fontSize:15,marginTop:4}}>Parsed events from forwarded emails</p>
+          <p style={{color:A.label4,fontSize:15,marginTop:4}}>Appointments and events detected from email</p>
         </div>
         {pending.length>0&&<Badge color={A.blue}>{pending.length} pending</Badge>}
       </div>
@@ -2914,7 +2915,7 @@ function InboxScreen({toastAdd,events,setEvents,setInboxCount}){
           return(
             <Card key={item.id} style={{overflow:'hidden',animation:'slideUp .2s ease'}}>
               <div style={{padding:'16px 18px 0'}}>
-                <div style={{fontSize:11,color:A.label4,marginBottom:6,textTransform:'uppercase',letterSpacing:'.04em',fontWeight:500}}>Forwarded email</div>
+                <div style={{fontSize:11,color:A.label4,marginBottom:6,textTransform:'uppercase',letterSpacing:'.04em',fontWeight:500}}>From email</div>
                 <div style={{fontSize:16,fontWeight:600,color:A.label1,marginBottom:14}}>{item.subject}</div>
                 <div style={{background:A.systemBg,borderRadius:A.rSm,padding:'14px 16px',marginBottom:14}}>
                   <div style={{fontSize:17,fontWeight:700,color:A.label1,marginBottom:10,letterSpacing:'-.01em'}}>{item.event_name}</div>
@@ -3845,7 +3846,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
             </div>
             {imapUser&&(
               <div style={{marginTop:12,paddingTop:12,borderTop:`1px solid ${A.sep}`}}>
-                <div style={{fontSize:13,color:A.label4,marginBottom:8}}>Scan the last 30 days of your inbox to auto-import packages, bills, and calendar events. Duplicates are skipped.</div>
+                <div style={{fontSize:13,color:A.label4,marginBottom:8}}>Scan the last 30 days of your inbox to auto-import packages, bills, reservations, and appointments. Duplicates are skipped.</div>
                 <Btn sm variant="ghost" loading={imapScanning} onClick={async()=>{
                   if(imapScanning) return;
                   setImapScanning(true);
@@ -3865,6 +3866,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
                       const parts=[];
                       if(d.packages>0) parts.push(`${d.packages} package${d.packages===1?'':'s'}`);
                       if(d.bills>0) parts.push(`${d.bills} bill${d.bills===1?'':'s'}`);
+                      if(d.appointments>0) parts.push(`${d.appointments} appointment${d.appointments===1?'':'s'}`);
                       if(d.events>0) parts.push(`${d.events} event${d.events===1?'':'s'}`);
                       toastAdd(parts.length?`Scan found: ${parts.join(', ')}`:'Scan complete — nothing new found');
                     }catch{toastAdd('Scan complete');}

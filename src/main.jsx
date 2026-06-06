@@ -5525,7 +5525,7 @@ function VehiclesScreen({vehicles,setVehicles,toastAdd}){
                 setVinLoading(true);
                 const r=await api.get(`/api/vehicles/vin/${vin}`).catch(()=>null);
                 setVinLoading(false);
-                if(!r||r.error){toastAdd(r.error||'VIN not found','red');return;}
+                if(!r||r.error){toastAdd(r?.error||'VIN not found','red');return;}
                 setVForm(f=>({...f,make:r.make||f.make,model:r.model||f.model,year:r.year?String(r.year):f.year}));
                 toastAdd('VIN decoded — make/model/year filled');
               }}

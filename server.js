@@ -3049,8 +3049,17 @@ app.post('/api/vehicles/:id/services', requireAuth, (req, res) => {
 app.put('/api/vehicles/:id/services/:sid', requireAuth, (req, res) => {
   const { name, interval_days=0, interval_miles=0, notes='' } = req.body || {};
   if (!name?.trim()) return res.status(400).json({ error: 'Name required' });
-  const row = db.prepare('UPDATE vehicle_services SET name=?,interval_days=?,interval_miles=?,notes=? WHERE id=? AND vehicle_id=? RETURNING *')
-    .get(name.trim(), parseInt(interval_days)||0, parseInt(interval_miles)||0, notes, Number(req.params.sid), Number(req.params.id));
+  const iDays = parseInt(interval_days) || 0;
+  const existing = db.prepare('SELECT last_done_date FROM vehicle_services WHERE id=? AND vehicle_id=?').get(Number(req.params.sid), Number(req.params.id));
+  if (!existing) return res.status(404).json({ error: 'Not found' });
+  let nextDue = '';
+  if (iDays > 0 && existing.last_done_date) {
+    const d = new Date(existing.last_done_date + 'T00:00:00');
+    d.setDate(d.getDate() + iDays);
+    nextDue = d.toISOString().slice(0, 10);
+  }
+  const row = db.prepare('UPDATE vehicle_services SET name=?,interval_days=?,interval_miles=?,notes=?,next_due_date=? WHERE id=? AND vehicle_id=? RETURNING *')
+    .get(name.trim(), iDays, parseInt(interval_miles)||0, notes, nextDue, Number(req.params.sid), Number(req.params.id));
   if (!row) return res.status(404).json({ error: 'Not found' });
   res.json(row);
 });
@@ -3076,6 +3085,7 @@ app.post('/api/vehicles/:id/services/:sid/done', requireAuth, (req, res) => {
   }
   const row = db.prepare('UPDATE vehicle_services SET last_done_date=?,last_done_miles=?,next_due_date=? WHERE id=? RETURNING *')
     .get(doneDate, parseInt(miles)||0, nextDue, sid);
+  broadcastSSE('vehicles', { action: 'reload' });
   res.json(row);
 });
 
@@ -3686,7 +3696,7 @@ async function scanImap30Days() {
         if (batch.length >= 30) break;
       }
     } finally { lock.release(); }
-    await client.logout();
+    try { await client.logout(); } catch {}
 
     for (const { subject, isShipping, body } of batch) {
       if (isShipping) {

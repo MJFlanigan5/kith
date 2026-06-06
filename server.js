@@ -3669,6 +3669,13 @@ async function scanImap30Days() {
     const user = g('imap_user'), pass = g('imap_pass');
     if (!host || !user || !pass) {
       broadcastSSE('scan_complete', { ...summary, error: 'no_credentials' });
+      _scanInProgress = false;
+      return;
+    }
+    const aiKey = g('ai_api_key') || g('anthropic_api_key') || process.env.ANTHROPIC_API_KEY || '';
+    if (!aiKey) {
+      broadcastSSE('scan_complete', { ...summary, error: 'no_ai_key' });
+      _scanInProgress = false;
       return;
     }
 
@@ -3751,10 +3758,12 @@ async function scanImap30Days() {
     console.log(`[imap scan] done — packages:${summary.packages} bills:${summary.bills} events:${summary.events} appointments:${summary.appointments}`);
   } catch (e) {
     console.error('[imap scan]', e?.message || e);
+    broadcastSSE('scan_complete', { ...summary, error: e?.message || 'Scan failed' });
+    return;
   } finally {
     _scanInProgress = false;
-    broadcastSSE('scan_complete', summary);
   }
+  broadcastSSE('scan_complete', summary);
 }
 
 app.post('/api/imap/scan', requireAuth, (req, res) => {

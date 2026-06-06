@@ -3875,6 +3875,8 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
                     try{
                       const d=JSON.parse(e.data);
                       if(d.error==='no_credentials'){toastAdd('IMAP credentials not saved — enter and save your Gmail settings first','red');return;}
+                      if(d.error==='no_ai_key'){toastAdd('No AI API key configured — add one in Settings → AI','red');return;}
+                      if(d.error){toastAdd(`Scan failed: ${d.error}`,'red');return;}
                       const parts=[];
                       if(d.packages>0) parts.push(`${d.packages} package${d.packages===1?'':'s'}`);
                       if(d.bills>0) parts.push(`${d.bills} bill${d.bills===1?'':'s'}`);

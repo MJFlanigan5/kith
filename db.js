@@ -228,6 +228,30 @@ CREATE TABLE IF NOT EXISTS bill_payments (
   paid_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(bill_id, period)
 );
+
+CREATE TABLE IF NOT EXISTS vehicles (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  make TEXT DEFAULT '',
+  model TEXT DEFAULT '',
+  year INTEGER DEFAULT 0,
+  color TEXT DEFAULT '#3B82F6',
+  notes TEXT DEFAULT '',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS vehicle_services (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  vehicle_id INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  interval_days INTEGER DEFAULT 0,
+  interval_miles INTEGER DEFAULT 0,
+  last_done_date TEXT DEFAULT '',
+  last_done_miles INTEGER DEFAULT 0,
+  next_due_date TEXT DEFAULT '',
+  notes TEXT DEFAULT '',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
 `);
 
 // migrations — safe to run on every boot

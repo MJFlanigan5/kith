@@ -575,6 +575,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
     es.addEventListener('packages',()=>{api.get('/api/packages').then(d=>{if(Array.isArray(d)&&setPackages)setPackages(d);}).catch(()=>{});});
     es.addEventListener('messages',()=>{api.get('/api/messages').then(d=>{if(Array.isArray(d)&&setMessages)setMessages(d);}).catch(()=>{});});
     es.addEventListener('bills',()=>{api.get('/api/bills').then(d=>{if(d.bills){setBills(d.bills);setPayments(d.payments||[]);}}).catch(()=>{});});
+    es.addEventListener('vehicles',()=>{api.get('/api/vehicles').then(d=>{if(Array.isArray(d))setVehicles(d);}).catch(()=>{});});
     es.addEventListener('open',()=>{setOnline(true);loadWidgets();});
     es.addEventListener('error',()=>setOnline(false));
     return()=>{clearInterval(fa);clearInterval(fb);clearInterval(fc);es.close();};
@@ -2286,16 +2287,16 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
   const [selectedEvent,setSelectedEvent]=useState(null);
   const [deleteConfirm,setDeleteConfirm]=useState(false);
 
-  const calMap={kith:A.green,packages:'#A0522D',bills:'#3B82F6'};
+  const calMap={kith:A.green,packages:'#A0522D',bills:'#3B82F6',vehicles:'#8B5CF6'};
   icsSources.forEach(s=>{calMap[`ics:${s.name}`]=s.color;});
   useEffect(()=>{
     setCalFilters(prev=>{
-      const next={kith:prev.kith??true,packages:prev.packages??true,bills:prev.bills??true};
+      const next={kith:prev.kith??true,packages:prev.packages??true,bills:prev.bills??true,vehicles:prev.vehicles??true};
       icsSources.forEach(s=>{const k=`ics:${s.name}`;next[k]=prev[k]??true;});
       return next;
     });
   },[icsSources]);
-  const calLabels={kith:'Kith',packages:'Packages',bills:'Bills'};
+  const calLabels={kith:'Kith',packages:'Packages',bills:'Bills',vehicles:'Vehicles'};
   icsSources.forEach(s=>{calLabels[`ics:${s.name}`]=s.name;});
 
   const weekStart=useMemo(()=>{
@@ -2572,6 +2573,8 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
                 <div style={{fontSize:13,color:A.label4,textAlign:'center'}}>Manage this in the Packages section</div>
               ):selectedEvent.source==='bill'?(
                 <div style={{fontSize:13,color:A.label4,textAlign:'center'}}>Manage this in the Bills section</div>
+              ):selectedEvent.source==='vehicle'?(
+                <div style={{fontSize:13,color:A.label4,textAlign:'center'}}>Manage this in the Vehicles section</div>
               ):deleteConfirm?(
                 <div>
                   <div style={{fontSize:13,color:A.label3,marginBottom:10,fontWeight:500}}>Delete recurring event:</div>
@@ -5246,6 +5249,220 @@ function MessagesScreen({messages,setMessages,members=[],toastAdd}){
   );
 }
 
+/* ── Vehicles Screen ─────────────────────────────────────────────────────── */
+function VehiclesScreen({vehicles,setVehicles,toastAdd}){
+  const isMobile=useIsMobile();
+  const [vDrawer,setVDrawer]=useState(false);
+  const [editVehicle,setEditVehicle]=useState(null);
+  const blankV={name:'',make:'',model:'',year:'',color:'#3B82F6',notes:''};
+  const [vForm,setVForm]=useState(blankV);
+
+  const [sDrawer,setSDrawer]=useState(false);
+  const [sVehicleId,setSVehicleId]=useState(null);
+  const [editService,setEditService]=useState(null);
+  const blankS={name:'',interval_days:'',interval_miles:'',notes:''};
+  const [sForm,setSForm]=useState(blankS);
+
+  const [doneTarget,setDoneTarget]=useState(null);
+  const [doneDate,setDoneDate]=useState('');
+  const [doneMiles,setDoneMiles]=useState('');
+
+  const svcStatus=s=>{
+    if(!s.next_due_date) return 'gray';
+    const d=daysUntil(s.next_due_date);
+    if(d<0) return 'red';
+    if(d<=30) return 'amber';
+    return 'green';
+  };
+  const svcColor=st=>({red:A.red,amber:A.amber,green:A.green,gray:A.label5}[st]);
+  const dueLabel=s=>{
+    if(!s.next_due_date){
+      if(s.interval_miles>0) return `Every ${Number(s.interval_miles).toLocaleString()} mi`;
+      return 'No schedule set';
+    }
+    const d=daysUntil(s.next_due_date);
+    if(d<0) return `Overdue by ${Math.abs(d)} day${Math.abs(d)===1?'':'s'}`;
+    if(d===0) return 'Due today';
+    return `Due in ${d} day${d===1?'':'s'}`;
+  };
+  const intervalLabel=s=>{
+    const parts=[];
+    if(s.interval_days>0) parts.push(`every ${s.interval_days}d`);
+    if(s.interval_miles>0) parts.push(`every ${Number(s.interval_miles).toLocaleString()} mi`);
+    return parts.join(' · ');
+  };
+
+  const openNewVehicle=()=>{setEditVehicle(null);setVForm(blankV);setVDrawer(true);};
+  const openEditVehicle=v=>{setEditVehicle(v);setVForm({name:v.name,make:v.make||'',model:v.model||'',year:v.year?String(v.year):'',color:v.color||'#3B82F6',notes:v.notes||''});setVDrawer(true);};
+
+  const saveVehicle=async()=>{
+    if(!vForm.name.trim()){toastAdd('Name required','red');return;}
+    const payload={name:vForm.name.trim(),make:vForm.make,model:vForm.model,year:parseInt(vForm.year)||0,color:vForm.color,notes:vForm.notes};
+    if(editVehicle){
+      const r=await api.put(`/api/vehicles/${editVehicle.id}`,payload).catch(()=>null);
+      if(!r?.id){toastAdd('Failed to save','red');return;}
+      setVehicles(p=>p.map(v=>v.id===r.id?{...r,services:v.services}:v));
+    }else{
+      const r=await api.post('/api/vehicles',payload).catch(()=>null);
+      if(!r?.id){toastAdd('Failed to save','red');return;}
+      setVehicles(p=>[...p,{...r,services:[]}].sort((a,b)=>a.name.localeCompare(b.name)));
+    }
+    setVDrawer(false);setEditVehicle(null);
+    toastAdd(editVehicle?'Vehicle updated':'Vehicle added');
+  };
+
+  const delVehicle=async id=>{
+    await api.del(`/api/vehicles/${id}`).catch(()=>{});
+    setVehicles(p=>p.filter(v=>v.id!==id));
+    setVDrawer(false);setEditVehicle(null);
+    toastAdd('Vehicle removed','blue');
+  };
+
+  const openNewService=vid=>{setSVehicleId(vid);setEditService(null);setSForm(blankS);setSDrawer(true);};
+  const openEditService=(vid,s)=>{setSVehicleId(vid);setEditService(s);setSForm({name:s.name,interval_days:s.interval_days||'',interval_miles:s.interval_miles||'',notes:s.notes||''});setSDrawer(true);};
+
+  const saveService=async()=>{
+    if(!sForm.name.trim()){toastAdd('Name required','red');return;}
+    const payload={name:sForm.name.trim(),interval_days:parseInt(sForm.interval_days)||0,interval_miles:parseInt(sForm.interval_miles)||0,notes:sForm.notes};
+    if(editService){
+      const r=await api.put(`/api/vehicles/${sVehicleId}/services/${editService.id}`,payload).catch(()=>null);
+      if(!r?.id){toastAdd('Failed to save','red');return;}
+      setVehicles(p=>p.map(v=>v.id===sVehicleId?{...v,services:v.services.map(s=>s.id===r.id?r:s)}:v));
+    }else{
+      const r=await api.post(`/api/vehicles/${sVehicleId}/services`,payload).catch(()=>null);
+      if(!r?.id){toastAdd('Failed to save','red');return;}
+      setVehicles(p=>p.map(v=>v.id===sVehicleId?{...v,services:[...v.services,r]}:v));
+    }
+    setSDrawer(false);setEditService(null);
+    toastAdd(editService?'Service updated':'Service added');
+  };
+
+  const delService=async(vid,sid)=>{
+    await api.del(`/api/vehicles/${vid}/services/${sid}`).catch(()=>{});
+    setVehicles(p=>p.map(v=>v.id===vid?{...v,services:v.services.filter(s=>s.id!==sid)}:v));
+    setSDrawer(false);setEditService(null);
+    toastAdd('Service removed','blue');
+  };
+
+  const openDone=(vid,s)=>{setDoneTarget({vehicleId:vid,service:s});setDoneDate(localDate());setDoneMiles('');};
+  const confirmDone=async()=>{
+    if(!doneTarget) return;
+    const {vehicleId,service}=doneTarget;
+    const r=await api.post(`/api/vehicles/${vehicleId}/services/${service.id}/done`,{date:doneDate,miles:parseInt(doneMiles)||0}).catch(()=>null);
+    if(!r?.id){toastAdd('Failed to log','red');return;}
+    setVehicles(p=>p.map(v=>v.id===vehicleId?{...v,services:v.services.map(s=>s.id===r.id?r:s)}:v));
+    setDoneTarget(null);
+    toastAdd('Service logged');
+  };
+
+  return(
+    <div>
+      <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:24}}>
+        <h1 style={{fontSize:isMobile?34:44,fontWeight:800,letterSpacing:'-.05em',lineHeight:1.05}}>Vehicles</h1>
+        <Btn onClick={openNewVehicle}>+ Add</Btn>
+      </div>
+
+      {vehicles.length===0?(
+        <Card style={{padding:'52px 24px',textAlign:'center'}}>
+          <div style={{fontSize:13,fontWeight:700,color:A.label5,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:10}}>No vehicles</div>
+          <div style={{fontSize:15,color:A.label3,fontWeight:500}}>Add a vehicle to track oil changes, tire rotations, and other maintenance intervals.</div>
+        </Card>
+      ):(
+        <div style={{display:'flex',flexDirection:'column',gap:20}}>
+          {vehicles.map(v=>(
+            <div key={v.id}>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+                <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  <div style={{width:10,height:10,borderRadius:'50%',background:v.color||'#3B82F6',flexShrink:0}}/>
+                  <span style={{fontSize:13,fontWeight:700,color:A.label2,letterSpacing:'-.01em'}}>
+                    {v.name}{v.year?` · ${v.year}`:''}
+                    {(v.make||v.model)?` · ${[v.make,v.model].filter(Boolean).join(' ')}`:''}
+                  </span>
+                </div>
+                <button onClick={()=>openEditVehicle(v)} style={{background:'none',border:'none',color:A.label4,cursor:'pointer',fontSize:13,padding:'0 4px'}}>Edit</button>
+              </div>
+              <Card style={{overflow:'hidden',padding:0}}>
+                {v.services.length===0&&(
+                  <div style={{padding:'16px 18px',fontSize:14,color:A.label4}}>No services tracked yet.</div>
+                )}
+                {v.services.map((s,i)=>{
+                  const st=svcStatus(s);
+                  return(
+                    <div key={s.id} style={{display:'flex',alignItems:'center',gap:12,padding:'14px 18px',borderTop:i>0?`1px solid ${A.sep}`:'none'}}>
+                      <div style={{width:8,height:8,borderRadius:'50%',background:svcColor(st),flexShrink:0}}/>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:15,fontWeight:600,color:A.label1}}>{s.name}</div>
+                        <div style={{fontSize:12,color:st==='red'?A.red:A.label5,marginTop:2}}>
+                          {dueLabel(s)}{intervalLabel(s)?` · ${intervalLabel(s)}`:''}
+                        </div>
+                      </div>
+                      <button onClick={()=>openDone(v.id,s)} style={{background:A.inputBg,border:`1.5px solid ${A.sep}`,borderRadius:20,padding:'5px 14px',fontSize:12,fontWeight:600,color:A.label3,cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>Mark done</button>
+                      <button onClick={()=>openEditService(v.id,s)} style={{background:'none',border:'none',color:A.label4,cursor:'pointer',fontSize:13,padding:'0 4px',flexShrink:0}}>Edit</button>
+                    </div>
+                  );
+                })}
+                <div style={{padding:'12px 18px',borderTop:v.services.length>0?`1px solid ${A.sep}`:'none'}}>
+                  <button onClick={()=>openNewService(v.id)} style={{background:'none',border:'none',color:A.blue,fontSize:14,fontWeight:600,cursor:'pointer',padding:0}}>+ Add service</button>
+                </div>
+              </Card>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {doneTarget&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:24}} onClick={()=>setDoneTarget(null)}>
+          <div style={{background:A.cardBg,borderRadius:A.r,padding:24,width:'100%',maxWidth:320,boxShadow:A.shadowLg}} onClick={e=>e.stopPropagation()}>
+            <div style={{fontSize:17,fontWeight:700,color:A.label1,marginBottom:4}}>Mark as done</div>
+            <div style={{fontSize:14,color:A.label3,marginBottom:20}}>{doneTarget.service.name}</div>
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:12,fontWeight:600,color:A.label4,marginBottom:6}}>Date</div>
+              <Inp type="date" value={doneDate} onChange={e=>setDoneDate(e.target.value)}/>
+            </div>
+            <div style={{marginBottom:20}}>
+              <div style={{fontSize:12,fontWeight:600,color:A.label4,marginBottom:6}}>Current mileage (optional)</div>
+              <Inp type="number" value={doneMiles} onChange={e=>setDoneMiles(e.target.value)} placeholder="e.g. 47322"/>
+            </div>
+            <div style={{display:'flex',gap:8}}>
+              <Btn onClick={confirmDone} full>Confirm</Btn>
+              <Btn variant="ghost" onClick={()=>setDoneTarget(null)} full>Cancel</Btn>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <Drawer open={vDrawer} onClose={()=>{setVDrawer(false);setEditVehicle(null);setVForm(blankV);}} title={editVehicle?'Edit Vehicle':'New Vehicle'}>
+        <FormGroup label="Name"><div style={{padding:'12px 16px'}}><Inp value={vForm.name} onChange={e=>setVForm(f=>({...f,name:e.target.value}))} placeholder="Mike's Truck"/></div></FormGroup>
+        <FormGroup label="Year"><div style={{padding:'12px 16px'}}><Inp type="number" value={vForm.year} onChange={e=>setVForm(f=>({...f,year:e.target.value}))} placeholder="2021"/></div></FormGroup>
+        <FormGroup label="Make"><div style={{padding:'12px 16px'}}><Inp value={vForm.make} onChange={e=>setVForm(f=>({...f,make:e.target.value}))} placeholder="Toyota"/></div></FormGroup>
+        <FormGroup label="Model"><div style={{padding:'12px 16px'}}><Inp value={vForm.model} onChange={e=>setVForm(f=>({...f,model:e.target.value}))} placeholder="4Runner"/></div></FormGroup>
+        <FormGroup label="Color">
+          <div style={{padding:'12px 16px',display:'flex',alignItems:'center',gap:10}}>
+            <input type="color" value={vForm.color} onChange={e=>setVForm(f=>({...f,color:e.target.value}))} style={{width:36,height:36,border:'none',borderRadius:6,cursor:'pointer',background:'transparent'}}/>
+            <span style={{fontSize:13,color:A.label3}}>Shows on calendar</span>
+          </div>
+        </FormGroup>
+        <FormGroup label="Notes (optional)"><div style={{padding:'12px 16px'}}><Inp value={vForm.notes} onChange={e=>setVForm(f=>({...f,notes:e.target.value}))}/></div></FormGroup>
+        <div style={{padding:'12px 16px',display:'flex',gap:8}}>
+          <Btn onClick={saveVehicle} full>Save</Btn>
+          {editVehicle&&<Btn variant="ghost" onClick={()=>delVehicle(editVehicle.id)} full>Delete</Btn>}
+        </div>
+      </Drawer>
+
+      <Drawer open={sDrawer} onClose={()=>{setSDrawer(false);setEditService(null);setSForm(blankS);}} title={editService?'Edit Service':'New Service'}>
+        <FormGroup label="Service"><div style={{padding:'12px 16px'}}><Inp value={sForm.name} onChange={e=>setSForm(f=>({...f,name:e.target.value}))} placeholder="Oil Change, Tire Rotation…"/></div></FormGroup>
+        <FormGroup label="Interval (days)"><div style={{padding:'12px 16px'}}><Inp type="number" value={sForm.interval_days} onChange={e=>setSForm(f=>({...f,interval_days:e.target.value}))} placeholder="e.g. 90"/></div></FormGroup>
+        <FormGroup label="Interval (miles)"><div style={{padding:'12px 16px'}}><Inp type="number" value={sForm.interval_miles} onChange={e=>setSForm(f=>({...f,interval_miles:e.target.value}))} placeholder="e.g. 5000"/></div></FormGroup>
+        <FormGroup label="Notes (optional)"><div style={{padding:'12px 16px'}}><Inp value={sForm.notes} onChange={e=>setSForm(f=>({...f,notes:e.target.value}))}/></div></FormGroup>
+        <div style={{padding:'12px 16px',display:'flex',gap:8}}>
+          <Btn onClick={saveService} full>Save</Btn>
+          {editService&&<Btn variant="ghost" onClick={()=>delService(sVehicleId,editService.id)} full>Delete</Btn>}
+        </div>
+      </Drawer>
+    </div>
+  );
+}
+
 /* ── Bills Screen ────────────────────────────────────────────────────────── */
 const BILL_CATEGORIES=['Housing','Utilities','Subscriptions','Insurance','Auto','Health','Other'];
 
@@ -5555,7 +5772,7 @@ function RecipesScreen({recipes,setRecipes,toastAdd}){
   );
 }
 
-function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocery,setGrocery,meals,setMeals,icsSources,setIcsSources,inboxCount,setInboxCount,countdowns,setCountdowns,members,setMembers,photos,setPhotos,clockFormat,setClockFormat,weather,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd,setRefreshMs,parseRefreshMs,goals,setGoals,notes,setNotes,polls,setPolls,bookmarks,setBookmarks,quickActions,setQuickActions,setRotationMs,setWifiQrData,darkMode,onDarkMode,packages,setPackages,messages,setMessages,recipes,setRecipes,bills,setBills,payments,setPayments,isAdmin=false}){
+function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocery,setGrocery,meals,setMeals,icsSources,setIcsSources,inboxCount,setInboxCount,countdowns,setCountdowns,members,setMembers,photos,setPhotos,clockFormat,setClockFormat,weather,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd,setRefreshMs,parseRefreshMs,goals,setGoals,notes,setNotes,polls,setPolls,bookmarks,setBookmarks,quickActions,setQuickActions,setRotationMs,setWifiQrData,darkMode,onDarkMode,packages,setPackages,messages,setMessages,recipes,setRecipes,bills,setBills,payments,setPayments,vehicles,setVehicles,isAdmin=false}){
   const isMobile=useIsMobile();
   const [screen,setScreen]=useState('dashboard');
   const {toasts,add:toastAdd}=useToast();
@@ -5580,6 +5797,7 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
     {id:'bookmarks',label:'Bookmarks',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><path d="M3.5 2h10a1 1 0 011 1v12l-5.5-3.5L3.5 15V3a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>},
     {id:'polls',label:'Polls',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="2" y="9" width="3" height="6" rx="1" fill="currentColor" opacity=".5"/><rect x="7" y="5" width="3" height="10" rx="1" fill="currentColor" opacity=".7"/><rect x="12" y="2" width="3" height="13" rx="1" fill="currentColor"/></svg>},
     {id:'bills',label:'Bills',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="1.5" y="3" width="14" height="11" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M5 8h4M5 11h2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M11.5 6.5v4M9.5 8.5h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
+    {id:'vehicles',label:'Vehicles',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><path d="M2 10l1.5-4.5A1 1 0 014.4 5h8.2a1 1 0 01.9.5L15 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><rect x="1" y="10" width="15" height="4" rx="1.5" stroke="currentColor" strokeWidth="1.5"/><circle cx="4.5" cy="14" r="1.5" fill="currentColor"/><circle cx="12.5" cy="14" r="1.5" fill="currentColor"/></svg>},
     {id:'packages',label:'Packages',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="2" y="5" width="13" height="10" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M5.5 5V3.5a3 3 0 016 0V5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M2 8.5h13" stroke="currentColor" strokeWidth="1.5"/></svg>,badge:packages?.length||0},
     {id:'messages',label:'Messages',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><path d="M2 3h13a1 1 0 011 1v8a1 1 0 01-1 1H5l-4 3V4a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>,badge:messages?.length||0},
     {id:'recipes',label:'Recipes',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><path d="M3 2h11a1 1 0 011 1v11a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.5"/><path d="M5 6h7M5 9h5M5 12h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
@@ -5599,6 +5817,7 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
     bookmarks:  <BookmarksScreen bookmarks={bookmarks} setBookmarks={setBookmarks} toastAdd={toastAdd}/>,
     polls:      <PollsScreen polls={polls} setPolls={setPolls} toastAdd={toastAdd}/>,
     bills:      <BillsScreen bills={bills} setBills={setBills} payments={payments} setPayments={setPayments} toastAdd={toastAdd}/>,
+    vehicles:   <VehiclesScreen vehicles={vehicles} setVehicles={setVehicles} toastAdd={toastAdd}/>,
     packages:   <PackagesScreen packages={packages} setPackages={setPackages} toastAdd={toastAdd}/>,
     messages:   <MessagesScreen messages={messages} setMessages={setMessages} members={members} toastAdd={toastAdd}/>,
     recipes:    <RecipesScreen recipes={recipes} setRecipes={setRecipes} toastAdd={toastAdd}/>,
@@ -6076,6 +6295,7 @@ function App(){
   const [recipes,setRecipes]=useState([]);
   const [bills,setBills]=useState([]);
   const [payments,setPayments]=useState([]);
+  const [vehicles,setVehicles]=useState([]);
   const [quickActions,setQuickActions]=useState([]);
   const [photos,setPhotos]=useState([]);
   const [clockFormat,setClockFormat]=useState('12h');
@@ -6151,7 +6371,8 @@ function App(){
       api.get('/api/messages'),
       api.get('/api/recipes'),
       api.get('/api/bills'),
-    ]).then(([ev,ch,gr,ml,ics,inb,cd,mb,ph,st,gl,nt,pl,qa,bm,pk,ms,rc,bl])=>{
+      api.get('/api/vehicles'),
+    ]).then(([ev,ch,gr,ml,ics,inb,cd,mb,ph,st,gl,nt,pl,qa,bm,pk,ms,rc,bl,veh])=>{
       if(ev.status==='fulfilled'&&Array.isArray(ev.value)) setEvents(ev.value);
       if(ch.status==='fulfilled'&&Array.isArray(ch.value)) setChores(ch.value);
       if(gr.status==='fulfilled'&&Array.isArray(gr.value)) setGrocery(gr.value);
@@ -6170,6 +6391,7 @@ function App(){
       if(ms.status==='fulfilled'&&Array.isArray(ms.value)) setMessages(ms.value);
       if(rc.status==='fulfilled'&&Array.isArray(rc.value)) setRecipes(rc.value);
       if(bl.status==='fulfilled'&&bl.value?.bills){setBills(bl.value.bills);setPayments(bl.value.payments||[]);}
+      if(veh.status==='fulfilled'&&Array.isArray(veh.value)) setVehicles(veh.value);
       if(st.status==='fulfilled'){
         const s=st.value;
         if(s.clock_format) setClockFormat(s.clock_format);
@@ -6240,7 +6462,7 @@ function App(){
   const goManage=()=>{localStorage.setItem('kith_mode','manage');setMode('manage');};
   return mode==='display'
     ?<DisplayMode onManage={goManage} events={events} chores={chores} setChores={setChores} meals={meals} grocery={grocery} setGrocery={setGrocery} countdowns={countdowns} photos={photos} clockFormat={clockFormat} weather={weather} nightModeStart={nightModeStart} nightModeEnd={nightModeEnd} goals={goals} notes={notes} polls={polls} rotationMs={rotationMs} wifiQrData={wifiQrData} quickActions={quickActions} members={members} packages={packages} setPackages={setPackages} messages={messages} setMessages={setMessages}/>
-    :<ManageMode onDisplay={goDisplay} onLogout={handleLogout} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources} inboxCount={inboxCount} setInboxCount={setInboxCount} countdowns={countdowns} setCountdowns={setCountdowns} members={members} setMembers={setMembers} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} weather={weather} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} goals={goals} setGoals={setGoals} notes={notes} setNotes={setNotes} polls={polls} setPolls={setPolls} bookmarks={bookmarks} setBookmarks={setBookmarks} quickActions={quickActions} setQuickActions={setQuickActions} setRotationMs={setRotationMs} setWifiQrData={setWifiQrData} darkMode={darkMode} onDarkMode={handleDarkMode} packages={packages} setPackages={setPackages} messages={messages} setMessages={setMessages} recipes={recipes} setRecipes={setRecipes} bills={bills} setBills={setBills} payments={payments} setPayments={setPayments} isAdmin={!!auth&&!currentMember&&!kiosk}/>;
+    :<ManageMode onDisplay={goDisplay} onLogout={handleLogout} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources} inboxCount={inboxCount} setInboxCount={setInboxCount} countdowns={countdowns} setCountdowns={setCountdowns} members={members} setMembers={setMembers} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} weather={weather} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} goals={goals} setGoals={setGoals} notes={notes} setNotes={setNotes} polls={polls} setPolls={setPolls} bookmarks={bookmarks} setBookmarks={setBookmarks} quickActions={quickActions} setQuickActions={setQuickActions} setRotationMs={setRotationMs} setWifiQrData={setWifiQrData} darkMode={darkMode} onDarkMode={handleDarkMode} packages={packages} setPackages={setPackages} messages={messages} setMessages={setMessages} recipes={recipes} setRecipes={setRecipes} bills={bills} setBills={setBills} payments={payments} setPayments={setPayments} vehicles={vehicles} setVehicles={setVehicles} isAdmin={!!auth&&!currentMember&&!kiosk}/>;
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);

@@ -396,7 +396,21 @@ app.get('/api/events', (req, res) => {
       }
     }
   }
-  res.json([...events, ...pkgEvents, ...billEvents]);
+  const vehicleSvcs = db.prepare(`
+    SELECT vs.*, v.name as vehicle_name, v.color as vehicle_color
+    FROM vehicle_services vs JOIN vehicles v ON vs.vehicle_id=v.id
+    WHERE vs.next_due_date != ''
+  `).all();
+  const vehicleEvents = vehicleSvcs.map(s => ({
+    id: `vehicle_${s.id}`,
+    title: `${s.name} — ${s.vehicle_name}`,
+    date: s.next_due_date,
+    time: 'All day', end_time: '', duration: '1h',
+    calendar: 'vehicles', color: s.vehicle_color || '#3B82F6',
+    notes: s.last_done_miles > 0 ? `Last done at ${Number(s.last_done_miles).toLocaleString()} mi` : '',
+    source: 'vehicle', member_id: null, recurring_rule: '',
+  }));
+  res.json([...events, ...pkgEvents, ...billEvents, ...vehicleEvents]);
 });
 
 app.post('/api/events', requireAuth, (req, res) => {
@@ -2990,6 +3004,79 @@ app.post('/api/bills/:id/pay', requireAuth, (req, res) => {
 app.delete('/api/bills/:id/pay/:period', requireAuth, (req, res) => {
   db.prepare('DELETE FROM bill_payments WHERE bill_id=? AND period=?').run(Number(req.params.id), req.params.period);
   res.json({ ok: true });
+});
+
+// ── Routes: Vehicles ──────────────────────────────────────────────────────────
+
+app.get('/api/vehicles', requireAuth, (req, res) => {
+  const vehicles = db.prepare('SELECT * FROM vehicles ORDER BY name').all();
+  const services = db.prepare('SELECT * FROM vehicle_services ORDER BY name').all();
+  res.json(vehicles.map(v => ({ ...v, services: services.filter(s => s.vehicle_id === v.id) })));
+});
+
+app.post('/api/vehicles', requireAuth, (req, res) => {
+  const { name, make='', model='', year=0, color='#3B82F6', notes='' } = req.body || {};
+  if (!name?.trim()) return res.status(400).json({ error: 'Name required' });
+  const row = db.prepare('INSERT INTO vehicles (name,make,model,year,color,notes) VALUES (?,?,?,?,?,?) RETURNING *')
+    .get(name.trim(), make, model, parseInt(year)||0, color, notes);
+  res.json(row);
+});
+
+app.put('/api/vehicles/:id', requireAuth, (req, res) => {
+  const { name, make='', model='', year=0, color='#3B82F6', notes='' } = req.body || {};
+  if (!name?.trim()) return res.status(400).json({ error: 'Name required' });
+  const row = db.prepare('UPDATE vehicles SET name=?,make=?,model=?,year=?,color=?,notes=? WHERE id=? RETURNING *')
+    .get(name.trim(), make, model, parseInt(year)||0, color, notes, Number(req.params.id));
+  if (!row) return res.status(404).json({ error: 'Not found' });
+  res.json(row);
+});
+
+app.delete('/api/vehicles/:id', requireAuth, (req, res) => {
+  const id = Number(req.params.id);
+  db.prepare('DELETE FROM vehicle_services WHERE vehicle_id=?').run(id);
+  db.prepare('DELETE FROM vehicles WHERE id=?').run(id);
+  res.json({ ok: true });
+});
+
+app.post('/api/vehicles/:id/services', requireAuth, (req, res) => {
+  const { name, interval_days=0, interval_miles=0, notes='' } = req.body || {};
+  if (!name?.trim()) return res.status(400).json({ error: 'Name required' });
+  const row = db.prepare('INSERT INTO vehicle_services (vehicle_id,name,interval_days,interval_miles,notes) VALUES (?,?,?,?,?) RETURNING *')
+    .get(Number(req.params.id), name.trim(), parseInt(interval_days)||0, parseInt(interval_miles)||0, notes);
+  res.json(row);
+});
+
+app.put('/api/vehicles/:id/services/:sid', requireAuth, (req, res) => {
+  const { name, interval_days=0, interval_miles=0, notes='' } = req.body || {};
+  if (!name?.trim()) return res.status(400).json({ error: 'Name required' });
+  const row = db.prepare('UPDATE vehicle_services SET name=?,interval_days=?,interval_miles=?,notes=? WHERE id=? AND vehicle_id=? RETURNING *')
+    .get(name.trim(), parseInt(interval_days)||0, parseInt(interval_miles)||0, notes, Number(req.params.sid), Number(req.params.id));
+  if (!row) return res.status(404).json({ error: 'Not found' });
+  res.json(row);
+});
+
+app.delete('/api/vehicles/:id/services/:sid', requireAuth, (req, res) => {
+  const info = db.prepare('DELETE FROM vehicle_services WHERE id=? AND vehicle_id=?').run(Number(req.params.sid), Number(req.params.id));
+  if (!info.changes) return res.status(404).json({ error: 'Not found' });
+  res.json({ ok: true });
+});
+
+app.post('/api/vehicles/:id/services/:sid/done', requireAuth, (req, res) => {
+  const { date, miles=0 } = req.body || {};
+  const doneDate = date || new Date().toISOString().slice(0, 10);
+  const sid = Number(req.params.sid);
+  const vid = Number(req.params.id);
+  const svc = db.prepare('SELECT * FROM vehicle_services WHERE id=? AND vehicle_id=?').get(sid, vid);
+  if (!svc) return res.status(404).json({ error: 'Not found' });
+  let nextDue = '';
+  if (svc.interval_days > 0) {
+    const d = new Date(doneDate + 'T00:00:00');
+    d.setDate(d.getDate() + svc.interval_days);
+    nextDue = d.toISOString().slice(0, 10);
+  }
+  const row = db.prepare('UPDATE vehicle_services SET last_done_date=?,last_done_miles=?,next_due_date=? WHERE id=? RETURNING *')
+    .get(doneDate, parseInt(miles)||0, nextDue, sid);
+  res.json(row);
 });
 
 // ── Routes: Messages ──────────────────────────────────────────────────────────

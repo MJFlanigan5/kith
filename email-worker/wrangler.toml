@@ -3,7 +3,9 @@ main = "src/index.js"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 
-[vars]
-KITH_URL = "https://kith.mjflanigan.com"
-
-# Set via: wrangler secret put KITH_WEBHOOK_SECRET
+# Both secrets are set via wrangler secret put — nothing sensitive lives here:
+#   npx wrangler secret put KITH_URL
+#   (your Kith server's public URL, e.g. https://kith.yourdomain.com)
+#
+#   npx wrangler secret put KITH_WEBHOOK_SECRET
+#   (shown in Kith → Settings → Email Forwarding → Webhook secret)

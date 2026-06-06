@@ -3844,8 +3844,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
                 finally{setImapSaving(false);}
               }}>Save</Btn>
             </div>
-            {imapUser&&(
-              <div style={{marginTop:12,paddingTop:12,borderTop:`1px solid ${A.sep}`}}>
+            <div style={{marginTop:4,paddingTop:12,borderTop:`1px solid ${A.sep}`}}>
                 <div style={{fontSize:13,color:A.label4,marginBottom:8}}>Scan the last 30 days of your inbox to auto-import packages, bills, reservations, and appointments. Duplicates are skipped.</div>
                 <Btn sm variant="ghost" loading={imapScanning} onClick={async()=>{
                   if(imapScanning) return;
@@ -3872,8 +3871,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
                     }catch{toastAdd('Scan complete');}
                   });
                 }}>{imapScanning?'Scanning…':'Scan last 30 days'}</Btn>
-              </div>
-            )}
+            </div>
           </div>
         </div>
       </FormGroup>

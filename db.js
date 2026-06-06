@@ -268,6 +268,7 @@ try { db.exec('ALTER TABLE chores ADD COLUMN member_id INTEGER'); } catch {}
 try { db.exec('ALTER TABLE chores ADD COLUMN streak INTEGER DEFAULT 0'); } catch {}
 try { db.exec("ALTER TABLE family_members ADD COLUMN reward TEXT DEFAULT ''"); } catch {}
 try { db.exec("ALTER TABLE meals ADD COLUMN breakfast TEXT DEFAULT ''"); } catch {}
+try { db.exec("ALTER TABLE vehicles ADD COLUMN vin TEXT DEFAULT ''"); } catch {}
 try { db.exec("ALTER TABLE meals ADD COLUMN lunch TEXT DEFAULT ''"); } catch {}
 // Grocery quick-add history
 db.exec(`CREATE TABLE IF NOT EXISTS grocery_history (
@@ -308,7 +309,7 @@ const defaults = {
   clock_format: '12h', temperature_unit: 'F', refresh_interval: '1min',
   smtp_host: '', smtp_port: '587', smtp_user: '', smtp_pass: '',
   forwarding_address: '',
-  imap_host: 'imap.gmail.com', imap_port: '993', imap_user: '', imap_pass: '', imap_enabled: '0',
+  imap_host: 'imap.gmail.com', imap_port: '993', imap_user: '', imap_pass: '', imap_enabled: '0', imap_poll_interval: '120',
   email_webhook_secret: require('crypto').randomBytes(24).toString('hex'),
   anthropic_api_key: '',
   ai_provider: 'gemini',

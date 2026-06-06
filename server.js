@@ -3014,19 +3014,33 @@ app.get('/api/vehicles', requireAuth, (req, res) => {
   res.json(vehicles.map(v => ({ ...v, services: services.filter(s => s.vehicle_id === v.id) })));
 });
 
+app.get('/api/vehicles/vin/:vin', requireAuth, async (req, res) => {
+  const vin = (req.params.vin || '').trim().toUpperCase();
+  if (vin.length !== 17) return res.status(400).json({ error: 'VIN must be 17 characters' });
+  try {
+    const data = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/decodevin/${vin}?format=json`).then(r => r.json());
+    const get = label => (data.Results || []).find(r => r.Variable === label)?.Value || '';
+    const make = get('Make'); const model = get('Model'); const year = get('Model Year');
+    if (!make && !model) return res.status(404).json({ error: 'VIN not found' });
+    res.json({ make, model, year: parseInt(year) || 0 });
+  } catch (e) {
+    res.status(500).json({ error: 'VIN decode failed' });
+  }
+});
+
 app.post('/api/vehicles', requireAuth, (req, res) => {
-  const { name, make='', model='', year=0, color='#3B82F6', notes='' } = req.body || {};
+  const { name, make='', model='', year=0, color='#3B82F6', notes='', vin='' } = req.body || {};
   if (!name?.trim()) return res.status(400).json({ error: 'Name required' });
-  const row = db.prepare('INSERT INTO vehicles (name,make,model,year,color,notes) VALUES (?,?,?,?,?,?) RETURNING *')
-    .get(name.trim(), make, model, parseInt(year)||0, color, notes);
+  const row = db.prepare('INSERT INTO vehicles (name,make,model,year,color,notes,vin) VALUES (?,?,?,?,?,?,?) RETURNING *')
+    .get(name.trim(), make, model, parseInt(year)||0, color, notes, vin.trim().toUpperCase());
   res.json(row);
 });
 
 app.put('/api/vehicles/:id', requireAuth, (req, res) => {
-  const { name, make='', model='', year=0, color='#3B82F6', notes='' } = req.body || {};
+  const { name, make='', model='', year=0, color='#3B82F6', notes='', vin='' } = req.body || {};
   if (!name?.trim()) return res.status(400).json({ error: 'Name required' });
-  const row = db.prepare('UPDATE vehicles SET name=?,make=?,model=?,year=?,color=?,notes=? WHERE id=? RETURNING *')
-    .get(name.trim(), make, model, parseInt(year)||0, color, notes, Number(req.params.id));
+  const row = db.prepare('UPDATE vehicles SET name=?,make=?,model=?,year=?,color=?,notes=?,vin=? WHERE id=? RETURNING *')
+    .get(name.trim(), make, model, parseInt(year)||0, color, notes, vin.trim().toUpperCase(), Number(req.params.id));
   if (!row) return res.status(404).json({ error: 'Not found' });
   res.json(row);
 });
@@ -3688,7 +3702,14 @@ async function pollImap() {
   }
 }
 
-cron.schedule('*/15 * * * *', () => pollImap().catch(() => {}));
+let _lastImapPoll = 0;
+cron.schedule('* * * * *', () => {
+  if (g('imap_enabled') !== '1') return;
+  const intervalMin = parseInt(g('imap_poll_interval') || '120') || 120;
+  if (Date.now() - _lastImapPoll < intervalMin * 60 * 1000) return;
+  _lastImapPoll = Date.now();
+  pollImap().catch(() => {});
+});
 
 let _scanInProgress = false;
 
@@ -3699,7 +3720,10 @@ async function scanImap30Days() {
   try {
     const host = g('imap_host'), port = parseInt(g('imap_port') || '993');
     const user = g('imap_user'), pass = g('imap_pass');
-    if (!host || !user || !pass) return;
+    if (!host || !user || !pass) {
+      broadcastSSE('scan_complete', { ...summary, error: 'no_credentials' });
+      return;
+    }
 
     const { ImapFlow } = require('imapflow');
     const { simpleParser } = require('mailparser');

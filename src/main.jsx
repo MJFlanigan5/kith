@@ -3508,6 +3508,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [imapSaving,setImapSaving]=useState(false);
   const [imapTesting,setImapTesting]=useState(false);
   const [imapScanning,setImapScanning]=useState(false);
+  const [imapInterval,setImapInterval]=useState('120');
   const [anthropicKey,setAnthropicKey]=useState('');
   const [hasAnthropicKey,setHasAnthropicKey]=useState(false);
   const [beehiivKey,setBeehiivKey]=useState('');
@@ -3600,6 +3601,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
       if(st.imap_port) setImapPort(st.imap_port);
       if(st.imap_user) setImapUser(st.imap_user);
       setImapEnabled(st.imap_enabled==='1');
+      if(st.imap_poll_interval) setImapInterval(st.imap_poll_interval);
       if(st.sports_leagues){
         const active=st.sports_leagues.split(',').map(s=>s.trim().toLowerCase());
         setSportsLeagues({nfl:active.includes('nfl'),nba:active.includes('nba'),mlb:active.includes('mlb'),nhl:active.includes('nhl'),wnba:active.includes('wnba'),mls:active.includes('mls'),epl:active.includes('epl'),ucl:active.includes('ucl'),wc:active.includes('wc'),wwc:active.includes('wwc'),ncaaf:active.includes('ncaaf'),ncaab:active.includes('ncaab'),pga:active.includes('pga'),atp:active.includes('atp'),nascar:active.includes('nascar'),f1:active.includes('f1')});
@@ -3646,7 +3648,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [refresh,setRefresh]=useState('1min');
   const [rotationSec,setRotationSec]=useState('10');
 
-  const saveSetting=(key,value)=>api.put('/api/settings',{[key]:value}).then(r=>{if(r.error)toastAdd(r.error,'red');else toastAdd('Saved');}).catch(()=>toastAdd('Save failed','red'));
+  const saveSetting=(key,value)=>api.put('/api/settings',{[key]:value}).then(r=>{if(r.error)throw new Error(r.error);}).catch(e=>{throw e;});
   const [pushStatus,setPushStatus]=useState('idle');
   const [icsForm,setIcsForm]=useState({name:'',url:'',color:'#3B82F6'});
   const [icsLoading,setIcsLoading]=useState(false);
@@ -3820,6 +3822,15 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
                 <input type="checkbox" checked={imapEnabled} onChange={e=>setImapEnabled(e.target.checked)} style={{width:15,height:15}}/>
                 Enable polling
               </label>
+              <select value={imapInterval} onChange={e=>setImapInterval(e.target.value)} style={{fontSize:12,color:A.label3,background:A.inputBg,border:`1px solid ${A.sep}`,borderRadius:A.rXs,padding:'4px 8px',cursor:'pointer'}}>
+                <option value="15">Every 15 min</option>
+                <option value="30">Every 30 min</option>
+                <option value="60">Every 1 hour</option>
+                <option value="120">Every 2 hours</option>
+                <option value="240">Every 4 hours</option>
+                <option value="720">Every 12 hours</option>
+                <option value="1440">Once a day</option>
+              </select>
               <div style={{flex:1}}/>
               <Btn sm variant="ghost" loading={imapTesting} onClick={async()=>{
                 setImapTesting(true);
@@ -3838,6 +3849,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
                     saveSetting('imap_user',imapUser),
                     ...(imapPass?[saveSetting('imap_pass',imapPass)]:[]),
                     saveSetting('imap_enabled',imapEnabled?'1':'0'),
+                    saveSetting('imap_poll_interval',imapInterval),
                   ]);
                   toastAdd('IMAP settings saved');
                 }catch(e){toastAdd('Save failed','red');}
@@ -3862,6 +3874,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
                     clearTimeout(tid);es.close();setImapScanning(false);
                     try{
                       const d=JSON.parse(e.data);
+                      if(d.error==='no_credentials'){toastAdd('IMAP credentials not saved — enter and save your Gmail settings first','red');return;}
                       const parts=[];
                       if(d.packages>0) parts.push(`${d.packages} package${d.packages===1?'':'s'}`);
                       if(d.bills>0) parts.push(`${d.bills} bill${d.bills===1?'':'s'}`);
@@ -5320,7 +5333,8 @@ function VehiclesScreen({vehicles,setVehicles,toastAdd}){
   const isMobile=useIsMobile();
   const [vDrawer,setVDrawer]=useState(false);
   const [editVehicle,setEditVehicle]=useState(null);
-  const blankV={name:'',make:'',model:'',year:'',color:'#3B82F6',notes:''};
+  const blankV={name:'',make:'',model:'',year:'',color:'#3B82F6',notes:'',vin:''};
+  const [vinLoading,setVinLoading]=useState(false);
   const [vForm,setVForm]=useState(blankV);
 
   const [sDrawer,setSDrawer]=useState(false);
@@ -5359,11 +5373,11 @@ function VehiclesScreen({vehicles,setVehicles,toastAdd}){
   };
 
   const openNewVehicle=()=>{setEditVehicle(null);setVForm(blankV);setVDrawer(true);};
-  const openEditVehicle=v=>{setEditVehicle(v);setVForm({name:v.name,make:v.make||'',model:v.model||'',year:v.year?String(v.year):'',color:v.color||'#3B82F6',notes:v.notes||''});setVDrawer(true);};
+  const openEditVehicle=v=>{setEditVehicle(v);setVForm({name:v.name,make:v.make||'',model:v.model||'',year:v.year?String(v.year):'',color:v.color||'#3B82F6',notes:v.notes||'',vin:v.vin||''});setVDrawer(true);};
 
   const saveVehicle=async()=>{
     if(!vForm.name.trim()){toastAdd('Name required','red');return;}
-    const payload={name:vForm.name.trim(),make:vForm.make,model:vForm.model,year:parseInt(vForm.year)||0,color:vForm.color,notes:vForm.notes};
+    const payload={name:vForm.name.trim(),make:vForm.make,model:vForm.model,year:parseInt(vForm.year)||0,color:vForm.color,notes:vForm.notes,vin:vForm.vin||''};
     if(editVehicle){
       const r=await api.put(`/api/vehicles/${editVehicle.id}`,payload).catch(()=>null);
       if(!r?.id){toastAdd('Failed to save','red');return;}
@@ -5499,6 +5513,23 @@ function VehiclesScreen({vehicles,setVehicles,toastAdd}){
 
       <Drawer open={vDrawer} onClose={()=>{setVDrawer(false);setEditVehicle(null);setVForm(blankV);}} title={editVehicle?'Edit Vehicle':'New Vehicle'}>
         <FormGroup label="Name"><div style={{padding:'12px 16px'}}><Inp value={vForm.name} onChange={e=>setVForm(f=>({...f,name:e.target.value}))} placeholder="Mike's Truck"/></div></FormGroup>
+        <FormGroup label="VIN (optional)">
+          <div style={{padding:'12px 16px',display:'flex',gap:8,alignItems:'center'}}>
+            <Inp value={vForm.vin} onChange={e=>setVForm(f=>({...f,vin:e.target.value.toUpperCase()}))}
+              onBlur={async e=>{
+                const vin=e.target.value.trim();
+                if(vin.length!==17) return;
+                setVinLoading(true);
+                const r=await api.get(`/api/vehicles/vin/${vin}`).catch(()=>null);
+                setVinLoading(false);
+                if(!r||r.error) return;
+                setVForm(f=>({...f,make:r.make||f.make,model:r.model||f.model,year:r.year?String(r.year):f.year}));
+                toastAdd('VIN decoded — make/model/year filled');
+              }}
+              placeholder="17-character VIN" style={{flex:1,fontFamily:'JetBrains Mono,monospace',fontSize:13,letterSpacing:'.04em'}}/>
+            {vinLoading&&<span style={{fontSize:12,color:A.label4}}>Decoding…</span>}
+          </div>
+        </FormGroup>
         <FormGroup label="Year"><div style={{padding:'12px 16px'}}><Inp type="number" value={vForm.year} onChange={e=>setVForm(f=>({...f,year:e.target.value}))} placeholder="2021"/></div></FormGroup>
         <FormGroup label="Make"><div style={{padding:'12px 16px'}}><Inp value={vForm.make} onChange={e=>setVForm(f=>({...f,make:e.target.value}))} placeholder="Toyota"/></div></FormGroup>
         <FormGroup label="Model"><div style={{padding:'12px 16px'}}><Inp value={vForm.model} onChange={e=>setVForm(f=>({...f,model:e.target.value}))} placeholder="4Runner"/></div></FormGroup>

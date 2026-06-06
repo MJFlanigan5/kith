@@ -3697,7 +3697,7 @@ async function scanImap30Days() {
         const isAppt = !isShipping && !isBill && APPT_RE.test(subject);
         if (!isShipping && !isBill && !isAppt) continue;
         let body = '';
-        try { const p = await simpleParser(msg.source); body = p.text || p.html || ''; } catch {}
+        try { const p = await simpleParser(msg.source); body = p.text || (p.html ? stripHtml(p.html) : ''); } catch {}
         _seenUids.add(msg.uid);
         batch.push({ subject, isShipping, isBill, isAppt, body });
         if (batch.length >= 50) break;

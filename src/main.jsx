@@ -3842,18 +3842,11 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
               }}>Test</Btn>
               <Btn sm loading={imapSaving} onClick={async()=>{
                 setImapSaving(true);
-                try{
-                  await Promise.all([
-                    saveSetting('imap_host',imapHost),
-                    saveSetting('imap_port',imapPort),
-                    saveSetting('imap_user',imapUser),
-                    ...(imapPass?[saveSetting('imap_pass',imapPass)]:[]),
-                    saveSetting('imap_enabled',imapEnabled?'1':'0'),
-                    saveSetting('imap_poll_interval',imapInterval),
-                  ]);
-                  toastAdd('IMAP settings saved');
-                }catch(e){toastAdd('Save failed','red');}
-                finally{setImapSaving(false);}
+                const payload={imap_host:imapHost,imap_port:imapPort,imap_user:imapUser,imap_enabled:imapEnabled?'1':'0',imap_poll_interval:imapInterval};
+                if(imapPass) payload.imap_pass=imapPass;
+                const r=await api.put('/api/settings',payload).catch(()=>null);
+                setImapSaving(false);
+                if(!r||r.error){toastAdd(r?.error||'Save failed','red');}else{toastAdd('IMAP settings saved');}
               }}>Save</Btn>
             </div>
             <div style={{marginTop:4,paddingTop:12,borderTop:`1px solid ${A.sep}`}}>

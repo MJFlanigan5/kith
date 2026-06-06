@@ -2686,7 +2686,7 @@ async function callAiForEvent(subject, body) {
   const apiKey = getSetting('ai_api_key') || getSetting('anthropic_api_key') || process.env.ANTHROPIC_API_KEY || '';
   if (!apiKey) return null;
 
-  const prompt = `Extract calendar event details from this email. Return JSON only, no other text.\n\nSubject: ${subject}\nBody: ${body.slice(0, 2000)}\n\nReturn: {"event_name":"...","event_date":"YYYY-MM-DD or description","event_time":"H:MM AM/PM or All day","recurrence":"One-time|Weekly|Monthly|etc","confidence":"high|medium|low"}\nIf no event is found return {"event_name":"","confidence":"low"}`;
+  const prompt = `Extract calendar event details from this email. Return JSON only, no other text.\n\nSubject: ${subject}\nBody: ${body.slice(0, 4000)}\n\nReturn: {"event_name":"...","event_date":"YYYY-MM-DD or description","event_time":"H:MM AM/PM or All day","recurrence":"One-time|Weekly|Monthly|etc","confidence":"high|medium|low"}\nIf no event is found return {"event_name":"","confidence":"low"}`;
 
   try {
     let text;
@@ -2766,7 +2766,7 @@ async function callAiForPackage(subject, body) {
   const apiKey = getSetting('ai_api_key') || getSetting('anthropic_api_key') || process.env.ANTHROPIC_API_KEY || '';
   if (!apiKey) return null;
 
-  const prompt = `Extract shipping/package information from this email. Return JSON only, no other text.\n\nSubject: ${subject}\nBody: ${body.slice(0, 2000)}\n\nReturn: {"is_shipping":true,"carrier":"UPS|FedEx|USPS|Amazon|DHL|OnTrac|LaserShip|etc","tracking_number":"...","description":"brief item description","expected_date":"YYYY-MM-DD or empty"}\nIf no shipping or package delivery info is present return {"is_shipping":false}`;
+  const prompt = `Extract shipping/package information from this email. Return JSON only, no other text.\n\nSubject: ${subject}\nBody: ${body.slice(0, 4000)}\n\nReturn: {"is_shipping":true,"carrier":"UPS|FedEx|USPS|Amazon|DHL|OnTrac|LaserShip|etc","tracking_number":"...","description":"brief item description","expected_date":"YYYY-MM-DD or empty"}\nIf no shipping or package delivery info is present return {"is_shipping":false}`;
 
   try {
     let text;
@@ -2805,7 +2805,7 @@ async function callAiForBill(subject, body) {
   const apiKey = getSetting('ai_api_key') || getSetting('anthropic_api_key') || process.env.ANTHROPIC_API_KEY || '';
   if (!apiKey) return null;
 
-  const prompt = `Extract billing/payment information from this email. Return JSON only, no other text.\n\nSubject: ${subject}\nBody: ${body.slice(0, 2000)}\n\nReturn: {"is_bill":true,"payee":"company or service name","amount":0.00,"due_date":"YYYY-MM-DD or empty string","recurrence":"monthly|annual|one-time"}\nIf this is not a bill, statement, or payment notice, return {"is_bill":false}`;
+  const prompt = `Extract billing/payment information from this email. Return JSON only, no other text.\n\nSubject: ${subject}\nBody: ${body.slice(0, 4000)}\n\nReturn: {"is_bill":true,"payee":"company or service name","amount":0.00,"due_date":"YYYY-MM-DD or empty string","recurrence":"monthly|annual|one-time"}\nIf this is not a bill, statement, or payment notice, return {"is_bill":false}`;
 
   try {
     let text;
@@ -3614,6 +3614,7 @@ cron.schedule('0 * * * *', () => {
 
 // ── IMAP email polling ────────────────────────────────────────────────────────
 const _seenUids = new Set(); // tracks UIDs processed this session so we don't reprocess read emails
+function stripHtml(html) { return html.replace(/<style[^>]*>[\s\S]*?<\/style>/gi,'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim(); }
 const SHIPPING_RE = /ship|track|deliver|order|package|dispatch|arrival|transit/i;
 const BILL_RE = /bill|statement|invoice|payment due|amount due|minimum payment|your balance|autopay/i;
 const APPT_RE = /reservation|booking|confirm|appointment|itinerary|check.in|boarding pass|flight|hotel|restaurant|ticket|rsvp|reminder|your trip|your stay|your reservation|your booking|your order confirmation/i;
@@ -3644,7 +3645,7 @@ async function pollImap() {
         let body = '';
         try {
           const parsed = await simpleParser(msg.source);
-          body = parsed.text || parsed.html || '';
+          body = parsed.text || (parsed.html ? stripHtml(parsed.html) : '');
         } catch {}
         _seenUids.add(msg.uid); // mark before AI calls so a crash doesn't cause infinite reprocessing
 
@@ -3653,11 +3654,13 @@ async function pollImap() {
             callAiForPackage(subject, body).catch(() => null),
             callAiForEvent(subject, body).catch(() => null),
           ]);
-          if (pkg?.is_shipping && pkg.tracking_number) {
-            const exists = db.prepare('SELECT id FROM packages WHERE tracking_number=?').get(pkg.tracking_number);
+          if (pkg?.is_shipping) {
+            const exists = pkg.tracking_number
+              ? db.prepare('SELECT id FROM packages WHERE tracking_number=?').get(pkg.tracking_number)
+              : db.prepare('SELECT id FROM packages WHERE source_subject=?').get(subject);
             if (!exists) {
               db.prepare('INSERT INTO packages (carrier,tracking_number,description,expected_date,source_subject) VALUES (?,?,?,?,?)')
-                .run(pkg.carrier || '', pkg.tracking_number, pkg.description || '', pkg.expected_date || '', subject);
+                .run(pkg.carrier || '', pkg.tracking_number || '', pkg.description || subject, pkg.expected_date || '', subject);
               broadcastSSE('packages', { action: 'reload' });
             }
           }
@@ -3744,6 +3747,7 @@ async function scanImap30Days() {
         if (!isShipping && !isBill && !isAppt) continue;
         let body = '';
         try { const p = await simpleParser(msg.source); body = p.text || p.html || ''; } catch {}
+        _seenUids.add(msg.uid);
         batch.push({ subject, isShipping, isBill, isAppt, body });
         if (batch.length >= 50) break;
       }
@@ -3756,11 +3760,13 @@ async function scanImap30Days() {
           callAiForPackage(subject, body).catch(() => null),
           callAiForEvent(subject, body).catch(() => null),
         ]);
-        if (pkg?.is_shipping && pkg.tracking_number) {
-          const exists = db.prepare('SELECT id FROM packages WHERE tracking_number=?').get(pkg.tracking_number);
+        if (pkg?.is_shipping) {
+          const exists = pkg.tracking_number
+            ? db.prepare('SELECT id FROM packages WHERE tracking_number=?').get(pkg.tracking_number)
+            : db.prepare('SELECT id FROM packages WHERE source_subject=?').get(subject);
           if (!exists) {
             db.prepare('INSERT INTO packages (carrier,tracking_number,description,expected_date,source_subject) VALUES (?,?,?,?,?)')
-              .run(pkg.carrier || '', pkg.tracking_number, pkg.description || '', pkg.expected_date || '', subject);
+              .run(pkg.carrier || '', pkg.tracking_number || '', pkg.description || subject, pkg.expected_date || '', subject);
             summary.packages++;
           }
         }

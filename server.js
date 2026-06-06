@@ -3613,6 +3613,7 @@ cron.schedule('0 * * * *', () => {
 });
 
 // ── IMAP email polling ────────────────────────────────────────────────────────
+const _seenUids = new Set(); // tracks UIDs processed this session so we don't reprocess read emails
 const SHIPPING_RE = /ship|track|deliver|order|package|dispatch|arrival|transit/i;
 const BILL_RE = /bill|statement|invoice|payment due|amount due|minimum payment|your balance|autopay/i;
 const APPT_RE = /reservation|booking|confirm|appointment|itinerary|check.in|boarding pass|flight|hotel|restaurant|ticket|rsvp|reminder|your trip|your stay|your reservation|your booking|your order confirmation/i;
@@ -3633,20 +3634,19 @@ async function pollImap() {
     const lock = await client.getMailboxLock('INBOX');
     const since = new Date(Date.now() - 48 * 60 * 60 * 1000);
     try {
-      for await (const msg of client.fetch({ unseen: true, since }, { uid: true, source: true, envelope: true })) {
+      for await (const msg of client.fetch({ since }, { uid: true, source: true, envelope: true })) {
+        if (_seenUids.has(msg.uid)) continue; // already processed this session
         const subject = msg.envelope?.subject || '';
         const isShipping = SHIPPING_RE.test(subject);
         const isBill = !isShipping && BILL_RE.test(subject);
         const isAppt = !isShipping && !isBill && APPT_RE.test(subject);
-        if (!isShipping && !isBill && !isAppt) continue;
+        if (!isShipping && !isBill && !isAppt) { _seenUids.add(msg.uid); continue; }
         let body = '';
         try {
           const parsed = await simpleParser(msg.source);
           body = parsed.text || parsed.html || '';
         } catch {}
-
-        // mark seen before AI calls so a crash mid-process doesn't cause infinite reprocessing
-        await client.messageFlagsAdd(msg.uid, ['\\Seen'], { uid: true });
+        _seenUids.add(msg.uid); // mark before AI calls so a crash doesn't cause infinite reprocessing
 
         if (isShipping) {
           const [pkg, result] = await Promise.all([

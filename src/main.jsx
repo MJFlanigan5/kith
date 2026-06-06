@@ -5454,10 +5454,13 @@ function VehiclesScreen({vehicles,setVehicles,toastAdd}){
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
                 <div style={{display:'flex',alignItems:'center',gap:8}}>
                   <div style={{width:10,height:10,borderRadius:'50%',background:v.color||'#3B82F6',flexShrink:0}}/>
-                  <span style={{fontSize:13,fontWeight:700,color:A.label2,letterSpacing:'-.01em'}}>
-                    {v.name}{v.year?` · ${v.year}`:''}
-                    {(v.make||v.model)?` · ${[v.make,v.model].filter(Boolean).join(' ')}`:''}
-                  </span>
+                  <div>
+                    <span style={{fontSize:13,fontWeight:700,color:A.label2,letterSpacing:'-.01em'}}>
+                      {v.name}{v.year?` · ${v.year}`:''}
+                      {(v.make||v.model)?` · ${[v.make,v.model].filter(Boolean).join(' ')}`:''}
+                    </span>
+                    {v.vin&&<div style={{fontSize:11,color:A.label4,fontFamily:'JetBrains Mono,monospace',marginTop:1,letterSpacing:'.04em'}}>{v.vin}</div>}
+                  </div>
                 </div>
                 <button onClick={()=>openEditVehicle(v)} style={{background:'none',border:'none',color:A.label4,cursor:'pointer',fontSize:13,padding:'0 4px'}}>Edit</button>
               </div>

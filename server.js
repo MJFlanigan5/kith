@@ -3705,10 +3705,11 @@ async function pollImap() {
 let _lastImapPoll = 0;
 cron.schedule('* * * * *', () => {
   if (g('imap_enabled') !== '1') return;
+  if (_scanInProgress) return; // manual scan in progress, don't update timestamp
   const intervalMin = parseInt(g('imap_poll_interval') || '120') || 120;
   if (Date.now() - _lastImapPoll < intervalMin * 60 * 1000) return;
   _lastImapPoll = Date.now();
-  pollImap().catch(() => {});
+  pollImap().catch(() => { _lastImapPoll = 0; }); // reset on failure so next tick retries
 });
 
 let _scanInProgress = false;

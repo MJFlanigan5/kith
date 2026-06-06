@@ -3648,7 +3648,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [refresh,setRefresh]=useState('1min');
   const [rotationSec,setRotationSec]=useState('10');
 
-  const saveSetting=(key,value)=>api.put('/api/settings',{[key]:value}).then(r=>{if(r.error)throw new Error(r.error);}).catch(e=>{throw e;});
+  const saveSetting=(key,value)=>api.put('/api/settings',{[key]:value}).then(r=>{if(r.error)toastAdd(r.error,'red');else toastAdd('Saved');}).catch(()=>toastAdd('Save failed','red'));
   const [pushStatus,setPushStatus]=useState('idle');
   const [icsForm,setIcsForm]=useState({name:'',url:'',color:'#3B82F6'});
   const [icsLoading,setIcsLoading]=useState(false);
@@ -5522,7 +5522,7 @@ function VehiclesScreen({vehicles,setVehicles,toastAdd}){
                 setVinLoading(true);
                 const r=await api.get(`/api/vehicles/vin/${vin}`).catch(()=>null);
                 setVinLoading(false);
-                if(!r||r.error) return;
+                if(!r||r.error){toastAdd(r.error||'VIN not found','red');return;}
                 setVForm(f=>({...f,make:r.make||f.make,model:r.model||f.model,year:r.year?String(r.year):f.year}));
                 toastAdd('VIN decoded — make/model/year filled');
               }}

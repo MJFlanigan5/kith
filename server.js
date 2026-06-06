@@ -992,7 +992,6 @@ app.get('/api/news', async (req, res) => {
       } catch { return []; }
     }));
     const flat = results.flat();
-    for (let i = flat.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [flat[i], flat[j]] = [flat[j], flat[i]]; }
     _newsCache = flat.slice(0, 20);
     _newsCacheAt = Date.now();
     res.json(_newsCache);
@@ -1633,8 +1632,16 @@ app.get('/api/widgets/data', async (req, res) => {
 
   if (gs('widget_quote_enabled') === '1')
     p.push(_wFetch(`quote:${localDate()}`, 86400000, async () => {
+      // Check DB first so the quote survives server restarts within the same calendar day
+      const storedDate = db.prepare("SELECT value FROM settings WHERE key='_quote_date'").get()?.value;
+      const storedJson = db.prepare("SELECT value FROM settings WHERE key='_quote_data'").get()?.value;
+      if (storedDate === localDate() && storedJson) { try { return JSON.parse(storedJson); } catch {} }
       const r = await fetch('https://zenquotes.io/api/random', { signal: AbortSignal.timeout(6000) });
-      const d = await r.json(); return { text: d[0].q, author: d[0].a };
+      const d = await r.json();
+      const quote = { text: d[0].q, author: d[0].a };
+      db.prepare('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)').run('_quote_date', localDate());
+      db.prepare('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)').run('_quote_data', JSON.stringify(quote));
+      return quote;
     }).then(d => { if (d) result.quote = d; }));
 
   const tickers = gs('widget_stocks_tickers');
@@ -3249,17 +3256,26 @@ function homeySocketConnect() {
 
     // Presence: user present state changed
     if (t.includes('user') && (t.includes('present') || id === 'present')) {
+      // Homey sends either (type='user.UID.present', id='present') or (type='user', id=UID)
+      // Extract the user UID regardless of format
+      let userId = id;
+      if (id === 'present') {
+        const parts = t.split('.');
+        const uIdx = parts.findIndex(p => p === 'user');
+        userId = (uIdx >= 0 && parts[uIdx + 1] && parts[uIdx + 1] !== 'present') ? parts[uIdx + 1] : null;
+      }
       // Only process UIDs that are explicitly configured
       const _configuredUids = g('homey_person_devices').split(',').map(s => s.trim()).filter(Boolean);
-      if (!_configuredUids.includes(id)) return;
-      console.log('[homey-socket] presence event — refreshing who_home', id, data);
+      if (!userId || !_configuredUids.includes(userId)) return;
+      console.log('[homey-socket] presence event — refreshing who_home', userId, data);
       const nowPresent = data === true || data?.value === true || data?.present === true;
-      const wasPresent = _homeyPresence[id];
-      _homeyPresence[id] = nowPresent;
-      if (nowPresent && wasPresent !== true) {
-        const arrivedName = _homeyNames[id] || id;
-        sendPushToAll({ title: `${arrivedName} is home`, body: 'Welcome home!', tag: `arrival-homey-${id}` });
-        broadcastSSE('arrival', { name: arrivedName, entity_id: id, source: 'homey' });
+      const wasPresent = _homeyPresence[userId];
+      _homeyPresence[userId] = nowPresent;
+      // Only fire if transitioning from an explicit away state (not undefined/unknown)
+      if (nowPresent && wasPresent === false) {
+        const arrivedName = _homeyNames[userId] || userId;
+        sendPushToAll({ title: `${arrivedName} is home`, body: 'Welcome home!', tag: `arrival-homey-${userId}` });
+        broadcastSSE('arrival', { name: arrivedName, entity_id: userId, source: 'homey' });
       }
       _wInvalidate('who_home');
       broadcastSSE('refresh', { source: 'homey', widgets: ['who_home'] });

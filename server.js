@@ -2858,7 +2858,7 @@ app.delete('/api/packages/:id', requireAuth, (req, res) => {
 
 // ── Routes: Recipes ───────────────────────────────────────────────────────────
 
-app.get('/api/recipes', (req, res) => {
+app.get('/api/recipes', requireAuth, (req, res) => {
   res.json(db.prepare('SELECT * FROM recipes ORDER BY name').all());
 });
 

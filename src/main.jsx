@@ -5098,6 +5098,7 @@ function PackagesScreen({packages,setPackages,toastAdd}){
     setDrawerOpen(false);setEditPkg(null);setForm({carrier:'',tracking_number:'',description:'',expected_date:''});
     toastAdd(editPkg?'Package updated':'Package added');
   };
+  const openNew=()=>{setEditPkg(null);setForm({carrier:'',tracking_number:'',description:'',expected_date:''});setDrawerOpen(true);};
   const openEdit=pkg=>{setEditPkg(pkg);setForm({carrier:pkg.carrier||'',tracking_number:pkg.tracking_number||'',description:pkg.description||'',expected_date:pkg.expected_date||''});setDrawerOpen(true);};
 
   return(
@@ -5107,7 +5108,7 @@ function PackagesScreen({packages,setPackages,toastAdd}){
           <h1 style={{fontSize:isMobile?34:44,fontWeight:800,letterSpacing:'-.05em',lineHeight:1.05}}>Packages</h1>
           <p style={{color:A.label4,fontSize:15,marginTop:6}}>Detected from shipping emails · shows on wall display</p>
         </div>
-        <Btn onClick={()=>setDrawerOpen(true)}>+ Add</Btn>
+        <Btn onClick={openNew}>+ Add</Btn>
       </div>
       {packages.length===0?(
         <Card style={{padding:'52px 24px',textAlign:'center'}}>
@@ -5284,7 +5285,8 @@ function RecipesScreen({recipes,setRecipes,toastAdd}){
   };
 
   const del=async id=>{
-    await api.del(`/api/recipes/${id}`).catch(()=>{});
+    const r=await api.del(`/api/recipes/${id}`).catch(()=>null);
+    if(r===null){toastAdd('Delete failed','red');return;}
     setRecipes(p=>p.filter(x=>x.id!==id));
     setViewRecipe(null);
     toastAdd('Recipe deleted','blue');
@@ -5367,7 +5369,7 @@ function RecipesScreen({recipes,setRecipes,toastAdd}){
       </Modal>
 
       {/* Add/Edit drawer */}
-      <Drawer open={drawerOpen} onClose={()=>{setDrawerOpen(false);setEditRecipe(null);}} title={editRecipe?'Edit Recipe':'New Recipe'}>
+      <Drawer open={drawerOpen} onClose={()=>{setDrawerOpen(false);setEditRecipe(null);setForm(blankForm);setIngLine('');}} title={editRecipe?'Edit Recipe':'New Recipe'}>
         <FormGroup label="Name"><div style={{padding:'12px 16px'}}><Inp value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} placeholder="Grandma's lasagna"/></div></FormGroup>
         <FormGroup label="Description"><div style={{padding:'12px 16px'}}><Inp value={form.description} onChange={e=>setForm(f=>({...f,description:e.target.value}))} placeholder="Short description"/></div></FormGroup>
         <FormGroup label="Servings &amp; time">

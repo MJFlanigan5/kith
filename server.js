@@ -3654,6 +3654,90 @@ async function pollImap() {
 
 cron.schedule('*/15 * * * *', () => pollImap().catch(() => {}));
 
+let _scanInProgress = false;
+
+async function scanImap30Days() {
+  if (_scanInProgress) return;
+  _scanInProgress = true;
+  const summary = { packages: 0, bills: 0, events: 0 };
+  try {
+    const host = g('imap_host'), port = parseInt(g('imap_port') || '993');
+    const user = g('imap_user'), pass = g('imap_pass');
+    if (!host || !user || !pass) return;
+
+    const { ImapFlow } = require('imapflow');
+    const { simpleParser } = require('mailparser');
+    const client = new ImapFlow({ host, port, secure: port === 993, auth: { user, pass }, logger: false });
+
+    await client.connect();
+    const lock = await client.getMailboxLock('INBOX');
+    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const batch = [];
+
+    try {
+      for await (const msg of client.fetch({ since }, { uid: true, source: true, envelope: true })) {
+        const subject = msg.envelope?.subject || '';
+        const isShipping = SHIPPING_RE.test(subject);
+        const isBill = !isShipping && BILL_RE.test(subject);
+        if (!isShipping && !isBill) continue;
+        let body = '';
+        try { const p = await simpleParser(msg.source); body = p.text || p.html || ''; } catch {}
+        batch.push({ subject, isShipping, body });
+        if (batch.length >= 30) break;
+      }
+    } finally { lock.release(); }
+    await client.logout();
+
+    for (const { subject, isShipping, body } of batch) {
+      if (isShipping) {
+        const [pkg, evt] = await Promise.all([
+          callAiForPackage(subject, body).catch(() => null),
+          callAiForEvent(subject, body).catch(() => null),
+        ]);
+        if (pkg?.is_shipping && pkg.tracking_number) {
+          const exists = db.prepare('SELECT id FROM packages WHERE tracking_number=?').get(pkg.tracking_number);
+          if (!exists) {
+            db.prepare('INSERT INTO packages (carrier,tracking_number,description,expected_date,source_subject) VALUES (?,?,?,?,?)')
+              .run(pkg.carrier || '', pkg.tracking_number, pkg.description || '', pkg.expected_date || '', subject);
+            summary.packages++;
+          }
+        }
+        if (evt?.event_name) {
+          db.prepare('INSERT INTO inbox (subject,event_name,event_date,event_time,recurrence,confidence) VALUES (?,?,?,?,?,?)')
+            .run(subject, evt.event_name, evt.event_date || '', evt.event_time || 'All day', evt.recurrence || 'One-time', evt.confidence || 'medium');
+          summary.events++;
+        }
+      } else {
+        const bill = await callAiForBill(subject, body).catch(() => null);
+        if (bill?.is_bill && bill.payee) {
+          const exists = db.prepare('SELECT id FROM bills WHERE name=? AND active=1').get(bill.payee);
+          if (!exists) {
+            db.prepare('INSERT INTO bills (name,amount,due_date,recurrence) VALUES (?,?,?,?)')
+              .run(bill.payee, Number(bill.amount) || 0, bill.due_date || '', bill.recurrence || 'monthly');
+            summary.bills++;
+          }
+        }
+      }
+    }
+
+    if (summary.packages > 0) broadcastSSE('packages', { action: 'reload' });
+    if (summary.bills > 0) broadcastSSE('bills', { action: 'reload' });
+    if (summary.events > 0) broadcastSSE('inbox', { action: 'reload' });
+    console.log(`[imap scan] done — packages:${summary.packages} bills:${summary.bills} events:${summary.events}`);
+  } catch (e) {
+    console.error('[imap scan]', e?.message || e);
+  } finally {
+    _scanInProgress = false;
+    broadcastSSE('scan_complete', summary);
+  }
+}
+
+app.post('/api/imap/scan', requireAuth, (req, res) => {
+  if (_scanInProgress) return res.json({ ok: false, status: 'already_scanning' });
+  scanImap30Days();
+  res.json({ ok: true, status: 'scanning' });
+});
+
 app.post('/api/imap/test', requireAuth, async (req, res) => {
   const { host, port, user, pass } = req.body;
   const { ImapFlow } = require('imapflow');

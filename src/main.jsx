@@ -3470,6 +3470,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [imapEnabled,setImapEnabled]=useState(false);
   const [imapSaving,setImapSaving]=useState(false);
   const [imapTesting,setImapTesting]=useState(false);
+  const [imapScanning,setImapScanning]=useState(false);
   const [anthropicKey,setAnthropicKey]=useState('');
   const [hasAnthropicKey,setHasAnthropicKey]=useState(false);
   const [beehiivKey,setBeehiivKey]=useState('');
@@ -3806,6 +3807,35 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
                 finally{setImapSaving(false);}
               }}>Save</Btn>
             </div>
+            {imapUser&&(
+              <div style={{marginTop:12,paddingTop:12,borderTop:`1px solid ${A.sep}`}}>
+                <div style={{fontSize:13,color:A.label4,marginBottom:8}}>Scan the last 30 days of your inbox to auto-import packages, bills, and calendar events. Duplicates are skipped.</div>
+                <Btn sm variant="ghost" loading={imapScanning} onClick={async()=>{
+                  if(imapScanning) return;
+                  setImapScanning(true);
+                  const r=await api.post('/api/imap/scan',{}).catch(()=>null);
+                  if(!r?.ok){
+                    toastAdd(r?.status==='already_scanning'?'Scan already in progress':'Failed to start scan','red');
+                    setImapScanning(false);
+                    return;
+                  }
+                  toastAdd('Scanning — this may take a minute…','blue');
+                  const es=new EventSource('/api/events/stream');
+                  const tid=setTimeout(()=>{es.close();setImapScanning(false);},5*60*1000);
+                  es.addEventListener('scan_complete',e=>{
+                    clearTimeout(tid);es.close();setImapScanning(false);
+                    try{
+                      const d=JSON.parse(e.data);
+                      const parts=[];
+                      if(d.packages>0) parts.push(`${d.packages} package${d.packages===1?'':'s'}`);
+                      if(d.bills>0) parts.push(`${d.bills} bill${d.bills===1?'':'s'}`);
+                      if(d.events>0) parts.push(`${d.events} event${d.events===1?'':'s'}`);
+                      toastAdd(parts.length?`Scan found: ${parts.join(', ')}`:'Scan complete — nothing new found');
+                    }catch{toastAdd('Scan complete');}
+                  });
+                }}>{imapScanning?'Scanning…':'Scan last 30 days'}</Btn>
+              </div>
+            )}
           </div>
         </div>
       </FormGroup>

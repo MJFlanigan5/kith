@@ -740,7 +740,9 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
     const label=offset===0?'Today':offset===1?'Tomorrow':DAYS[d.getDay()];
     return{label,date:localDate(d)};
   });
-  const hasUpcomingEvents=agendaDays.some(({date})=>(events||[]).some(e=>e.date===date));
+  const displayEvents=(events||[]).filter(e=>e.source!=='bill'&&e.source!=='vehicle');
+  const hasUpcomingEvents=agendaDays.some(({date})=>displayEvents.some(e=>e.date===date));
+  const dueSoonVehicles=(events||[]).filter(e=>e.source==='vehicle'&&daysUntil(e.date)>=0&&daysUntil(e.date)<=14).sort((a,b)=>a.date.localeCompare(b.date));
   const dueC=chores.filter(c=>(c.status==='due'||c.status==='overdue')&&!c.done);
   const upCD=(countdowns||[]).filter(c=>daysUntil(c.date)>=0);
   const uncheckedGrocery=(grocery||[]).filter(i=>!i.checked);
@@ -749,6 +751,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
   const centerPanels=[
     'dinner',
     ...(dueC.length>0?['chores']:[]),
+    ...(dueSoonVehicles.length>0?['due_soon']:[]),
     ...(upCD.length>0?['countdowns']:[]),
     ...(goals.length>0?['goals']:[]),
     ...(progressMembers.length>0?['members']:[]),
@@ -972,8 +975,8 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
                     )}
                   </div>
                   <div ref={calScrollRef} style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:14,WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
-                    {agendaDays.filter(({date})=>(events||[]).some(e=>e.date===date)).map(({label,date})=>{
-                      const evs=(events||[]).filter(e=>e.date===date);
+                    {agendaDays.filter(({date})=>displayEvents.some(e=>e.date===date)).map(({label,date})=>{
+                      const evs=displayEvents.filter(e=>e.date===date);
                       return(
                         <div key={date}>
                           <div style={{fontSize:10,fontWeight:700,color:D.t3,marginBottom:6,textTransform:'uppercase',letterSpacing:'.08em'}}>{label}</div>
@@ -1018,6 +1021,30 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
                       </div>
                     )}
                     <div style={{flex:1,display:'flex',flexDirection:'column',minHeight:0,opacity:panelOpacity,transition:'opacity 0.3s ease'}}>
+                    {visiblePanelId==='due_soon'&&(
+                      <>
+                        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+                          <WLabel>Due Soon</WLabel>
+                          <span style={{fontSize:11,fontWeight:700,color:A.amber}}>{dueSoonVehicles.length} service{dueSoonVehicles.length===1?'':'s'}</span>
+                        </div>
+                        <div style={{flex:1,overflowY:'auto',WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
+                          {dueSoonVehicles.map(e=>{
+                            const days=daysUntil(e.date);
+                            const [svcName,vehName]=(e.title||'').split(' — ');
+                            return(
+                              <div key={e.id} style={{display:'flex',alignItems:'center',gap:12,padding:'9px 0',borderBottom:`1px solid ${D.sep}`}}>
+                                <div style={{width:8,height:8,borderRadius:'50%',background:e.color||A.blue,flexShrink:0}}/>
+                                <div style={{flex:1,minWidth:0}}>
+                                  <div style={{fontSize:14,color:D.t1,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{svcName}</div>
+                                  {vehName&&<div style={{fontSize:11,color:D.t4,marginTop:1}}>{vehName}</div>}
+                                </div>
+                                <span style={{fontSize:12,fontWeight:700,color:days===0?A.amber:D.t3,flexShrink:0}}>{days===0?'Today':`${days}d`}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
                     {visiblePanelId==='chores'&&(
                       <>
                         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>

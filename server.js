@@ -3553,6 +3553,7 @@ cron.schedule('0 * * * *', () => {
 });
 
 // ── IMAP email polling ────────────────────────────────────────────────────────
+const g = k => db.prepare('SELECT value FROM settings WHERE key=?').get(k)?.value || '';
 const _seenUids = new Set(); // tracks UIDs processed this session so we don't reprocess read emails
 function stripHtml(html) { return html.replace(/<style[^>]*>[\s\S]*?<\/style>/gi,'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim(); }
 const SHIPPING_RE = /ship|track|deliver|package|dispatch|arrival|transit/i;

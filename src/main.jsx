@@ -402,16 +402,22 @@ function FamilyScreen({members,setMembers,toastAdd}){
   };
   const savePin=async()=>{
     if(!String(pinInput||'').match(/^\d{4,8}$/)){toastAdd('PIN must be 4–8 digits','red');return;}
-    await api.put(`/api/members/${pinModal}/pin`,{pin:String(pinInput)});
-    setPinModal(null);setPinInput('');
-    toastAdd('PIN updated');
+    try{
+      const r=await api.put(`/api/members/${pinModal}/pin`,{pin:String(pinInput)});
+      if(r?.error){toastAdd(r.error,'red');return;}
+      setPinModal(null);setPinInput('');
+      toastAdd('PIN updated');
+    }catch{toastAdd('Failed to save PIN','red');}
   };
   const saveGoal=async()=>{
     const goal=Number(goalForm.monthly_goal)||0;
-    await api.put(`/api/members/${goalId}/goal`,{monthly_goal:goal,reward:goalForm.reward});
-    setMembers(p=>p.map(m=>m.id===goalId?{...m,monthly_goal:goal,reward:goalForm.reward}:m));
-    setGoalId(null);
-    toastAdd('Goal saved');
+    try{
+      const r=await api.put(`/api/members/${goalId}/goal`,{monthly_goal:goal,reward:goalForm.reward});
+      if(r?.error){toastAdd(r.error,'red');return;}
+      setMembers(p=>p.map(m=>m.id===goalId?{...m,monthly_goal:goal,reward:goalForm.reward}:m));
+      setGoalId(null);
+      toastAdd('Goal saved');
+    }catch{toastAdd('Failed to save goal','red');}
   };
   return(
     <div style={{maxWidth:600}}>

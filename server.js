@@ -2815,19 +2815,31 @@ app.post('/api/email/inbound', async (req, res) => {
     callAiForBill(subject || '', body || '').catch(() => null),
   ]);
 
-  db.prepare('INSERT INTO inbox (subject,event_name,event_date,event_time,recurrence,confidence) VALUES (?,?,?,?,?,?)')
-    .run(subject || '', event_name, event_date, event_time, recurrence, confidence);
+  const inboxDup = db.prepare("SELECT id FROM inbox WHERE subject=? OR (event_name=? AND event_date=? AND event_name!='')").get(subject || '', event_name, event_date);
+  if (!inboxDup) {
+    db.prepare('INSERT INTO inbox (subject,event_name,event_date,event_time,recurrence,confidence) VALUES (?,?,?,?,?,?)')
+      .run(subject || '', event_name, event_date, event_time, recurrence, confidence);
+  }
 
   if (pkg?.is_shipping) {
-    db.prepare('INSERT INTO packages (carrier,tracking_number,description,expected_date,source_subject) VALUES (?,?,?,?,?)')
-      .run(pkg.carrier || '', pkg.tracking_number || '', pkg.description || '', pkg.expected_date || '', subject || '');
-    broadcastSSE('packages', { action: 'reload' });
+    const pkgExists = pkg.tracking_number
+      ? db.prepare('SELECT id FROM packages WHERE tracking_number=?').get(pkg.tracking_number)
+      : db.prepare('SELECT id FROM packages WHERE source_subject=?').get(subject || '');
+    if (!pkgExists) {
+      db.prepare('INSERT INTO packages (carrier,tracking_number,description,expected_date,source_subject) VALUES (?,?,?,?,?)')
+        .run(pkg.carrier || '', pkg.tracking_number || '', pkg.description || '', pkg.expected_date || '', subject || '');
+      broadcastSSE('packages', { action: 'reload' });
+    }
   }
 
   if (bill?.is_bill && bill.payee) {
-    db.prepare('INSERT INTO bills (name,amount,due_date,recurrence) VALUES (?,?,?,?)')
-      .run(bill.payee, Number(bill.amount) || 0, bill.due_date || '', bill.recurrence || 'monthly');
-    broadcastSSE('bills', { action: 'reload' });
+    const billExists = db.prepare('SELECT id FROM bills WHERE name=? AND recurrence=? AND active=1').get(bill.payee, bill.recurrence || 'monthly');
+    if (!billExists) {
+      const dueDay = bill.due_date ? (parseInt(bill.due_date.split('-')[2]) || 1) : 1;
+      db.prepare('INSERT INTO bills (name,amount,due_day,due_date,recurrence) VALUES (?,?,?,?,?)')
+        .run(bill.payee, Number(bill.amount) || 0, dueDay, bill.due_date || '', bill.recurrence || 'monthly');
+      broadcastSSE('bills', { action: 'reload' });
+    }
   }
 
   res.json({ ok: true });

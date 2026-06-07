@@ -2744,7 +2744,7 @@ async function callAi(systemPrompt, userContent) {
       const baseUrl = provider === 'groq' ? 'https://api.groq.com/openai/v1' : provider === 'deepseek' ? 'https://api.deepseek.com/v1' : 'https://api.openai.com/v1';
       const model = provider === 'groq' ? 'llama-3.3-70b-versatile' : provider === 'deepseek' ? 'deepseek-chat' : 'gpt-4o-mini';
       const supportsJsonMode = provider === 'openai' || provider === 'deepseek';
-      const reqBody = { model, max_tokens: 256, messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userContent }] };
+      const reqBody = { model, max_tokens: 400, messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userContent }] };
       if (supportsJsonMode) reqBody.response_format = { type: 'json_object' };
       const data = await fetch(`${baseUrl}/chat/completions`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
@@ -2754,7 +2754,7 @@ async function callAi(systemPrompt, userContent) {
     } else {
       const data = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-        body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 256, system: systemPrompt, messages: [{ role: 'user', content: userContent }] }),
+        body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 400, system: systemPrompt, messages: [{ role: 'user', content: userContent }] }),
       }).then(r => r.json());
       text = data.content?.[0]?.text;
     }
@@ -3555,10 +3555,10 @@ cron.schedule('0 * * * *', () => {
 // ── IMAP email polling ────────────────────────────────────────────────────────
 const g = k => db.prepare('SELECT value FROM settings WHERE key=?').get(k)?.value || '';
 const _seenUids = new Set(); // tracks UIDs processed this session so we don't reprocess read emails
-function stripHtml(html) { return html.replace(/<style[^>]*>[\s\S]*?<\/style>/gi,'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim(); }
-const SHIPPING_RE = /ship|track|deliver|package|dispatch|arrival|transit/i;
-const BILL_RE = /bill|statement|invoice|payment due|amount due|minimum payment|your balance|autopay/i;
-const APPT_RE = /reservation|booking|confirm|appointment|itinerary|check.in|boarding pass|flight|hotel|restaurant|ticket|rsvp|reminder|your trip|your stay|your reservation|your booking|your order confirmation/i;
+function stripHtml(html) { return html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi,'').replace(/<style[^>]*>[\s\S]*?<\/style>/gi,'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim(); }
+const SHIPPING_RE = /\b(ship(?:ped|ping|ment)?|track(?:ing)?|deliver(?:y|ed|ing)?|package|dispatch(?:ed)?|arrival|in transit|out for delivery)\b/i;
+const BILL_RE = /\b(bill|statement|invoice|payment due|amount due|minimum payment|your balance|autopay|auto-pay|past due|balance due)\b/i;
+const APPT_RE = /\b(appointment|reservation|itinerary|check.in|boarding pass|your flight|your hotel|your trip|your stay|rsvp|your reservation|your booking|your event)\b/i;
 
 async function pollImap() {
   if (g('imap_enabled') !== '1') return;
@@ -3608,7 +3608,7 @@ async function pollImap() {
             } else { console.log(`[imap] package duplicate, skipped`); }
           } else { console.log(`[imap] AI said not shipping`); }
           if (result?.event_name && result?.event_date) {
-            const dupInbox = db.prepare('SELECT id FROM inbox WHERE subject=?').get(subject);
+            const dupInbox = db.prepare("SELECT id FROM inbox WHERE subject=? OR (event_name=? AND event_date=? AND event_name!='')").get(subject, result.event_name, result.event_date);
             if (!dupInbox) {
               db.prepare('INSERT INTO inbox (subject,event_name,event_date,event_time,recurrence,confidence) VALUES (?,?,?,?,?,?)')
                 .run(subject, result.event_name, result.event_date, result.event_time || 'All day', result.recurrence || 'One-time', result.confidence || 'medium');
@@ -3619,10 +3619,11 @@ async function pollImap() {
           const bill = await callAiForBill(subject, body).catch(e => { console.error('[imap] bill AI error:', e?.message); return null; });
           console.log(`[imap] bill → AI: ${JSON.stringify(bill)}`);
           if (bill?.is_bill && bill.payee) {
-            const exists = db.prepare('SELECT id FROM bills WHERE name=? AND active=1').get(bill.payee);
+            const exists = db.prepare('SELECT id FROM bills WHERE name=? AND recurrence=? AND active=1').get(bill.payee, bill.recurrence || 'monthly');
             if (!exists) {
-              db.prepare('INSERT INTO bills (name,amount,due_date,recurrence) VALUES (?,?,?,?)')
-                .run(bill.payee, Number(bill.amount) || 0, bill.due_date || '', bill.recurrence || 'monthly');
+              const dueDay = bill.due_date ? (parseInt(bill.due_date.split('-')[2]) || 1) : 1;
+              db.prepare('INSERT INTO bills (name,amount,due_day,due_date,recurrence) VALUES (?,?,?,?,?)')
+                .run(bill.payee, Number(bill.amount) || 0, dueDay, bill.due_date || '', bill.recurrence || 'monthly');
               broadcastSSE('bills', { action: 'reload' });
               console.log(`[imap] inserted bill: ${bill.payee}`);
             }
@@ -3630,7 +3631,7 @@ async function pollImap() {
         } else if (isAppt) {
           const result = await callAiForEvent(subject, body).catch(() => null);
           if (result?.event_name && result?.event_date) {
-            const dupInbox = db.prepare('SELECT id FROM inbox WHERE subject=?').get(subject);
+            const dupInbox = db.prepare("SELECT id FROM inbox WHERE subject=? OR (event_name=? AND event_date=? AND event_name!='')").get(subject, result.event_name, result.event_date);
             if (!dupInbox) {
               db.prepare('INSERT INTO inbox (subject,event_name,event_date,event_time,recurrence,confidence) VALUES (?,?,?,?,?,?)')
                 .run(subject, result.event_name, result.event_date, result.event_time || 'All day', result.recurrence || 'One-time', result.confidence || 'high');
@@ -3723,7 +3724,7 @@ async function scanImap30Days() {
         }
         // only add shipping emails to inbox if there's an actual calendar event (e.g. a delivery date confirmation)
         if (evt?.event_name && evt?.event_date) {
-          const dup = db.prepare('SELECT id FROM inbox WHERE subject=?').get(subject);
+          const dup = db.prepare("SELECT id FROM inbox WHERE subject=? OR (event_name=? AND event_date=? AND event_name!='')").get(subject, evt.event_name, evt.event_date);
           if (!dup) {
             db.prepare('INSERT INTO inbox (subject,event_name,event_date,event_time,recurrence,confidence) VALUES (?,?,?,?,?,?)')
               .run(subject, evt.event_name, evt.event_date, evt.event_time || 'All day', evt.recurrence || 'One-time', evt.confidence || 'medium');
@@ -3733,17 +3734,18 @@ async function scanImap30Days() {
       } else if (isBill) {
         const bill = await callAiForBill(subject, body).catch(() => null);
         if (bill?.is_bill && bill.payee) {
-          const exists = db.prepare('SELECT id FROM bills WHERE name=? AND active=1').get(bill.payee);
+          const exists = db.prepare('SELECT id FROM bills WHERE name=? AND recurrence=? AND active=1').get(bill.payee, bill.recurrence || 'monthly');
           if (!exists) {
-            db.prepare('INSERT INTO bills (name,amount,due_date,recurrence) VALUES (?,?,?,?)')
-              .run(bill.payee, Number(bill.amount) || 0, bill.due_date || '', bill.recurrence || 'monthly');
+            const dueDay = bill.due_date ? (parseInt(bill.due_date.split('-')[2]) || 1) : 1;
+            db.prepare('INSERT INTO bills (name,amount,due_day,due_date,recurrence) VALUES (?,?,?,?,?)')
+              .run(bill.payee, Number(bill.amount) || 0, dueDay, bill.due_date || '', bill.recurrence || 'monthly');
             summary.bills++;
           }
         }
       } else if (isAppt) {
         const result = await callAiForEvent(subject, body).catch(() => null);
         if (result?.event_name && result?.event_date) {
-          const dup = db.prepare('SELECT id FROM inbox WHERE subject=?').get(subject);
+          const dup = db.prepare("SELECT id FROM inbox WHERE subject=? OR (event_name=? AND event_date=? AND event_name!='')").get(subject, result.event_name, result.event_date);
           if (!dup) {
             db.prepare('INSERT INTO inbox (subject,event_name,event_date,event_time,recurrence,confidence) VALUES (?,?,?,?,?,?)')
               .run(subject, result.event_name, result.event_date, result.event_time || 'All day', result.recurrence || 'One-time', result.confidence || 'high');

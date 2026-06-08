@@ -3281,6 +3281,17 @@ cron.schedule('0 18 * * 0', async () => {
 // ── SPA fallback ──────────────────────────────────────────────────────────────
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'dist', 'index.html')));
 
+// ── Arrival dedup — prevents reconnection artifacts from re-firing stale notifications ──
+const _lastArrivalAt = {}; // entityId/userId → Date.now() of last fired arrival
+const ARRIVAL_DEDUP_MS = 30 * 60 * 1000; // 30 minutes
+function fireArrival(name, entity_id, source) {
+  const now = Date.now();
+  if (_lastArrivalAt[entity_id] && now - _lastArrivalAt[entity_id] < ARRIVAL_DEDUP_MS) return;
+  _lastArrivalAt[entity_id] = now;
+  sendPushToAll({ title: `${name} is home`, body: 'Welcome home!', tag: `arrival-${source}-${entity_id}` });
+  broadcastSSE('arrival', { name, entity_id, source, ts: now });
+}
+
 // ── HA WebSocket — real-time entity state changes ────────────────────────────
 let _haWs = null, _haWsRetryMs = 2000, _haWsTimer = null;
 
@@ -3345,8 +3356,7 @@ function haWsConnect() {
         _wInvalidate('who_home');
         if (new_state?.state === 'home' && old_state?.state !== 'home') {
           const name = (new_state?.attributes?.friendly_name || entity_id).split(' ')[0];
-          sendPushToAll({ title: `${name} is home`, body: 'Welcome home!', tag: `arrival-${entity_id}` });
-          broadcastSSE('arrival', { name, entity_id, source: 'ha' });
+          fireArrival(name, entity_id, 'ha');
         }
       } else if (entity_id === _climateId || entity_id.startsWith('climate.')) _wInvalidate('thermostat');
       else _wInvalidate('ha_sensors');
@@ -3437,8 +3447,7 @@ async function homeyPoll() {
         _homeyPresence[uid] = u.present;
         changed = true;
         if (!firstRun && u.present === true && wasPresent !== true) {
-          sendPushToAll({ title: `${name} is home`, body: 'Welcome home!', tag: `arrival-homey-${uid}` });
-          broadcastSSE('arrival', { name, entity_id: uid, source: 'homey' });
+          fireArrival(name, uid, 'homey');
         }
       }
     }
@@ -3504,9 +3513,7 @@ function homeySocketConnect() {
       _homeyPresence[userId] = nowPresent;
       // Only fire if transitioning from an explicit away state (not undefined/unknown)
       if (nowPresent && wasPresent === false) {
-        const arrivedName = _homeyNames[userId] || userId;
-        sendPushToAll({ title: `${arrivedName} is home`, body: 'Welcome home!', tag: `arrival-homey-${userId}` });
-        broadcastSSE('arrival', { name: arrivedName, entity_id: userId, source: 'homey' });
+        fireArrival(_homeyNames[userId] || userId, userId, 'homey');
       }
       _wInvalidate('who_home');
       broadcastSSE('refresh', { source: 'homey', widgets: ['who_home'] });

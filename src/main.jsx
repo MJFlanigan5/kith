@@ -569,6 +569,8 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
     es.addEventListener('arrival',e=>{
       try{
         const d=JSON.parse(e.data);
+        // Discard if the event is more than 10 minutes old — SSE was down when arrival happened
+        if(d.ts&&Date.now()-d.ts>10*60*1000) return;
         const first=(d.name||'').toLowerCase();
         const m=membersRef.current.find(x=>x.name.toLowerCase()===first||x.name.toLowerCase().startsWith(first+' '));
         const color=m?.color||'#34C759';

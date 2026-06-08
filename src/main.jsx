@@ -582,18 +582,9 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
     es.addEventListener('grocery',e=>{try{const d=JSON.parse(e.data);if(setGrocery){if(d.action==='add')setGrocery(p=>[...p,d.item]);else if(d.action==='remove')setGrocery(p=>p.filter(i=>i.id!==d.id));else if(d.action==='toggle')setGrocery(p=>p.map(i=>i.id===d.id?{...i,checked:d.checked}:i));else if(d.action==='clear_checked')setGrocery(p=>p.filter(i=>!i.checked));}}catch{}});
     es.addEventListener('packages',()=>{
       api.get('/api/packages').then(d=>{if(Array.isArray(d)&&setPackages)setPackages(d);}).catch(()=>{});
-      api.get('/api/events').then(d=>{if(Array.isArray(d))setEvents(d);}).catch(()=>{});
     });
     es.addEventListener('messages',()=>{api.get('/api/messages').then(d=>{if(Array.isArray(d)&&setMessages)setMessages(d);}).catch(()=>{});});
-    es.addEventListener('inbox',()=>{api.get('/api/inbox').then(d=>{if(d&&Array.isArray(d.pending))setInboxCount(d.pending.length);}).catch(()=>{});});
-    es.addEventListener('bills',()=>{
-      api.get('/api/bills').then(d=>{if(d.bills){setBills(d.bills);setPayments(d.payments||[]);}}).catch(()=>{});
-      api.get('/api/events').then(d=>{if(Array.isArray(d))setEvents(d);}).catch(()=>{});
-    });
-    es.addEventListener('vehicles',()=>{
-      api.get('/api/vehicles').then(d=>{if(Array.isArray(d))setVehicles(d);}).catch(()=>{});
-      api.get('/api/events').then(d=>{if(Array.isArray(d))setEvents(d);}).catch(()=>{});
-    });
+    // bills/vehicles/inbox state lives in App — DisplayMode gets those as props, no setters available here
     es.addEventListener('open',()=>{setOnline(true);loadWidgets();});
     es.addEventListener('error',()=>setOnline(false));
     return()=>{clearInterval(fa);clearInterval(fb);clearInterval(fc);es.close();};

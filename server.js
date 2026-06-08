@@ -571,11 +571,10 @@ app.put('/api/chores/:id/done', requireAuth, (req, res) => {
   const storedDone = isRecurring ? 0 : done;
   db.prepare('UPDATE chores SET done=?,last_done=?,next_due=?,streak=? WHERE id=?').run(storedDone, lastDone, nextDue, newStreak, c.id);
   if (done) {
-    const member = db.prepare('SELECT * FROM family_members WHERE id=?').get(Number(req.user.sub));
-    if (member) {
-      db.prepare('INSERT INTO chore_completions (chore_id,member_id,member_name,points) VALUES (?,?,?,?)')
-        .run(c.id, member.id, member.name, c.points || 1);
-    }
+    const memberId = req.user.sub === 'admin' ? null : Number(req.user.sub);
+    const member = memberId ? db.prepare('SELECT * FROM family_members WHERE id=?').get(memberId) : null;
+    db.prepare('INSERT INTO chore_completions (chore_id,member_id,member_name,points) VALUES (?,?,?,?)')
+      .run(c.id, member?.id ?? null, member?.name ?? 'Admin', c.points || 1);
   }
   if (done && c.goal_id) {
     const g = db.prepare('SELECT * FROM household_goals WHERE id=?').get(c.goal_id);
@@ -789,7 +788,7 @@ app.post('/api/push/test', requireAuth, async (req, res) => {
 });
 
 // ── Routes: Settings ──────────────────────────────────────────────────────────
-const SETTINGS_SENSITIVE = new Set(['email_webhook_secret','anthropic_api_key','ai_api_key','beehiiv_api_key','youtube_api_key','etsy_api_key','teslemetry_api_key','aviationstack_api_key','lastfm_api_key','nextdns_api_key','beszel_user','beszel_pass','jwt_secret','vapid_public','vapid_private','admin_pin_hash','resend_api_key','ha_webhook_secret','smart_home_token','ha_token','homey_token','plex_token','spotify_refresh_token','moen_pass','unifi_pass','wifi_password']);
+const SETTINGS_SENSITIVE = new Set(['email_webhook_secret','anthropic_api_key','ai_api_key','beehiiv_api_key','youtube_api_key','etsy_api_key','teslemetry_api_key','aviationstack_api_key','lastfm_api_key','nextdns_api_key','beszel_user','beszel_pass','jwt_secret','vapid_public','vapid_private','admin_pin_hash','resend_api_key','ha_webhook_secret','smart_home_token','ha_token','homey_token','plex_token','spotify_refresh_token','moen_pass','unifi_pass','wifi_password','smtp_pass','imap_pass','smtp_user','imap_user']);
 app.get('/api/settings', (req, res) => {
   const rows = db.prepare('SELECT key,value FROM settings').all();
   res.json(Object.fromEntries(rows.filter(r=>!SETTINGS_SENSITIVE.has(r.key)).map(r=>[r.key,r.value])));
@@ -1281,16 +1280,21 @@ app.post('/api/polls', requireAdmin, (req, res) => {
 });
 
 app.post('/api/polls/:id/vote', requireAuth, (req, res) => {
-  const p = db.prepare('SELECT * FROM polls WHERE id=?').get(req.params.id);
-  if (!p) return res.status(404).json({ error: 'Not found' });
-  let options, votes;
-  try { options = JSON.parse(p.options); } catch { return res.status(500).json({ error: 'Corrupt poll data' }); }
-  try { votes = JSON.parse(p.votes || '{}'); } catch { votes = {}; }
   const { option } = req.body || {};
-  if (typeof option !== 'number' || option < 0 || option >= options.length)
-    return res.status(400).json({ error: 'Invalid option index' });
-  votes[option] = (votes[option] || 0) + 1;
-  db.prepare('UPDATE polls SET votes=? WHERE id=?').run(JSON.stringify(votes), p.id);
+  const votes = db.transaction(() => {
+    const p = db.prepare('SELECT * FROM polls WHERE id=?').get(req.params.id);
+    if (!p) return null;
+    let options, votes;
+    try { options = JSON.parse(p.options); } catch { return 'corrupt'; }
+    try { votes = JSON.parse(p.votes || '{}'); } catch { votes = {}; }
+    if (typeof option !== 'number' || option < 0 || option >= options.length) return 'invalid';
+    votes[option] = (votes[option] || 0) + 1;
+    db.prepare('UPDATE polls SET votes=? WHERE id=?').run(JSON.stringify(votes), p.id);
+    return votes;
+  })();
+  if (votes === null) return res.status(404).json({ error: 'Not found' });
+  if (votes === 'corrupt') return res.status(500).json({ error: 'Corrupt poll data' });
+  if (votes === 'invalid') return res.status(400).json({ error: 'Invalid option index' });
   res.json({ votes });
 });
 

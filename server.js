@@ -3281,11 +3281,29 @@ cron.schedule('0 18 * * 0', async () => {
 // ── SPA fallback ──────────────────────────────────────────────────────────────
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'dist', 'index.html')));
 
-// ── Arrival dedup — prevents reconnection artifacts from re-firing stale notifications ──
-const _lastArrivalAt = {}; // entityId/userId → Date.now() of last fired arrival
-const ARRIVAL_DEDUP_MS = 30 * 60 * 1000; // 30 minutes
+// ── Arrival/departure tracking — prevents glitch-driven and reconnection-driven false arrivals ──
+// Two failure modes:
+//   1. GPS/Homey glitch: HA reports home→not_home→home in seconds. Without departure tracking,
+//      the not_home→home transition fires a welcome notification hours after actual arrival.
+//   2. Socket reconnection: remote sends current state on reconnect; if in-memory state is stale
+//      it looks like a new arrival.
+// Fix: require a person to have been away for at least MIN_AWAY_MS before treating home→home
+// as a genuine arrival. departures are tracked across all three paths so the timing is accurate.
+const _lastArrivalAt  = {}; // entityId → ms of last fired arrival notification
+const _lastDepartureAt = {}; // entityId → ms when person was last confirmed away
+const ARRIVAL_DEDUP_MS = 30 * 60 * 1000; // suppress duplicate fires within 30 min
+const MIN_AWAY_MS      = 3  * 60 * 1000; // glitch threshold — must be away ≥3 min for arrival to count
+
+function noteDeparture(entity_id) {
+  _lastDepartureAt[entity_id] = Date.now();
+}
+
 function fireArrival(name, entity_id, source) {
   const now = Date.now();
+  const departedAt = _lastDepartureAt[entity_id] || 0;
+  // Was "away" for less than the glitch threshold — treat as sensor noise, skip
+  if (departedAt && now - departedAt < MIN_AWAY_MS) return;
+  // Already fired for this person recently (reconnection replay guard)
   if (_lastArrivalAt[entity_id] && now - _lastArrivalAt[entity_id] < ARRIVAL_DEDUP_MS) return;
   _lastArrivalAt[entity_id] = now;
   sendPushToAll({ title: `${name} is home`, body: 'Welcome home!', tag: `arrival-${source}-${entity_id}` });
@@ -3357,6 +3375,8 @@ function haWsConnect() {
         if (new_state?.state === 'home' && old_state?.state !== 'home') {
           const name = (new_state?.attributes?.friendly_name || entity_id).split(' ')[0];
           fireArrival(name, entity_id, 'ha');
+        } else if (new_state?.state !== 'home' && old_state?.state === 'home') {
+          noteDeparture(entity_id);
         }
       } else if (entity_id === _climateId || entity_id.startsWith('climate.')) _wInvalidate('thermostat');
       else _wInvalidate('ha_sensors');
@@ -3448,6 +3468,8 @@ async function homeyPoll() {
         changed = true;
         if (!firstRun && u.present === true && wasPresent !== true) {
           fireArrival(name, uid, 'homey');
+        } else if (!firstRun && u.present !== true && wasPresent === true) {
+          noteDeparture(uid);
         }
       }
     }
@@ -3514,6 +3536,8 @@ function homeySocketConnect() {
       // Only fire if transitioning from an explicit away state (not undefined/unknown)
       if (nowPresent && wasPresent === false) {
         fireArrival(_homeyNames[userId] || userId, userId, 'homey');
+      } else if (!nowPresent && wasPresent === true) {
+        noteDeparture(userId);
       }
       _wInvalidate('who_home');
       broadcastSSE('refresh', { source: 'homey', widgets: ['who_home'] });

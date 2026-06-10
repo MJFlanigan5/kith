@@ -7967,6 +7967,22 @@ function ListsScreen({toastAdd}){
           <Inp value={newItem} onChange={e=>setNewItem(e.target.value)} placeholder="Add item…" onKeyDown={e=>e.key==='Enter'&&addItem()}/>
           <Btn onClick={addItem} style={{flexShrink:0}}>Add</Btn>
         </div>
+        <Drawer open={editListDrawer} onClose={()=>{setEditListDrawer(false);setEditListTarget(null);}} title="Edit List">
+          <FormGroup label="Name">
+            <div style={{padding:'12px 16px'}}><Inp value={editListForm.name} onChange={e=>setEditListForm(f=>({...f,name:e.target.value}))}/></div>
+          </FormGroup>
+          <FormGroup label="Emoji">
+            <div style={{padding:'12px 16px',display:'flex',flexWrap:'wrap',gap:8}}>
+              {EMOJIS.map(em=>(
+                <button key={em} onClick={()=>setEditListForm(f=>({...f,emoji:em}))} style={{width:44,height:44,borderRadius:A.rSm,border:`2px solid ${editListForm.emoji===em?A.blue:A.sep}`,background:editListForm.emoji===em?A.blueFill:A.inputBg,fontSize:22,cursor:'pointer'}}>{em}</button>
+              ))}
+            </div>
+          </FormGroup>
+          <div style={{display:'flex',gap:8}}>
+            <Btn onClick={saveListEdit} full>Save</Btn>
+            {editListTarget&&<Btn variant="ghost" onClick={()=>{delList(editListTarget.id);setEditListDrawer(false);}} full style={{color:A.red}}>Delete List</Btn>}
+          </div>
+        </Drawer>
       </div>
     );
   }
@@ -8242,7 +8258,8 @@ function PantryScreen({pantry,setPantry,grocery,setGrocery,toastAdd}){
   const openUse=p=>{setUseTarget(p);setUseAmount('1');};
   const confirmUse=async()=>{
     if(!useTarget) return;
-    const amount=Math.max(1,Number(useAmount)||1);
+    const amount=Number(useAmount);
+    if(!amount||amount<=0){toastAdd('Enter a valid amount','red');return;}
     const r=await api.put(`/api/pantry/${useTarget.id}/use`,{amount}).catch(()=>null);
     if(!r?.id){toastAdd('Failed','red');return;}
     setPantry(prev=>prev.map(x=>x.id===r.id?r:x));

@@ -594,7 +594,7 @@ app.post('/api/chores/:id/photo', requireAuth, (req, res) => {
   const { data, filename = 'photo.jpg' } = req.body || {};
   if (!data?.startsWith('data:image/')) return res.status(400).json({ error: 'image data required' });
   const ext = (filename.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z]/g, '') || 'jpg';
-  const safe = `${Date.now()}-${ext}.${ext}`;
+  const safe = `chore-${Date.now()}.${ext}`;
   try {
     fs.writeFileSync(path.join(PHOTOS_DIR, safe), Buffer.from(data.split(',')[1], 'base64'));
     const memberId = req.user.sub === 'admin' ? null : Number(req.user.sub);
@@ -4722,6 +4722,7 @@ app.get('/api/export', requireAuth, (req, res) => {
       events:              db.prepare('SELECT * FROM events').all(),
       chores:              db.prepare('SELECT * FROM chores').all(),
       grocery:             db.prepare('SELECT * FROM grocery').all(),
+      grocery_history:     db.prepare('SELECT * FROM grocery_history').all(),
       meals:               db.prepare('SELECT * FROM meals').all(),
       pantry_items:        db.prepare('SELECT * FROM pantry_items').all(),
       subscriptions:       db.prepare('SELECT * FROM subscriptions').all(),

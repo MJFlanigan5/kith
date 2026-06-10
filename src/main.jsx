@@ -259,7 +259,8 @@ function CountdownsScreen({countdowns,setCountdowns,toastAdd}){
   const [editForm,setEditForm]=useState({label:'',date:'',emoji:'🎉'});
   const EMOJIS=['🎉','🎂','✈️','🏫','🏖️','🎄','🎃','💍','🏆','⭐'];
   const save=async()=>{
-    if(!form.label.trim()||!form.date) return;
+    if(!form.label.trim()){toastAdd('Label required','red');return;}
+    if(!form.date){toastAdd('Date required','red');return;}
     const r=await api.post('/api/countdowns',form);
     if(!r?.id){toastAdd('Failed to add','red');return;}
     setCountdowns(p=>[...p,r].sort((a,b)=>a.date.localeCompare(b.date)));
@@ -267,7 +268,8 @@ function CountdownsScreen({countdowns,setCountdowns,toastAdd}){
     toastAdd('Countdown added');
   };
   const saveEdit=async()=>{
-    if(!editForm.label.trim()||!editForm.date) return;
+    if(!editForm.label.trim()){toastAdd('Label required','red');return;}
+    if(!editForm.date){toastAdd('Date required','red');return;}
     const r=await api.put(`/api/countdowns/${editId}`,editForm);
     if(!r?.id){toastAdd('Failed to update','red');return;}
     setCountdowns(p=>p.map(c=>c.id===editId?r:c).sort((a,b)=>a.date.localeCompare(b.date)));
@@ -418,7 +420,7 @@ function FamilyScreen({members,setMembers,toastAdd}){
   },[members?.length]);
   const COLORS=['#007AFF','#34C759','#FF3B30','#FF9500','#5856D6','#32ADE6','#AF52DE','#FF2D55','#FF6B35','#30D158'];
   const save=async()=>{
-    if(!form.name.trim()) return;
+    if(!form.name.trim()){toastAdd('Name required','red');return;}
     const r=await api.post('/api/members',form);
     if(!r?.id){toastAdd('Failed to add','red');return;}
     setMembers(p=>[...p,r]);
@@ -426,7 +428,7 @@ function FamilyScreen({members,setMembers,toastAdd}){
     toastAdd('Member added');
   };
   const saveEdit=async()=>{
-    if(!editForm.name.trim()) return;
+    if(!editForm.name.trim()){toastAdd('Name required','red');return;}
     const r=await api.put(`/api/members/${editId}`,{name:editForm.name,color:editForm.color,birthday:editForm.birthday||'',family_role:editForm.family_role||'adult'});
     if(!r?.id){toastAdd('Failed to update','red');return;}
     setMembers(p=>p.map(m=>m.id===editId?r:m));
@@ -2754,7 +2756,8 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
     }
   };
   const deleteEvent=async(id,scope='one')=>{
-    await api.del(`/api/events/${id}?scope=${scope}`);
+    const r=await api.del(`/api/events/${id}?scope=${scope}`).catch(()=>null);
+    if(r?.error){toastAdd('Failed to delete event','red');return;}
     if(scope==='one') setEvents(p=>p.filter(e=>e.id!==id));
     else if(scope==='all'){ const ev=events.find(e=>e.id===id); const sid=String(ev?.external_id||id); setEvents(p=>p.filter(e=>String(e.id)!==sid&&String(e.external_id)!==sid)); }
     else if(scope==='future'){ const ev=events.find(e=>e.id===id); const sid=String(ev?.external_id||id); setEvents(p=>p.filter(e=>!((String(e.id)===sid||String(e.external_id)===sid)&&e.date>=ev.date))); }
@@ -3370,12 +3373,13 @@ function ChoresScreen({chores,setChores,goals=[],members=[],toastAdd}){
 
   const openEdit=c=>{
     let recur='Weekly',day='Monday';
-    if(c.recurrence==='Daily') recur='Daily';
-    else if(c.recurrence==='Bi-weekly') recur='Bi-weekly';
-    else if(c.recurrence==='Monthly'||c.recurrence.startsWith('Monthly')) recur='Monthly';
-    else if(c.recurrence.startsWith('Weekly')) {
+    const rec=c.recurrence||'';
+    if(rec==='Daily') recur='Daily';
+    else if(rec==='Bi-weekly') recur='Bi-weekly';
+    else if(rec==='Monthly'||rec.startsWith('Monthly')) recur='Monthly';
+    else if(rec.startsWith('Weekly')) {
       recur='Weekly';
-      const m=c.recurrence.match(/\((\w+)\)/);
+      const m=rec.match(/\((\w+)\)/);
       if(m) day=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'].find(d=>d.startsWith(m[1]))||'Monday';
     } else recur='Custom';
     setEditChore(c);
@@ -3384,7 +3388,7 @@ function ChoresScreen({chores,setChores,goals=[],members=[],toastAdd}){
   };
 
   const saveChore=async()=>{
-    if(!form.name.trim()) return;
+    if(!form.name.trim()){toastAdd('Name required','red');return;}
     const recurrence=form.recur==='Weekly'?`Weekly (${form.day.slice(0,3)})`:form.recur;
     const body={name:form.name,recurrence,next_due:form.start,points:form.points,outdoor:form.outdoor?1:0,goal_id:form.goal_id||null,goal_amount:Number(form.goal_amount)||1,member_id:form.member_id||null};
     try{
@@ -6062,7 +6066,7 @@ function VehiclesScreen({vehicles,setVehicles,toastAdd}){
     if(editVehicle){
       const r=await api.put(`/api/vehicles/${editVehicle.id}`,payload).catch(()=>null);
       if(!r?.id){toastAdd('Failed to save','red');return;}
-      setVehicles(p=>p.map(v=>v.id===r.id?{...r,services:v.services}:v));
+      setVehicles(p=>p.map(v=>v.id===r.id?{...r,services:v.services||[]}:v));
     }else{
       const r=await api.post('/api/vehicles',payload).catch(()=>null);
       if(!r?.id){toastAdd('Failed to save','red');return;}
@@ -6088,11 +6092,11 @@ function VehiclesScreen({vehicles,setVehicles,toastAdd}){
     if(editService){
       const r=await api.put(`/api/vehicles/${sVehicleId}/services/${editService.id}`,payload).catch(()=>null);
       if(!r?.id){toastAdd('Failed to save','red');return;}
-      setVehicles(p=>p.map(v=>v.id===sVehicleId?{...v,services:v.services.map(s=>s.id===r.id?r:s)}:v));
+      setVehicles(p=>p.map(v=>v.id===sVehicleId?{...v,services:(v.services||[]).map(s=>s.id===r.id?r:s)}:v));
     }else{
       const r=await api.post(`/api/vehicles/${sVehicleId}/services`,payload).catch(()=>null);
       if(!r?.id){toastAdd('Failed to save','red');return;}
-      setVehicles(p=>p.map(v=>v.id===sVehicleId?{...v,services:[...v.services,r]}:v));
+      setVehicles(p=>p.map(v=>v.id===sVehicleId?{...v,services:[...(v.services||[]),r]}:v));
     }
     setSDrawer(false);setEditService(null);
     toastAdd(editService?'Service updated':'Service added');
@@ -6100,7 +6104,7 @@ function VehiclesScreen({vehicles,setVehicles,toastAdd}){
 
   const delService=async(vid,sid)=>{
     await api.del(`/api/vehicles/${vid}/services/${sid}`).catch(()=>{});
-    setVehicles(p=>p.map(v=>v.id===vid?{...v,services:v.services.filter(s=>s.id!==sid)}:v));
+    setVehicles(p=>p.map(v=>v.id===vid?{...v,services:(v.services||[]).filter(s=>s.id!==sid)}:v));
     setSDrawer(false);setEditService(null);
     toastAdd('Service removed','blue');
   };
@@ -6111,7 +6115,7 @@ function VehiclesScreen({vehicles,setVehicles,toastAdd}){
     const {vehicleId,service}=doneTarget;
     const r=await api.post(`/api/vehicles/${vehicleId}/services/${service.id}/done`,{date:doneDate,miles:parseInt(doneMiles)||0}).catch(()=>null);
     if(!r?.id){toastAdd('Failed to log','red');return;}
-    setVehicles(p=>p.map(v=>v.id===vehicleId?{...v,services:v.services.map(s=>s.id===r.id?r:s)}:v));
+    setVehicles(p=>p.map(v=>v.id===vehicleId?{...v,services:(v.services||[]).map(s=>s.id===r.id?r:s)}:v));
     setDoneTarget(null);
     toastAdd('Service logged');
   };
@@ -6187,10 +6191,10 @@ function VehiclesScreen({vehicles,setVehicles,toastAdd}){
                     </div>
                   </div>
                 )}
-                {v.services.length===0&&(
+                {(v.services||[]).length===0&&(
                   <div style={{padding:'16px 18px',fontSize:14,color:A.label4}}>No services tracked yet.</div>
                 )}
-                {v.services.map((s,i)=>{
+                {(v.services||[]).map((s,i)=>{
                   const st=svcStatus(s);
                   const logs=mileageLogs[v.id];
                   const latestMiles=logs&&logs.length>0?logs[0].miles:null;
@@ -6216,7 +6220,7 @@ function VehiclesScreen({vehicles,setVehicles,toastAdd}){
                     </div>
                   );
                 })}
-                <div style={{padding:'12px 18px',borderTop:v.services.length>0?`1px solid ${A.sep}`:'none'}}>
+                <div style={{padding:'12px 18px',borderTop:(v.services||[]).length>0?`1px solid ${A.sep}`:'none'}}>
                   <button onClick={()=>openNewService(v.id)} style={{background:'none',border:'none',color:A.blue,fontSize:14,fontWeight:600,cursor:'pointer',padding:0}}>+ Add service</button>
                 </div>
               </Card>
@@ -6320,11 +6324,19 @@ function BillsScreen({bills,setBills,payments,setPayments,toastAdd}){
   const togglePaid=async b=>{
     const period=getPeriod(b);
     if(isPaid(b)){
-      await api.del(`/api/bills/${b.id}/pay/${period}`).catch(()=>{});
       setPayments(p=>p.filter(x=>!(x.bill_id===b.id&&x.period===period)));
+      const r=await api.del(`/api/bills/${b.id}/pay/${period}`).catch(()=>null);
+      if(r?.error){
+        setPayments(p=>[...p,{bill_id:b.id,period,paid_at:new Date().toISOString()}]);
+        toastAdd('Failed to update','red');
+      }
     }else{
-      await api.post(`/api/bills/${b.id}/pay`,{period}).catch(()=>{});
       setPayments(p=>[...p,{bill_id:b.id,period,paid_at:new Date().toISOString()}]);
+      const r=await api.post(`/api/bills/${b.id}/pay`,{period}).catch(()=>null);
+      if(r?.error){
+        setPayments(p=>p.filter(x=>!(x.bill_id===b.id&&x.period===period)));
+        toastAdd('Failed to update','red');
+      }
     }
   };
 
@@ -6470,16 +6482,27 @@ function BudgetScreen({budget,setBudget,toastAdd}){
   const saveSpend=async()=>{
     if(!spendForm.amount||isNaN(Number(spendForm.amount))||Number(spendForm.amount)<=0){toastAdd('Enter a valid amount','red');return;}
     if(!spendForm.category_id){toastAdd('Select a category','red');return;}
-    const r=await api.post('/api/budget/entries',{...spendForm,amount:Number(spendForm.amount),category_id:Number(spendForm.category_id)}).catch(()=>null);
+    const catId=Number(spendForm.category_id);
+    const r=await api.post('/api/budget/entries',{...spendForm,amount:Number(spendForm.amount),category_id:catId}).catch(()=>null);
     if(!r?.id){toastAdd('Failed to save','red');return;}
-    setBudget(b=>({...b,entries:[r,...b.entries]}));
+    setBudget(b=>({...b,entries:[r,...(b.entries||[])]}));
     setSpendDrawer(false);setSpendForm({amount:'',category_id:'',note:'',date:localDate()});
     toastAdd('Spending logged');
+    const cat=(categories||[]).find(c=>c.id===catId);
+    if(cat&&Number(cat.monthly_budget)>0){
+      const monthPrefix=new Date().toISOString().slice(0,7);
+      const spent=[...(entries||[]),r]
+        .filter(e=>e.category_id===cat.id&&e.date?.startsWith(monthPrefix))
+        .reduce((s,e)=>s+Number(e.amount),0);
+      if(spent>Number(cat.monthly_budget)){
+        toastAdd(`Over budget on ${cat.name} ($${spent.toFixed(0)} / $${Number(cat.monthly_budget).toFixed(0)})`,'red');
+      }
+    }
   };
 
   const delEntry=async id=>{
     try{await api.del(`/api/budget/entries/${id}`);}catch{toastAdd('Failed','red');return;}
-    setBudget(b=>({...b,entries:b.entries.filter(e=>e.id!==id)}));
+    setBudget(b=>({...b,entries:(b.entries||[]).filter(e=>e.id!==id)}));
   };
 
   const saveCat=async()=>{
@@ -6487,11 +6510,11 @@ function BudgetScreen({budget,setBudget,toastAdd}){
     if(editCat){
       const r=await api.put(`/api/budget/categories/${editCat.id}`,{...catForm,monthly_budget:Number(catForm.monthly_budget)||0}).catch(()=>null);
       if(!r?.id){toastAdd('Failed','red');return;}
-      setBudget(b=>({...b,categories:b.categories.map(c=>c.id===r.id?r:c).sort((a,z)=>a.name.localeCompare(z.name))}));
+      setBudget(b=>({...b,categories:(b.categories||[]).map(c=>c.id===r.id?r:c).sort((a,z)=>a.name.localeCompare(z.name))}));
     }else{
       const r=await api.post('/api/budget/categories',{...catForm,monthly_budget:Number(catForm.monthly_budget)||0}).catch(()=>null);
       if(!r?.id){toastAdd('Failed','red');return;}
-      setBudget(b=>({...b,categories:[...b.categories,r].sort((a,z)=>a.name.localeCompare(z.name))}));
+      setBudget(b=>({...b,categories:[...(b.categories||[]),r].sort((a,z)=>a.name.localeCompare(z.name))}));
     }
     setCatDrawer(false);setEditCat(null);setCatForm({name:'',monthly_budget:'',color:'#3B82F6'});
     toastAdd(editCat?'Category updated':'Category added');
@@ -6499,7 +6522,7 @@ function BudgetScreen({budget,setBudget,toastAdd}){
 
   const delCat=async id=>{
     try{await api.del(`/api/budget/categories/${id}`);}catch{toastAdd('Failed','red');return;}
-    setBudget(b=>({...b,categories:b.categories.filter(c=>c.id!==id),entries:b.entries.filter(e=>e.category_id!==id)}));
+    setBudget(b=>({...b,categories:(b.categories||[]).filter(c=>c.id!==id),entries:(b.entries||[]).filter(e=>e.category_id!==id)}));
     setCatDrawer(false);setEditCat(null);
     toastAdd('Deleted','blue');
   };
@@ -7010,7 +7033,7 @@ function PetsScreen({pets,setPets,toastAdd}){
     if(editPet){
       const r=await api.put(`/api/pets/${editPet.id}`,pForm).catch(()=>null);
       if(!r?.id){toastAdd('Failed to save','red');return;}
-      setPets(p=>p.map(v=>v.id===r.id?{...r,records:v.records}:v));
+      setPets(p=>p.map(v=>v.id===r.id?{...r,records:v.records||[]}:v));
     }else{
       const r=await api.post('/api/pets',pForm).catch(()=>null);
       if(!r?.id){toastAdd('Failed to save','red');return;}
@@ -7036,11 +7059,11 @@ function PetsScreen({pets,setPets,toastAdd}){
     if(editRec){
       const r=await api.put(`/api/pets/${rPetId}/records/${editRec.id}`,payload).catch(()=>null);
       if(!r?.id){toastAdd('Failed to save','red');return;}
-      setPets(p=>p.map(v=>v.id===rPetId?{...v,records:v.records.map(x=>x.id===r.id?r:x)}:v));
+      setPets(p=>p.map(v=>v.id===rPetId?{...v,records:(v.records||[]).map(x=>x.id===r.id?r:x)}:v));
     }else{
       const r=await api.post(`/api/pets/${rPetId}/records`,payload).catch(()=>null);
       if(!r?.id){toastAdd('Failed to save','red');return;}
-      setPets(p=>p.map(v=>v.id===rPetId?{...v,records:[...v.records,r]}:v));
+      setPets(p=>p.map(v=>v.id===rPetId?{...v,records:[...(v.records||[]),r]}:v));
     }
     setRDrawer(false);setEditRec(null);
     toastAdd(editRec?'Record updated':'Record added');
@@ -7048,7 +7071,7 @@ function PetsScreen({pets,setPets,toastAdd}){
 
   const delRec=async(pid,rid)=>{
     try{await api.del(`/api/pets/${pid}/records/${rid}`);}catch{toastAdd('Failed to remove','red');return;}
-    setPets(p=>p.map(v=>v.id===pid?{...v,records:v.records.filter(x=>x.id!==rid)}:v));
+    setPets(p=>p.map(v=>v.id===pid?{...v,records:(v.records||[]).filter(x=>x.id!==rid)}:v));
     setRDrawer(false);setEditRec(null);
     toastAdd('Record removed','blue');
   };
@@ -7056,7 +7079,7 @@ function PetsScreen({pets,setPets,toastAdd}){
   const markDone=async(pid,r)=>{
     const updated=await api.post(`/api/pets/${pid}/records/${r.id}/done`,{}).catch(()=>null);
     if(!updated?.id){toastAdd('Failed','red');return;}
-    setPets(p=>p.map(v=>v.id===pid?{...v,records:v.records.map(x=>x.id===updated.id?updated:x)}:v));
+    setPets(p=>p.map(v=>v.id===pid?{...v,records:(v.records||[]).map(x=>x.id===updated.id?updated:x)}:v));
     toastAdd('Logged');
   };
 
@@ -7332,7 +7355,8 @@ function HomeScreen({appliances,setAppliances,consumables,setConsumables,mainten
 
   const delCons=async id=>{
     try{
-      await api.del(`/api/home/consumables/${id}`);
+      const r=await api.del(`/api/home/consumables/${id}`);
+      if(r?.error){toastAdd('Failed to remove','red');return;}
       setConsumables(p=>p.filter(c=>c.id!==id));
       setCDrawer(false);setEditCons(null);
       toastAdd('Removed','blue');
@@ -8776,13 +8800,13 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
         {/* Mobile top bar */}
         <div className="hdr" style={{paddingTop:'max(12px, env(safe-area-inset-top))',background:A.cardBg,borderBottom:`1px solid ${A.sep}`,boxShadow:scrolled?A.shadowSm:'none',display:'flex',alignItems:'center',justifyContent:'space-between',padding:`max(12px, env(safe-area-inset-top)) 16px 12px`,flexShrink:0}}>
           <span style={{fontSize:17,fontWeight:700,letterSpacing:'-.03em',color:A.label1}}>{nav.find(n=>n.id===screen)?.label}</span>
-          <button onClick={()=>setScreen('settings')} style={{width:30,height:30,borderRadius:'50%',background:A.inputBg,border:'none',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',color:A.label3}}>
+          {!isKidMode && <button onClick={()=>setScreen('settings')} style={{width:30,height:30,borderRadius:'50%',background:A.inputBg,border:'none',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',color:A.label3}}>
             <svg width="15" height="15" viewBox="0 0 17 17" fill="none"><circle cx="8.5" cy="8.5" r="2.5" stroke="currentColor" strokeWidth="1.5"/><path d="M8.5 1v2M8.5 14v2M1 8.5h2M14 8.5h2M3.05 3.05l1.42 1.42M12.53 12.53l1.42 1.42M12.53 3.05l-1.42 1.42M4.47 12.53l-1.42 1.42" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-          </button>
+          </button>}
         </div>
         {/* Content */}
         <div key={screen} className="screen fade-scroll" onScroll={e=>setScrolled(e.currentTarget.scrollTop>12)} style={{flex:1,overflowY:'auto',padding:screen==='calendar'?0:'16px 20px',paddingBottom:`calc(96px + env(safe-area-inset-bottom))`}}>
-          {screens[screen]}
+          {isKidMode && !KID_SCREENS.has(screen) ? screens['dashboard'] : screens[screen]}
         </div>
         {/* Bottom tab bar */}
         <div style={{position:'fixed',bottom:'max(12px, env(safe-area-inset-bottom))',left:'50%',transform:'translateX(-50%)',width:'calc(100% - 32px)',maxWidth:560,background:A.cardBg,border:`1px solid ${A.sep}`,borderRadius:28,boxShadow:A.shadowMd,display:'flex',padding:'0 2px',zIndex:50,height:58,alignItems:'center'}}>
@@ -8889,7 +8913,7 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
           )}
         </div>
         <div key={screen} className="screen fade-scroll" onScroll={e=>setScrolled(e.currentTarget.scrollTop>12)} style={{flex:1,overflowY:'auto',padding:screen==='calendar'?0:'28px 32px'}}>
-          {screens[screen]}
+          {isKidMode && !KID_SCREENS.has(screen) ? screens['dashboard'] : screens[screen]}
         </div>
       </div>
       <ToastStack toasts={toasts}/>

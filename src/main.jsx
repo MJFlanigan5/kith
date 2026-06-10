@@ -7754,7 +7754,11 @@ function ListsScreen({toastAdd}){
     setItems(p=>p.map(x=>x.id===it.id?{...x,checked:next}:x));
     setLists(p=>p.map(l=>l.id===activeList.id?{...l,unchecked_count:Math.max(0,(l.unchecked_count||0)+(next?-1:1))}:l));
     const r=await api.put(`/api/lists/${activeList.id}/items/${it.id}`,{checked:next}).catch(()=>null);
-    if(!r?.id){toastAdd('Failed','red');}
+    if(!r?.id){
+      setItems(p=>p.map(x=>x.id===it.id?{...x,checked:it.checked}:x));
+      setLists(p=>p.map(l=>l.id===activeList.id?{...l,unchecked_count:Math.max(0,(l.unchecked_count||0)+(next?1:-1))}:l));
+      toastAdd('Failed','red');
+    }
   };
   const delItem=async id=>{
     try{

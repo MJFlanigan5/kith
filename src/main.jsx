@@ -284,9 +284,11 @@ function CountdownsScreen({countdowns,setCountdowns,toastAdd}){
   };
   const clearPast=async()=>{
     const past=countdowns.filter(c=>daysUntil(c.date)<0);
-    await Promise.all(past.map(c=>api.del(`/api/countdowns/${c.id}`)));
-    setCountdowns(p=>p.filter(c=>daysUntil(c.date)>=0));
-    toastAdd(`Cleared ${past.length}`,'blue');
+    try{
+      await Promise.all(past.map(c=>api.del(`/api/countdowns/${c.id}`)));
+      setCountdowns(p=>p.filter(c=>daysUntil(c.date)>=0));
+      toastAdd(`Cleared ${past.length}`,'blue');
+    }catch{toastAdd('Failed to clear','red');}
   };
   return(
     <div style={{maxWidth:640}}>
@@ -374,7 +376,7 @@ function FamilyScreen({members,setMembers,toastAdd}){
   const [goalId,setGoalId]=useState(null);
   const [goalForm,setGoalForm]=useState({monthly_goal:'',reward:''});
   const [editId,setEditId]=useState(null);
-  const [editForm,setEditForm]=useState({name:'',color:'#007AFF'});
+  const [editForm,setEditForm]=useState({name:'',color:'#007AFF',birthday:''});
   const COLORS=['#007AFF','#34C759','#FF3B30','#FF9500','#5856D6','#32ADE6','#AF52DE','#FF2D55','#FF6B35','#30D158'];
   const save=async()=>{
     if(!form.name.trim()) return;
@@ -386,7 +388,7 @@ function FamilyScreen({members,setMembers,toastAdd}){
   };
   const saveEdit=async()=>{
     if(!editForm.name.trim()) return;
-    const r=await api.put(`/api/members/${editId}`,editForm);
+    const r=await api.put(`/api/members/${editId}`,{name:editForm.name,color:editForm.color,birthday:editForm.birthday||''});
     if(!r?.id){toastAdd('Failed to update','red');return;}
     setMembers(p=>p.map(m=>m.id===editId?r:m));
     setEditId(null);
@@ -452,8 +454,9 @@ function FamilyScreen({members,setMembers,toastAdd}){
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:15,fontWeight:500,color:A.label1}}>{m.name}</div>
                   {m.monthly_goal>0&&<div style={{fontSize:12,color:A.label4,marginTop:2}}>{m.monthly_goal} pt goal{m.reward?` · ${m.reward}`:''}</div>}
+                  {m.birthday&&<div style={{fontSize:12,color:A.label5,marginTop:1}}>{new Date(m.birthday+'T12:00:00').toLocaleDateString(undefined,{month:'long',day:'numeric'})}</div>}
                 </div>
-                <button onClick={()=>{setEditId(editId===m.id?null:m.id);setEditForm({name:m.name,color:m.color});}} style={{background:'none',border:'none',color:A.blue,fontSize:13,cursor:'pointer',fontWeight:500}}>
+                <button onClick={()=>{setEditId(editId===m.id?null:m.id);setEditForm({name:m.name,color:m.color,birthday:m.birthday||''});}} style={{background:'none',border:'none',color:A.blue,fontSize:13,cursor:'pointer',fontWeight:500}}>
                   {editId===m.id?'Cancel':'Edit'}
                 </button>
                 <button onClick={()=>{setGoalId(goalId===m.id?null:m.id);setGoalForm({monthly_goal:m.monthly_goal||'',reward:m.reward||''});}} style={{background:'none',border:'none',color:A.blue,fontSize:13,cursor:'pointer',fontWeight:500}}>
@@ -469,9 +472,13 @@ function FamilyScreen({members,setMembers,toastAdd}){
                       <button key={c} onClick={()=>setEditForm(p=>({...p,color:c}))} style={{width:26,height:26,borderRadius:'50%',border:`3px solid ${editForm.color===c?A.label1:'transparent'}`,background:c,cursor:'pointer'}}/>
                     ))}
                   </div>
-                  <div style={{display:'flex',gap:8}}>
+                  <div style={{display:'flex',gap:8,marginBottom:8}}>
                     <Inp value={editForm.name} onChange={e=>setEditForm(p=>({...p,name:e.target.value}))} placeholder="Name"/>
                     <Btn sm onClick={saveEdit}>Save</Btn>
+                  </div>
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    <div style={{fontSize:12,color:A.label4,flexShrink:0}}>Birthday</div>
+                    <Inp type="date" value={editForm.birthday||''} onChange={e=>setEditForm(p=>({...p,birthday:e.target.value}))} style={{flex:1}}/>
                   </div>
                 </div>
               )}
@@ -509,7 +516,7 @@ function PresenceBar({duration,color}){
 }
 
 /* ── Display Mode ────────────────────────────────────────────────────── */
-function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,countdowns,photos=[],weather,clockFormat='12h',nightModeStart='23:00',nightModeEnd='06:00',goals=[],notes=[],polls=[],rotationMs=10000,wifiQrData=null,quickActions=[],members=[],packages=[],setPackages,messages=[],setMessages}){
+function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,countdowns,photos=[],weather,clockFormat='12h',nightModeStart='23:00',nightModeEnd='06:00',goals=[],notes=[],polls=[],rotationMs=10000,wifiQrData=null,quickActions=[],members=[],packages=[],setPackages,messages=[],setMessages,appliances=[],consumables=[],maintenanceItems=[],pets=[]}){
   const isMobile=useIsMobile();
   const now=useClock();
   const [liveGames,setLiveGames]=useState([]);
@@ -742,12 +749,16 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
   });
   const displayEvents=(events||[]).filter(e=>e.source!=='bill'&&e.source!=='vehicle');
   const hasUpcomingEvents=agendaDays.some(({date})=>displayEvents.some(e=>e.date===date));
-  const dueSoonVehicles=(events||[]).filter(e=>e.source==='vehicle'&&daysUntil(e.date)>=0&&daysUntil(e.date)<=14).sort((a,b)=>a.date.localeCompare(b.date));
+  const dueSoonVehicles=(events||[]).filter(e=>e.source==='vehicle'&&daysUntil(e.date)<=14).sort((a,b)=>a.date.localeCompare(b.date));
   const dueC=chores.filter(c=>(c.status==='due'||c.status==='overdue')&&!c.done);
   const upCD=(countdowns||[]).filter(c=>daysUntil(c.date)>=0);
   const uncheckedGrocery=(grocery||[]).filter(i=>!i.checked);
   const progressMembers=memberProgress.filter(m=>m.monthly_goal>0);
   const pinnedNotes=useMemo(()=>(notes||[]).filter(n=>n.pinned),[notes]);
+  const expiringAppliances=useMemo(()=>(appliances||[]).filter(a=>a.warranty_date&&daysUntil(a.warranty_date)<=30).sort((a,b)=>a.warranty_date.localeCompare(b.warranty_date)),[appliances]);
+  const urgentConsumables=useMemo(()=>(consumables||[]).filter(c=>c.status==='overdue'||c.status==='due_soon').sort((a,b)=>(a.days_remaining??Infinity)-(b.days_remaining??Infinity)),[consumables]);
+  const urgentMaintenance=useMemo(()=>(maintenanceItems||[]).filter(m=>m.status==='overdue'||m.status==='due_this_month'),[maintenanceItems]);
+  const urgentPetRecords=useMemo(()=>(pets||[]).flatMap(p=>(p.records||[]).filter(r=>r.status==='overdue'||(r.status==='due_soon'&&r.days_remaining<=14)).map(r=>({...r,pet_name:p.name,pet_color:p.color||'#FF9500'}))).sort((a,b)=>(a.days_remaining??Infinity)-(b.days_remaining??Infinity)),[pets]);
   const centerPanels=[
     'dinner',
     ...(dueC.length>0?['chores']:[]),
@@ -784,6 +795,10 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
     ...(packages.length>0?['w_packages']:[]),
     ...(messages.some(m=>m.expires_at&&new Date(m.expires_at.replace(' ','T')+'Z').getTime()>Date.now())?['w_messages']:[]),
     ...(nowPlaying.playing&&nowPlaying.title?['w_music']:[]),
+    ...(expiringAppliances.length>0?['w_home_warranty']:[]),
+    ...(urgentConsumables.length>0?['w_home_consumables']:[]),
+    ...(urgentMaintenance.length>0?['w_home_maintenance']:[]),
+    ...(urgentPetRecords.length>0?['w_pets']:[]),
   ];
   const activePanelId=centerPanels[centerIdx%Math.max(1,centerPanels.length)];
   useEffect(()=>{
@@ -1024,7 +1039,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
                     {visiblePanelId==='due_soon'&&(
                       <>
                         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
-                          <WLabel>Due Soon</WLabel>
+                          <WLabel>Vehicle Services</WLabel>
                           <span style={{fontSize:11,fontWeight:700,color:A.amber}}>{dueSoonVehicles.length} service{dueSoonVehicles.length===1?'':'s'}</span>
                         </div>
                         <div style={{flex:1,overflowY:'auto',WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
@@ -1038,7 +1053,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
                                   <div style={{fontSize:14,color:D.t1,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{svcName}</div>
                                   {vehName&&<div style={{fontSize:11,color:D.t4,marginTop:1}}>{vehName}</div>}
                                 </div>
-                                <span style={{fontSize:12,fontWeight:700,color:days===0?A.amber:D.t3,flexShrink:0}}>{days===0?'Today':`${days}d`}</span>
+                                <span style={{fontSize:12,fontWeight:700,color:days<0?A.red:days===0?A.amber:D.t3,flexShrink:0}}>{days<0?`${Math.abs(days)}d overdue`:days===0?'Today':`${days}d`}</span>
                               </div>
                             );
                           })}
@@ -1810,6 +1825,74 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
                         </div>
                       </>
                     )}
+                    {visiblePanelId==='w_home_warranty'&&expiringAppliances.length>0&&(
+                      <>
+                        <WLabel>Warranties expiring</WLabel>
+                        <div style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:10,marginTop:4}}>
+                          {expiringAppliances.map(a=>{
+                            const d=daysUntil(a.warranty_date);
+                            return(
+                              <div key={a.id} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',background:'rgba(255,255,255,0.05)',borderRadius:10}}>
+                                <div style={{flex:1,minWidth:0}}>
+                                  <div style={{fontSize:isTV?18:14,fontWeight:600,color:D.t1}}>{a.name}</div>
+                                  {a.location&&<div style={{fontSize:11,color:D.t4,marginTop:1}}>{a.location}</div>}
+                                </div>
+                                <span style={{fontSize:12,fontWeight:700,color:d<0?A.red:A.amber,flexShrink:0,background:d<0?A.redFill:A.amberFill,padding:'3px 8px',borderRadius:A.rPill}}>{d<0?'Expired':`${d}d`}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
+                    {visiblePanelId==='w_home_consumables'&&urgentConsumables.length>0&&(
+                      <>
+                        <WLabel>Needs replacement</WLabel>
+                        <div style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:10,marginTop:4}}>
+                          {urgentConsumables.map(c=>(
+                            <div key={c.id} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',background:'rgba(255,255,255,0.05)',borderRadius:10}}>
+                              <div style={{width:8,height:8,borderRadius:'50%',background:c.status==='overdue'?A.red:A.amber,flexShrink:0}}/>
+                              <div style={{flex:1,minWidth:0}}>
+                                <div style={{fontSize:isTV?18:14,fontWeight:600,color:D.t1}}>{c.name}</div>
+                                {c.location&&<div style={{fontSize:11,color:D.t4,marginTop:1}}>{c.location}</div>}
+                              </div>
+                              <span style={{fontSize:12,color:c.status==='overdue'?A.red:A.amber,flexShrink:0}}>{c.days_remaining<0?`${Math.abs(c.days_remaining)}d overdue`:'Due soon'}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                    {visiblePanelId==='w_home_maintenance'&&urgentMaintenance.length>0&&(
+                      <>
+                        <WLabel>Seasonal maintenance</WLabel>
+                        <div style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:10,marginTop:4}}>
+                          {urgentMaintenance.map(m=>(
+                            <div key={m.id} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',background:'rgba(255,255,255,0.05)',borderRadius:10}}>
+                              <div style={{flex:1,minWidth:0}}>
+                                <div style={{fontSize:isTV?18:14,fontWeight:600,color:D.t1}}>{m.name}</div>
+                              </div>
+                              <span style={{fontSize:12,fontWeight:700,color:m.status==='overdue'?A.red:A.amber,background:m.status==='overdue'?A.redFill:A.amberFill,padding:'2px 8px',borderRadius:A.rPill,flexShrink:0}}>{m.status==='overdue'?'Overdue':'This month'}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                    {visiblePanelId==='w_pets'&&urgentPetRecords.length>0&&(
+                      <>
+                        <WLabel>Pet care due</WLabel>
+                        <div style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:10,marginTop:4}}>
+                          {urgentPetRecords.map(r=>(
+                            <div key={r.id} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',background:'rgba(255,255,255,0.05)',borderRadius:10}}>
+                              <div style={{width:8,height:8,borderRadius:'50%',background:r.pet_color,flexShrink:0}}/>
+                              <div style={{flex:1,minWidth:0}}>
+                                <div style={{fontSize:isTV?18:14,fontWeight:600,color:D.t1}}>{r.name}</div>
+                                <div style={{fontSize:11,color:D.t4,marginTop:1}}>{r.pet_name}</div>
+                              </div>
+                              <span style={{fontSize:12,color:r.status==='overdue'?A.red:A.amber,flexShrink:0}}>{r.days_remaining<0?`${Math.abs(r.days_remaining)}d overdue`:r.days_remaining===0?'Today':`${r.days_remaining}d`}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
                     {visiblePanelId==='dinner'&&(()=>{const td=todayDinner()||'—';return(
                       <>
                         <WLabel>Dinner tonight</WLabel>
@@ -1956,7 +2039,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
               setQaState(s=>({...s,[action.id]:'loading'}));
               try{
                 const r=await api.post('/api/quick-actions/trigger',{id:action.id});
-                setQaState(s=>({...s,[action.id]:r.ok===false?'error':'done'}));
+                setQaState(s=>({...s,[action.id]:(r.ok===false||r.error)?'error':'done'}));
               }catch{setQaState(s=>({...s,[action.id]:'error'}));}
               setTimeout(()=>setQaState(s=>({...s,[action.id]:'idle'})),2000);
             }} style={{flexShrink:0,display:'flex',alignItems:'center',gap:6,background:st==='done'?'rgba(52,199,89,0.18)':st==='error'?'rgba(255,59,48,0.18)':'rgba(255,255,255,0.08)',color:st==='done'?'#30D158':st==='error'?'#FF453A':D.t2,border:'1px solid rgba(255,255,255,0.12)',borderRadius:A.rPill,padding:'9px 16px',fontSize:13,fontWeight:500,cursor:st==='loading'?'wait':'pointer',transition:'background .2s',opacity:showControls?1:0,pointerEvents:showControls?'auto':'none'}}>
@@ -1975,7 +2058,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
 }
 
 /* ── Dashboard ───────────────────────────────────────────────────────── */
-function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weather,clockFormat='12h',quickActions=[]}){
+function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weather,clockFormat='12h',quickActions=[],bills=[],payments=[]}){
   const isMobile=useIsMobile();
   const now=useClock();
   const [news,setNews]=useState([]);
@@ -2019,6 +2102,20 @@ function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weath
 
   const getMeal=dayName=>((meals||[]).find(m=>m.day===dayName)?.meal||'');
   const upcomingCDs=(countdowns||[]).filter(c=>daysUntil(c.date)>=0).sort((a,b)=>daysUntil(a.date)-daysUntil(b.date)).slice(0,4);
+  const currentPeriod=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const currentYear=String(now.getFullYear());
+  const paidSet=useMemo(()=>new Set((payments||[]).map(p=>`${p.bill_id}_${p.period}`)),[payments]);
+  const isPaidBill=b=>paidSet.has(`${b.id}_${(b.recurrence==='monthly'?currentPeriod:b.recurrence==='annual'?currentYear:b.due_date)}`);
+  const billsDueSoon=useMemo(()=>(bills||[]).filter(b=>{
+    if(!b.active||isPaidBill(b)) return false;
+    if(b.recurrence==='monthly'){const d=b.due_day-now.getDate();return d>=0&&d<=7;}
+    if(b.due_date){const d=daysUntil(b.due_date);return d>=0&&d<=7;}
+    return false;
+  }).sort((a,b)=>{
+    const da=a.recurrence==='monthly'?a.due_day-now.getDate():daysUntil(a.due_date);
+    const db=b.recurrence==='monthly'?b.due_day-now.getDate():daysUntil(b.due_date);
+    return da-db;
+  }),[bills,paidSet,now]);
 
   useEffect(()=>{
     api.get('/api/chores/leaderboard').then(d=>setLeaderboard(Array.isArray(d)?d:[])).catch(()=>{});
@@ -2121,7 +2218,7 @@ function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weath
                   setQaState(s=>({...s,[action.id]:'loading'}));
                   try{
                     const r=await api.post('/api/quick-actions/trigger',{id:action.id});
-                    setQaState(s=>({...s,[action.id]:r.ok===false?'error':'done'}));
+                    setQaState(s=>({...s,[action.id]:(r.ok===false||r.error)?'error':'done'}));
                   }catch{
                     setQaState(s=>({...s,[action.id]:'error'}));
                   }
@@ -2228,6 +2325,24 @@ function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weath
           {dueChores.length===0&&<div style={{padding:'20px 16px',fontSize:14,color:A.label4}}>All caught up!</div>}
         </Card>
       </div>
+
+      {/* Bills due this week */}
+      {billsDueSoon.length>0&&(
+        <Card style={{marginBottom:12,padding:0,overflow:'hidden'}}>
+          <div style={{padding:'10px 16px',fontSize:11,fontWeight:700,color:A.label3,textTransform:'uppercase',letterSpacing:'.07em',borderBottom:`1px solid ${A.sep}`}}>Bills Due This Week</div>
+          {billsDueSoon.map((b,i)=>{
+            const d=b.recurrence==='monthly'?b.due_day-now.getDate():daysUntil(b.due_date);
+            return(
+              <div key={b.id} style={{display:'flex',alignItems:'center',gap:12,padding:'13px 16px',borderTop:i>0?`1px solid ${A.sep}`:'none'}}>
+                <div style={{width:10,height:10,borderRadius:'50%',background:b.color||'#3B82F6',flexShrink:0}}/>
+                <span style={{flex:1,fontSize:14,fontWeight:600,color:A.label1}}>{b.name}</span>
+                {Number(b.amount)>0&&<span style={{fontSize:13,color:A.label3,fontVariantNumeric:'tabular-nums'}}>${Number(b.amount).toFixed(2)}</span>}
+                <span style={{fontSize:12,color:d===0?A.red:A.amber,fontWeight:600,flexShrink:0}}>{d===0?'Today':`${d}d`}</span>
+              </div>
+            );
+          })}
+        </Card>
+      )}
 
       {/* Meals this week */}
       {meals&&meals.length>0&&(
@@ -2987,6 +3102,11 @@ function ChoresScreen({chores,setChores,goals=[],members=[],toastAdd}){
   const [editChore,setEditChore]=useState(null);
   const [form,setForm]=useState({name:'',recur:'Weekly',day:'Monday',start:'',points:1,outdoor:false,goal_id:'',goal_amount:1,member_id:''});
   const [choreConfetti,setChoreConfetti]=useState(false);
+  const [tab,setTab]=useState('chores');
+  const [choreHistory,setChoreHistory]=useState([]);
+  useEffect(()=>{
+    if(tab==='history') api.get('/api/chores/history?limit=50').then(d=>Array.isArray(d)&&setChoreHistory(d)).catch(()=>{});
+  },[tab]);
 
   const openNew=()=>{
     setEditChore(null);
@@ -3032,9 +3152,11 @@ function ChoresScreen({chores,setChores,goals=[],members=[],toastAdd}){
   };
 
   const deleteChore=async id=>{
-    await api.del(`/api/chores/${id}`);
-    setChores(p=>p.filter(c=>c.id!==id));
-    toastAdd('Deleted','blue');
+    try{
+      await api.del(`/api/chores/${id}`);
+      setChores(p=>p.filter(c=>c.id!==id));
+      toastAdd('Deleted','blue');
+    }catch{toastAdd('Failed to delete','red');}
   };
 
   const toggleDone=async c=>{
@@ -3056,6 +3178,37 @@ function ChoresScreen({chores,setChores,goals=[],members=[],toastAdd}){
     return                  {color:A.green,bg:A.greenFill,label:'Upcoming'};
   };
 
+  const histDateLabel=ts=>{
+    const d=new Date(ts);
+    const today=new Date(); today.setHours(0,0,0,0);
+    const yesterday=new Date(today); yesterday.setDate(yesterday.getDate()-1);
+    const dt=new Date(d); dt.setHours(0,0,0,0);
+    if(dt.getTime()===today.getTime()) return 'Today';
+    if(dt.getTime()===yesterday.getTime()) return 'Yesterday';
+    return d.toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'});
+  };
+
+  const histWeekGroups=()=>{
+    const groups=[];
+    const seenWeeks=new Map();
+    for(const row of choreHistory){
+      const d=new Date(row.completed_at);
+      const weekStart=new Date(d);
+      weekStart.setHours(0,0,0,0);
+      weekStart.setDate(weekStart.getDate()-weekStart.getDay());
+      const wk=weekStart.toISOString().slice(0,10);
+      if(!seenWeeks.has(wk)){seenWeeks.set(wk,[]);groups.push({week:weekStart,key:wk,items:seenWeeks.get(wk)});}
+      seenWeeks.get(wk).push(row);
+    }
+    return groups;
+  };
+
+  const thisWeekCount=()=>{
+    const now=new Date(); now.setHours(0,0,0,0);
+    const weekStart=new Date(now); weekStart.setDate(now.getDate()-now.getDay());
+    return choreHistory.filter(r=>new Date(r.completed_at)>=weekStart).length;
+  };
+
   return(
     <div>
       <Confetti active={choreConfetti} count={14}/>
@@ -3066,9 +3219,51 @@ function ChoresScreen({chores,setChores,goals=[],members=[],toastAdd}){
             {chores.filter(c=>c.status==='due'||c.status==='overdue').length} due today · {chores.length} total
           </p>
         </div>
-        <Btn onClick={openNew}>+ Add Chore</Btn>
+        {tab==='chores'&&<Btn onClick={openNew}>+ Add Chore</Btn>}
       </div>
-      <Card>
+      <div style={{display:'flex',gap:4,background:A.inputBg,borderRadius:A.rSm,padding:3,marginBottom:20,width:'fit-content'}}>
+        {[{id:'chores',label:'Chores'},{id:'history',label:'History'}].map(t=>(
+          <button key={t.id} onClick={()=>setTab(t.id)} style={{padding:'7px 18px',borderRadius:A.rXs,border:'none',cursor:'pointer',fontSize:14,fontWeight:tab===t.id?700:500,background:tab===t.id?A.cardBg:'transparent',color:tab===t.id?A.label1:A.label3,boxShadow:tab===t.id?A.shadowSm:'none',transition:'all .15s'}}>{t.label}</button>
+        ))}
+      </div>
+
+      {tab==='history'&&(
+        <div>
+          {choreHistory.length===0?(
+            <Card style={{padding:'40px 24px',textAlign:'center'}}>
+              <div style={{fontSize:15,color:A.label3,fontWeight:500}}>No completions yet — complete a chore to see history here.</div>
+            </Card>
+          ):(
+            <div>
+              <div style={{fontSize:14,color:A.label3,fontWeight:500,marginBottom:16}}>{thisWeekCount()} completion{thisWeekCount()!==1?'s':''} this week</div>
+              {histWeekGroups().map(({week,key,items})=>(
+                <div key={key} style={{marginBottom:24}}>
+                  <div style={{fontSize:12,fontWeight:700,color:A.label4,textTransform:'uppercase',letterSpacing:'.07em',marginBottom:8}}>
+                    Week of {week.toLocaleDateString(undefined,{month:'short',day:'numeric'})}
+                  </div>
+                  <Card style={{overflow:'hidden',padding:0}}>
+                    {items.map((row,i)=>(
+                      <div key={row.id} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 16px',borderTop:i>0?`1px solid ${A.sep}`:'none'}}>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:15,fontWeight:600,color:A.label1}}>{row.chore_name||'Unknown chore'}</div>
+                          <div style={{fontSize:12,color:A.label4,marginTop:1}}>{histDateLabel(row.completed_at)}{row.member_name?` · ${row.member_name}`:''}</div>
+                        </div>
+                        <div style={{display:'flex',gap:3,alignItems:'center',flexShrink:0}}>
+                          {Array.from({length:row.points||1},(_,pi)=>(
+                            <div key={pi} style={{width:8,height:8,borderRadius:'50%',background:A.amber}}/>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </Card>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab==='chores'&&<Card>
         {chores.length===0 ? (
           <div style={{padding:'52px 24px',textAlign:'center'}}>
             <div style={{fontSize:13,fontWeight:700,color:A.label5,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:10}}>No chores yet</div>
@@ -3131,7 +3326,7 @@ function ChoresScreen({chores,setChores,goals=[],members=[],toastAdd}){
             })}
           </>
         )}
-      </Card>
+      </Card>}
       <Drawer open={drawerOpen} onClose={()=>{setDrawerOpen(false);setEditChore(null);}} title={editChore?'Edit Chore':'Add Chore'}>
         <FormGroup label="Details">
           <div style={{padding:'12px 16px'}}><Inp value={form.name} onChange={e=>setForm(p=>({...p,name:e.target.value}))} placeholder="Chore name"/></div>
@@ -3207,16 +3402,21 @@ function ChoresScreen({chores,setChores,goals=[],members=[],toastAdd}){
 }
 
 /* ── Grocery ─────────────────────────────────────────────────────────── */
-function GroceryScreen({grocery,setGrocery,meals,setMeals,toastAdd}){
+function GroceryScreen({grocery,setGrocery,meals,setMeals,recipes=[],toastAdd}){
   const isMobile=useIsMobile();
+  const [storeMode,setStoreMode]=useState(false);
   const [input,setInput]=useState('');
   const [catInput,setCatInput]=useState('');
+  const [qtyInput,setQtyInput]=useState('');
   const [editingField,setEditingField]=useState(null); // {day, field:'breakfast'|'lunch'|'dinner'}
   const [mealInput,setMealInput]=useState('');
   const [removing,setRemoving]=useState(new Set());
   const [history,setHistory]=useState([]);
   const inputRef=useRef();
   const removeTimers=useRef({});
+  const [recipePickerTarget,setRecipePickerTarget]=useState(null);
+  const [recipeSearch,setRecipeSearch]=useState('');
+  const [fromMealsLoading,setFromMealsLoading]=useState(false);
 
   useEffect(()=>()=>{Object.values(removeTimers.current).forEach(clearTimeout)},[]);
   useEffect(()=>{api.get('/api/grocery/history').then(r=>Array.isArray(r)&&setHistory(r)).catch(()=>{})},[]);
@@ -3233,10 +3433,11 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,toastAdd}){
     if(!input.trim()) return;
     const body={name:input.trim()};
     if(catInput.trim()) body.category=catInput.trim();
+    if(qtyInput.trim()) body.qty=qtyInput.trim();
     try{
       const newItem=await api.post('/api/grocery',body);
       setGrocery(p=>[...p,newItem]);
-      setInput('');
+      setInput('');setQtyInput('');
       inputRef.current?.focus();
     }catch{toastAdd('Failed to add item','red');}
   };
@@ -3291,14 +3492,18 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,toastAdd}){
             <h1 style={{fontSize:isMobile?34:44,fontWeight:800,letterSpacing:'-.05em',lineHeight:1.05}}>Grocery</h1>
             <p style={{fontSize:15,marginTop:6,color:A.label4,fontWeight:400}}>{unchecked.length} items remaining</p>
           </div>
-          {checked.length>0&&<span style={{fontSize:13,color:A.label4}}>{checked.length} in cart</span>}
+          <div style={{display:'flex',alignItems:'center',gap:10}}>
+            {checked.length>0&&<span style={{fontSize:13,color:A.label4}}>{checked.length} in cart</span>}
+            {(unchecked.length>0||checked.length>0)&&<button onClick={()=>setStoreMode(true)} style={{fontSize:13,fontWeight:600,padding:'7px 14px',borderRadius:A.rSm,border:`1px solid ${A.sep}`,background:A.cardBg,color:A.label2,cursor:'pointer'}}>Store</button>}
+          </div>
         </div>
         <div style={{display:'flex',gap:10,marginBottom:8}}>
           <Inp value={input} onChange={e=>setInput(e.target.value)} placeholder="Add item..." onKeyDown={e=>e.key==='Enter'&&addItem()} inputRef={inputRef}/>
           <Btn onClick={addItem} style={{flexShrink:0}}>Add</Btn>
         </div>
-        <div style={{marginBottom:8}}>
-          <Inp value={catInput} onChange={e=>setCatInput(e.target.value)} placeholder="Category (optional, e.g. Produce)" onKeyDown={e=>e.key==='Enter'&&addItem()}/>
+        <div style={{display:'flex',gap:8,marginBottom:8}}>
+          <Inp value={catInput} onChange={e=>setCatInput(e.target.value)} placeholder="Category (e.g. Produce)" onKeyDown={e=>e.key==='Enter'&&addItem()} style={{flex:1}}/>
+          <Inp value={qtyInput} onChange={e=>setQtyInput(e.target.value)} placeholder="Qty (e.g. 2 lbs)" onKeyDown={e=>e.key==='Enter'&&addItem()} style={{width:130,flexShrink:0}}/>
         </div>
         {history.filter(h=>!unchecked.some(i=>i.name.toLowerCase()===h.name.toLowerCase())).slice(0,6).length>0&&(
           <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:14}}>
@@ -3339,7 +3544,10 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,toastAdd}){
                         onMouseLeave={e=>e.currentTarget.style.background='transparent'}
                       >
                         <div style={{width:22,height:22,borderRadius:'50%',border:`2px solid ${A.sepOpaque}`,flexShrink:0}}/>
-                        <span style={{fontSize:15,color:A.label1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{item.name}</span>
+                        <div style={{flex:1,minWidth:0}}>
+                          {item.qty&&<div style={{fontSize:11,fontWeight:600,color:A.label4,letterSpacing:'.02em'}}>{item.qty}</div>}
+                          <span style={{fontSize:15,color:A.label1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',display:'block'}}>{item.name}</span>
+                        </div>
                       </div>
                     );
                   })}
@@ -3367,12 +3575,31 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,toastAdd}){
       </div>
 
       <div>
-        <h2 style={{fontSize:18,fontWeight:700,letterSpacing:'-.01em',marginBottom:4}}>Meal Plan</h2>
+        <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',marginBottom:4}}>
+          <h2 style={{fontSize:18,fontWeight:700,letterSpacing:'-.01em'}}>Meal Plan</h2>
+          <button onClick={async()=>{
+            setFromMealsLoading(true);
+            try{
+              const r=await api.post('/api/grocery/from-meals',{days:['Mon','Tue','Wed','Thu','Fri','Sat','Sun']});
+              if(r?.error){toastAdd(r.error||'Failed','red');}
+              else if(r.added===0&&!r.skipped){toastAdd('No linked recipes — link recipes to meal slots first','blue');}
+              else if(r.added===0){toastAdd('All ingredients already on list','blue');}
+              else{
+                const fresh=await api.get('/api/grocery');
+                if(Array.isArray(fresh)) setGrocery(fresh);
+                toastAdd(`Added ${r.added} item${r.added!==1?'s':''} to grocery list`);
+              }
+            }catch{toastAdd('Failed','red');}
+            setFromMealsLoading(false);
+          }} style={{fontSize:12,color:A.blue,background:'none',border:'none',cursor:'pointer',fontWeight:500,flexShrink:0}}>{fromMealsLoading?'Adding…':'Add to grocery'}</button>
+        </div>
         <p style={{color:A.label4,fontSize:14,marginBottom:14}}>This week</p>
         <Card>
           {(meals||[]).map((m,i)=>{
             const dayName=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date().getDay()];
             const isToday=m.day===dayName;
+            const recipeIdFor=field=>field==='dinner'?m.dinner_recipe_id:field==='breakfast'?m.breakfast_recipe_id:m.lunch_recipe_id;
+            const recipeIdKey=field=>field==='dinner'?'dinner_recipe_id':field==='breakfast'?'breakfast_recipe_id':'lunch_recipe_id';
             return(
               <div key={m.day} style={{padding:'12px 16px',borderTop:i>0?`1px solid ${A.sep}`:'none',background:isToday?A.blueFill:'transparent'}}>
                 <div style={{display:'flex',alignItems:'flex-start',gap:10}}>
@@ -3380,6 +3607,8 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,toastAdd}){
                   <div style={{flex:1,display:'flex',flexDirection:'column',gap:5}}>
                     {[['breakfast','B',m.breakfast],['lunch','L',m.lunch],['dinner','D',m.meal]].map(([field,lbl,val])=>{
                       const isEditing=editingField?.day===m.day&&editingField?.field===field;
+                      const linkedRecipeId=recipeIdFor(field);
+                      const linkedRecipe=linkedRecipeId?(recipes||[]).find(r=>r.id===linkedRecipeId):null;
                       return(
                         <div key={field} style={{display:'flex',alignItems:'center',gap:6}}>
                           <span style={{fontSize:10,fontWeight:700,color:A.label5,width:12,flexShrink:0}}>{lbl}</span>
@@ -3391,7 +3620,15 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,toastAdd}){
                             </>
                           ):(
                             <>
-                              <span style={{flex:1,fontSize:14,color:val?A.label1:A.label5,fontStyle:val?'normal':'italic'}}>{val||'—'}</span>
+                              <span style={{flex:1,fontSize:14,color:val?A.label1:A.label5,fontStyle:val?'normal':'italic',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{val||'—'}</span>
+                              {linkedRecipe?(
+                                <span style={{display:'flex',alignItems:'center',gap:3,fontSize:11,color:A.green,fontWeight:600,flexShrink:0}}>
+                                  {linkedRecipe.name.length>12?linkedRecipe.name.slice(0,12)+'…':linkedRecipe.name}
+                                  <button onClick={async()=>{const body={[recipeIdKey(field)]:null};await api.put(`/api/meals/${m.day}`,body).catch(()=>{});setMeals(p=>p.map(mx=>mx.day===m.day?{...mx,[recipeIdKey(field)]:null}:mx));}} style={{background:'none',border:'none',color:A.label4,cursor:'pointer',fontSize:11,padding:'0 2px',lineHeight:1}}>✕</button>
+                                </span>
+                              ):(
+                                <button onClick={()=>{setRecipePickerTarget({day:m.day,field});setRecipeSearch('');}} style={{background:'none',border:'none',color:A.label4,fontSize:11,cursor:'pointer',fontWeight:500,flexShrink:0}}>Recipe</button>
+                              )}
                               <button onClick={()=>{setEditingField({day:m.day,field});setMealInput(val||'');}} style={{background:'none',border:'none',color:A.blue,fontSize:12,cursor:'pointer',fontWeight:500,flexShrink:0}}>{val?'Edit':'Add'}</button>
                             </>
                           )}
@@ -3405,6 +3642,76 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,toastAdd}){
           })}
         </Card>
       </div>
+      {storeMode&&(()=>{
+        const storeUnchecked=(grocery||[]).filter(i=>!i.checked);
+        const storeChecked=(grocery||[]).filter(i=>i.checked);
+        const storeCats=[...new Set(storeUnchecked.map(i=>i.category||'Other'))];
+        return(
+          <div style={{position:'fixed',inset:0,zIndex:500,background:A.systemBg,overflowY:'auto',paddingBottom:80}}>
+            <div style={{padding:'24px 20px 0'}}>
+              <h1 style={{fontSize:32,fontWeight:800,letterSpacing:'-.04em',marginBottom:20}}>Store Mode</h1>
+              {storeCats.map(cat=>{
+                const catItems=storeUnchecked.filter(i=>(i.category||'Other')===cat);
+                return(
+                  <div key={cat} style={{marginBottom:24}}>
+                    <div style={{fontSize:14,fontWeight:700,color:A.label4,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:8}}>{cat}</div>
+                    {catItems.map(item=>(
+                      <div key={item.id} onClick={()=>toggle(item.id)}
+                        style={{display:'flex',alignItems:'center',gap:16,minHeight:64,padding:'12px 16px',borderRadius:A.rSm,background:A.cardBg,marginBottom:6,cursor:'pointer',boxShadow:A.shadowSm}}>
+                        <div style={{width:28,height:28,borderRadius:'50%',border:`2px solid ${A.sepOpaque}`,flexShrink:0}}/>
+                        <span style={{fontSize:22,fontWeight:600,color:A.label1}}>{item.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+              {storeChecked.length>0&&(
+                <div style={{marginBottom:24}}>
+                  <div style={{fontSize:14,fontWeight:700,color:A.label5,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:8}}>In Cart ({storeChecked.length})</div>
+                  {storeChecked.map(item=>(
+                    <div key={item.id} onClick={()=>toggle(item.id)}
+                      style={{display:'flex',alignItems:'center',gap:16,minHeight:64,padding:'12px 16px',borderRadius:A.rSm,background:A.cardBg,marginBottom:6,cursor:'pointer',opacity:0.45,boxShadow:A.shadowSm}}>
+                      <div style={{width:28,height:28,borderRadius:'50%',background:A.green,border:`2px solid ${A.green}`,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                        <svg width="14" height="10" viewBox="0 0 12 9" fill="none"><path d="M1 4.5L4.5 8L11 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      </div>
+                      <span style={{fontSize:22,fontWeight:600,color:A.label4,textDecoration:'line-through'}}>{item.name}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <button onClick={()=>setStoreMode(false)}
+              style={{position:'fixed',bottom:24,right:24,zIndex:501,background:A.blue,color:'#fff',border:'none',borderRadius:A.rPill,padding:'14px 28px',fontSize:15,fontWeight:700,cursor:'pointer',boxShadow:A.shadowLg}}>
+              Exit
+            </button>
+          </div>
+        );
+      })()}
+
+      {recipePickerTarget&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:24}} onClick={()=>setRecipePickerTarget(null)}>
+          <div style={{background:A.cardBg,borderRadius:A.r,padding:24,width:'100%',maxWidth:360,boxShadow:A.shadowLg,maxHeight:'70vh',display:'flex',flexDirection:'column'}} onClick={e=>e.stopPropagation()}>
+            <div style={{fontSize:17,fontWeight:700,color:A.label1,marginBottom:12}}>Link a recipe</div>
+            <Inp value={recipeSearch} onChange={e=>setRecipeSearch(e.target.value)} placeholder="Search recipes…" style={{marginBottom:12}}/>
+            <div style={{overflowY:'auto',flex:1}}>
+              {(recipes||[]).filter(r=>r.name.toLowerCase().includes(recipeSearch.toLowerCase())).map(r=>(
+                <button key={r.id} onClick={async()=>{
+                  const key=recipePickerTarget.field==='dinner'?'dinner_recipe_id':recipePickerTarget.field==='breakfast'?'breakfast_recipe_id':'lunch_recipe_id';
+                  await api.put(`/api/meals/${recipePickerTarget.day}`,{[key]:r.id}).catch(()=>{});
+                  setMeals(p=>p.map(m=>m.day===recipePickerTarget.day?{...m,[key]:r.id}:m));
+                  setRecipePickerTarget(null);
+                }} style={{display:'block',width:'100%',textAlign:'left',padding:'10px 12px',background:'none',border:`1px solid ${A.sep}`,borderRadius:A.rSm,marginBottom:6,cursor:'pointer',fontSize:14,color:A.label1,fontWeight:500}}>
+                  {r.name}
+                </button>
+              ))}
+              {(recipes||[]).filter(r=>r.name.toLowerCase().includes(recipeSearch.toLowerCase())).length===0&&(
+                <div style={{fontSize:14,color:A.label4,textAlign:'center',padding:'20px 0'}}>No recipes found</div>
+              )}
+            </div>
+            <Btn variant="ghost" onClick={()=>setRecipePickerTarget(null)} full style={{marginTop:12}}>Cancel</Btn>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -3596,6 +3903,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
       if(st.uptime_kuma_slug) setKumaSlug(st.uptime_kuma_slug);
       if(st.custom_sport_paths) setCustomSportPath(st.custom_sport_paths);
       if(st.wifi_ssid) setWifiSsid(st.wifi_ssid);
+      if(st.ics_export_token) setIcsExportToken(st.ics_export_token);
       if(st.imap_host) setImapHost(st.imap_host);
       if(st.imap_port) setImapPort(st.imap_port);
       if(st.imap_user) setImapUser(st.imap_user);
@@ -3655,6 +3963,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [icsEditForm,setIcsEditForm]=useState({name:'',url:'',color:'#3B82F6'});
   const [icsEditLoading,setIcsEditLoading]=useState(false);
   const [customSportPath,setCustomSportPath]=useState('');
+  const [icsExportToken,setIcsExportToken]=useState('');
 
   const addIcsSource=async()=>{
     if(!icsForm.name.trim()||!icsForm.url.trim()) return;
@@ -3784,6 +4093,18 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
           </div>
         </div>
       </FormGroup>
+
+      {icsExportToken&&(
+        <FormGroup label="Calendar Export">
+          <div style={{padding:'14px 16px'}}>
+            <div style={{fontSize:13,color:A.label3,marginBottom:10}}>Subscribe to this URL in any calendar app (Apple Calendar, Google Calendar, etc.) to see Kith events.</div>
+            <div style={{display:'flex',gap:8,alignItems:'center'}}>
+              <input readOnly value={`${window.location.origin}/api/ics/export?token=${icsExportToken}`} style={{flex:1,background:A.inputBg,border:'none',borderRadius:A.rSm,padding:'9px 12px',fontSize:12,color:A.label2,fontFamily:'JetBrains Mono,monospace',overflow:'hidden',textOverflow:'ellipsis'}}/>
+              <Btn sm variant="ghost" onClick={()=>{navigator.clipboard.writeText(`${window.location.origin}/api/ics/export?token=${icsExportToken}`);toastAdd('Copied','blue');}}>Copy</Btn>
+            </div>
+          </div>
+        </FormGroup>
+      )}
 
       <FormGroup label="Push Notifications">
         <div style={{padding:'14px 16px'}}>
@@ -4776,6 +5097,7 @@ function NotesScreen({notes,setNotes,toastAdd}){
   const [editNote,setEditNote]=useState(null);
   const blank={title:'',content:'',color:'#FAFAF5',pinned:false};
   const [form,setForm]=useState(blank);
+  const [search,setSearch]=useState('');
 
   const openNew=()=>{setEditNote(null);setForm(blank);setDrawerOpen(true);};
   const openEdit=n=>{setEditNote(n);setForm({title:n.title,content:n.content||'',color:n.color||'#FAFAF5',pinned:!!n.pinned});setDrawerOpen(true);};
@@ -4804,7 +5126,7 @@ function NotesScreen({notes,setNotes,toastAdd}){
   };
 
   const del=async id=>{
-    await api.del(`/api/notes/${id}`);
+    try{await api.del(`/api/notes/${id}`);}catch{toastAdd('Failed to delete','red');return;}
     setNotes(p=>p.filter(n=>n.id!==id));
     toastAdd('Deleted','blue');
   };
@@ -4819,14 +5141,27 @@ function NotesScreen({notes,setNotes,toastAdd}){
         <Btn onClick={openNew}>+ Add Note</Btn>
       </div>
 
+      {notes.length>3&&(
+        <div style={{marginBottom:16}}>
+          <Inp value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search notes…"/>
+        </div>
+      )}
       {notes.length===0?(
         <Card style={{padding:'52px 24px',textAlign:'center'}}>
           <div style={{fontSize:13,fontWeight:700,color:A.label5,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:10}}>No notes yet</div>
           <div style={{fontSize:15,color:A.label3,fontWeight:500}}>WiFi password, trash day, plumber number — pin a note to show it on the wall display</div>
         </Card>
-      ):(
+      ):(()=>{
+        const q=search.trim().toLowerCase();
+        const filtered=q?notes.filter(n=>n.title.toLowerCase().includes(q)||(n.content||'').toLowerCase().includes(q)):notes;
+        if(q&&filtered.length===0) return(
+          <Card style={{padding:'40px 24px',textAlign:'center'}}>
+            <div style={{fontSize:15,color:A.label3,fontWeight:500}}>No notes match '{search}'</div>
+          </Card>
+        );
+        return(
         <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'repeat(auto-fill,minmax(240px,1fr))',gap:12}}>
-          {notes.map(n=>(
+          {filtered.map(n=>(
             <div key={n.id} style={{background:n.color||'#FAFAF5',borderRadius:A.r,padding:'18px 20px',position:'relative',border:'1px solid rgba(0,0,0,0.06)'}}>
               {n.pinned&&<div style={{position:'absolute',top:12,right:14,width:8,height:8,borderRadius:'50%',background:A.blue}}/>}
               <div style={{fontSize:15,fontWeight:700,color:'#1A1A1A',marginBottom:n.content?8:0,paddingRight:16}}>{n.title}</div>
@@ -4839,7 +5174,8 @@ function NotesScreen({notes,setNotes,toastAdd}){
             </div>
           ))}
         </div>
-      )}
+        );
+      })()}
 
       <Drawer open={drawerOpen} onClose={()=>{setDrawerOpen(false);setEditNote(null);}} title={editNote?'Edit Note':'Add Note'}>
         <FormGroup label="Note">
@@ -5341,6 +5677,40 @@ function VehiclesScreen({vehicles,setVehicles,toastAdd}){
   const [doneDate,setDoneDate]=useState('');
   const [doneMiles,setDoneMiles]=useState('');
 
+  const [mileageLogs,setMileageLogs]=useState({});
+  const [mileageFormVid,setMileageFormVid]=useState(null);
+  const [mileageInput,setMileageInput]=useState('');
+  const [mileageDate,setMileageDate]=useState(localDate());
+  const [mileageNote,setMileageNote]=useState('');
+
+  useEffect(()=>{
+    vehicles.forEach(v=>{
+      api.get(`/api/vehicles/${v.id}/mileage`).then(rows=>{
+        if(Array.isArray(rows)) setMileageLogs(p=>({...p,[v.id]:rows}));
+      }).catch(()=>{});
+    });
+  },[vehicles.length]);
+
+  const loadMileage=async vid=>{
+    const rows=await api.get(`/api/vehicles/${vid}/mileage`).catch(()=>null);
+    if(Array.isArray(rows)) setMileageLogs(p=>({...p,[vid]:rows}));
+  };
+
+  const logMileage=async vid=>{
+    const m=parseInt(mileageInput);
+    if(!m||m<=0){toastAdd('Enter a valid mileage','red');return;}
+    const r=await api.post(`/api/vehicles/${vid}/mileage`,{miles:m,date:mileageDate,note:mileageNote}).catch(()=>null);
+    if(!r?.id){toastAdd('Failed to log','red');return;}
+    setMileageLogs(p=>({...p,[vid]:[r,...(p[vid]||[])]}));
+    setMileageFormVid(null);setMileageInput('');setMileageNote('');setMileageDate(localDate());
+    toastAdd('Mileage logged');
+  };
+
+  const delMileage=async(vid,mid)=>{
+    try{await api.del(`/api/vehicles/${vid}/mileage/${mid}`);}catch{toastAdd('Failed to delete','red');return;}
+    setMileageLogs(p=>({...p,[vid]:(p[vid]||[]).filter(x=>x.id!==mid)}));
+  };
+
   const svcStatus=s=>{
     if(!s.next_due_date) return 'gray';
     const d=daysUntil(s.next_due_date);
@@ -5459,11 +5829,59 @@ function VehiclesScreen({vehicles,setVehicles,toastAdd}){
                 <button onClick={()=>openEditVehicle(v)} style={{background:'none',border:'none',color:A.label4,cursor:'pointer',fontSize:13,padding:'0 4px'}}>Edit</button>
               </div>
               <Card style={{overflow:'hidden',padding:0}}>
+                {(()=>{
+                  const logs=mileageLogs[v.id];
+                  const latestMiles=logs&&logs.length>0?logs[0].miles:null;
+                  return(
+                    <div style={{padding:'12px 18px',borderBottom:`1px solid ${A.sep}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                      <div style={{fontSize:13,color:A.label3}}>
+                        {latestMiles!=null?(
+                          <span><span style={{fontWeight:700,color:A.label1}}>{Number(latestMiles).toLocaleString()}</span> mi current odometer</span>
+                        ):(
+                          <span style={{color:A.label4}}>No mileage logged</span>
+                        )}
+                      </div>
+                      <button onClick={()=>{
+                        if(!mileageLogs[v.id]) loadMileage(v.id);
+                        setMileageFormVid(mileageFormVid===v.id?null:v.id);
+                        setMileageInput('');setMileageNote('');setMileageDate(localDate());
+                      }} style={{background:'none',border:`1.5px solid ${A.sep}`,borderRadius:20,padding:'4px 12px',fontSize:12,fontWeight:600,color:A.label3,cursor:'pointer'}}>
+                        {mileageFormVid===v.id?'Cancel':'Log miles'}
+                      </button>
+                    </div>
+                  );
+                })()}
+                {mileageFormVid===v.id&&(
+                  <div style={{padding:'12px 18px',borderBottom:`1px solid ${A.sep}`,background:A.inputBg}}>
+                    <div style={{display:'flex',gap:8,alignItems:'flex-end',flexWrap:'wrap'}}>
+                      <div style={{flex:'1 1 120px'}}>
+                        <div style={{fontSize:11,fontWeight:600,color:A.label4,marginBottom:4}}>Miles</div>
+                        <Inp type="number" value={mileageInput} onChange={e=>setMileageInput(e.target.value)} placeholder="e.g. 47322"/>
+                      </div>
+                      <div style={{flex:'1 1 130px'}}>
+                        <div style={{fontSize:11,fontWeight:600,color:A.label4,marginBottom:4}}>Date</div>
+                        <Inp type="date" value={mileageDate} onChange={e=>setMileageDate(e.target.value)}/>
+                      </div>
+                      <div style={{flex:'2 1 180px'}}>
+                        <div style={{fontSize:11,fontWeight:600,color:A.label4,marginBottom:4}}>Note (optional)</div>
+                        <Inp value={mileageNote} onChange={e=>setMileageNote(e.target.value)} placeholder="e.g. Oil change"/>
+                      </div>
+                      <Btn onClick={()=>logMileage(v.id)}>Save</Btn>
+                    </div>
+                  </div>
+                )}
                 {v.services.length===0&&(
                   <div style={{padding:'16px 18px',fontSize:14,color:A.label4}}>No services tracked yet.</div>
                 )}
                 {v.services.map((s,i)=>{
                   const st=svcStatus(s);
+                  const logs=mileageLogs[v.id];
+                  const latestMiles=logs&&logs.length>0?logs[0].miles:null;
+                  let milesUntil=null;
+                  if(s.interval_miles>0&&latestMiles!=null&&s.last_done_miles>0){
+                    const milesSinceService=latestMiles-s.last_done_miles;
+                    milesUntil=s.interval_miles-milesSinceService;
+                  }
                   return(
                     <div key={s.id} style={{display:'flex',alignItems:'center',gap:12,padding:'14px 18px',borderTop:i>0?`1px solid ${A.sep}`:'none'}}>
                       <div style={{width:8,height:8,borderRadius:'50%',background:svcColor(st),flexShrink:0}}/>
@@ -5471,6 +5889,9 @@ function VehiclesScreen({vehicles,setVehicles,toastAdd}){
                         <div style={{fontSize:15,fontWeight:600,color:A.label1}}>{s.name}</div>
                         <div style={{fontSize:12,color:st==='red'?A.red:A.label5,marginTop:2}}>
                           {dueLabel(s)}{intervalLabel(s)?` · ${intervalLabel(s)}`:''}
+                          {milesUntil!=null&&<span style={{marginLeft:4,color:milesUntil<=0?A.red:milesUntil<=500?A.amber:A.label5}}>
+                            {milesUntil<=0?` · ${Math.abs(milesUntil).toLocaleString()} mi overdue`:` · ${milesUntil.toLocaleString()} mi until service`}
+                          </span>}
                         </div>
                       </div>
                       <button onClick={()=>openDone(v.id,s)} style={{background:A.inputBg,border:`1.5px solid ${A.sep}`,borderRadius:20,padding:'5px 14px',fontSize:12,fontWeight:600,color:A.label3,cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>Mark done</button>
@@ -5705,6 +6126,260 @@ function BillsScreen({bills,setBills,payments,setPayments,toastAdd}){
   );
 }
 
+/* ── Budget Screen ───────────────────────────────────────────────────────── */
+function BudgetScreen({budget,setBudget,toastAdd}){
+  const isMobile=useIsMobile();
+  const {categories=[],entries=[]}=budget||{};
+  const [spendDrawer,setSpendDrawer]=useState(false);
+  const [catDrawer,setCatDrawer]=useState(false);
+  const [editCat,setEditCat]=useState(null);
+  const [expandedCat,setExpandedCat]=useState(null);
+  const [spendForm,setSpendForm]=useState({amount:'',category_id:'',note:'',date:localDate()});
+  const [catForm,setCatForm]=useState({name:'',monthly_budget:'',color:'#3B82F6'});
+  const [importOpen,setImportOpen]=useState(false);
+  const [importRows,setImportRows]=useState(null);
+  const [importCatId,setImportCatId]=useState('');
+  const [importLoading,setImportLoading]=useState(false);
+  const [importDetected,setImportDetected]=useState('');
+
+  const BUDGET_COLORS=['#3B82F6','#34C759','#FF9500','#FF3B30','#AF52DE','#32ADE6','#5856D6','#FF6B6B','#4ECDC4','#FFE66D'];
+
+  const spentForCat=id=>entries.filter(e=>e.category_id===id).reduce((s,e)=>s+Number(e.amount),0);
+  const totalBudget=categories.reduce((s,c)=>s+Number(c.monthly_budget||0),0);
+  const totalSpent=entries.reduce((s,e)=>s+Number(e.amount),0);
+
+  const monthName=new Date().toLocaleDateString(undefined,{month:'long',year:'numeric'});
+
+  const saveSpend=async()=>{
+    if(!spendForm.amount||isNaN(Number(spendForm.amount))||Number(spendForm.amount)<=0){toastAdd('Enter a valid amount','red');return;}
+    if(!spendForm.category_id){toastAdd('Select a category','red');return;}
+    const r=await api.post('/api/budget/entries',{...spendForm,amount:Number(spendForm.amount),category_id:Number(spendForm.category_id)}).catch(()=>null);
+    if(!r?.id){toastAdd('Failed to save','red');return;}
+    setBudget(b=>({...b,entries:[r,...b.entries]}));
+    setSpendDrawer(false);setSpendForm({amount:'',category_id:'',note:'',date:localDate()});
+    toastAdd('Spending logged');
+  };
+
+  const delEntry=async id=>{
+    try{await api.del(`/api/budget/entries/${id}`);}catch{toastAdd('Failed','red');return;}
+    setBudget(b=>({...b,entries:b.entries.filter(e=>e.id!==id)}));
+  };
+
+  const saveCat=async()=>{
+    if(!catForm.name.trim()){toastAdd('Name required','red');return;}
+    if(editCat){
+      const r=await api.put(`/api/budget/categories/${editCat.id}`,{...catForm,monthly_budget:Number(catForm.monthly_budget)||0}).catch(()=>null);
+      if(!r?.id){toastAdd('Failed','red');return;}
+      setBudget(b=>({...b,categories:b.categories.map(c=>c.id===r.id?r:c).sort((a,z)=>a.name.localeCompare(z.name))}));
+    }else{
+      const r=await api.post('/api/budget/categories',{...catForm,monthly_budget:Number(catForm.monthly_budget)||0}).catch(()=>null);
+      if(!r?.id){toastAdd('Failed','red');return;}
+      setBudget(b=>({...b,categories:[...b.categories,r].sort((a,z)=>a.name.localeCompare(z.name))}));
+    }
+    setCatDrawer(false);setEditCat(null);setCatForm({name:'',monthly_budget:'',color:'#3B82F6'});
+    toastAdd(editCat?'Category updated':'Category added');
+  };
+
+  const delCat=async id=>{
+    try{await api.del(`/api/budget/categories/${id}`);}catch{toastAdd('Failed','red');return;}
+    setBudget(b=>({...b,categories:b.categories.filter(c=>c.id!==id),entries:b.entries.filter(e=>e.category_id!==id)}));
+    setCatDrawer(false);setEditCat(null);
+    toastAdd('Deleted','blue');
+  };
+
+  const barColor=(spent,budget)=>{
+    if(!budget) return A.blue;
+    const pct=spent/budget;
+    if(pct>1) return A.red;
+    if(pct>=0.75) return A.amber;
+    return A.green;
+  };
+
+  return(
+    <div>
+      <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:24}}>
+        <div>
+          <h1 style={{fontSize:isMobile?34:44,fontWeight:800,letterSpacing:'-.05em',lineHeight:1.05}}>Budget</h1>
+          <p style={{color:A.label4,fontSize:15,marginTop:6}}>{monthName}</p>
+        </div>
+        <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+          <button onClick={()=>{setEditCat(null);setCatForm({name:'',monthly_budget:'',color:'#3B82F6'});setCatDrawer(true);}} style={{background:A.inputBg,border:`1px solid ${A.sep}`,borderRadius:A.rSm,padding:'9px 14px',fontSize:13,fontWeight:600,color:A.label2,cursor:'pointer'}}>+ Category</button>
+          <button onClick={()=>{setImportOpen(true);setImportRows(null);setImportCatId('');}} style={{background:A.inputBg,border:`1px solid ${A.sep}`,borderRadius:A.rSm,padding:'9px 14px',fontSize:13,fontWeight:600,color:A.label2,cursor:'pointer'}}>Import CSV</button>
+          <Btn onClick={()=>setSpendDrawer(true)}>+ Add Spending</Btn>
+        </div>
+      </div>
+
+      {totalBudget>0&&(
+        <Card style={{padding:'18px 20px',marginBottom:20}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:8}}>
+            <div style={{fontSize:13,fontWeight:700,color:A.label2}}>Monthly total</div>
+            <div style={{fontSize:13,color:A.label4}}><span style={{fontWeight:700,color:totalSpent>totalBudget?A.red:A.label1}}>${totalSpent.toFixed(2)}</span> of ${totalBudget.toFixed(2)}</div>
+          </div>
+          <div style={{height:8,borderRadius:4,background:A.inputBg,overflow:'hidden'}}>
+            <div style={{height:'100%',borderRadius:4,background:barColor(totalSpent,totalBudget),width:`${Math.min(100,(totalSpent/totalBudget)*100)}%`,transition:'width .3s'}}/>
+          </div>
+        </Card>
+      )}
+
+      {categories.length===0?(
+        <Card style={{padding:'52px 24px',textAlign:'center'}}>
+          <div style={{fontSize:13,fontWeight:700,color:A.label5,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:10}}>No categories</div>
+          <div style={{fontSize:15,color:A.label3,fontWeight:500}}>Add a category like Groceries or Dining to start tracking.</div>
+        </Card>
+      ):(
+        <div style={{display:'flex',flexDirection:'column',gap:12}}>
+          {categories.map(cat=>{
+            const spent=spentForCat(cat.id);
+            const hasBudget=Number(cat.monthly_budget)>0;
+            const pct=hasBudget?Math.min(100,(spent/cat.monthly_budget)*100):0;
+            const catEntries=entries.filter(e=>e.category_id===cat.id);
+            const expanded=expandedCat===cat.id;
+            return(
+              <Card key={cat.id} style={{overflow:'hidden',padding:0}}>
+                <div style={{padding:'16px 18px',cursor:'pointer'}} onClick={()=>setExpandedCat(expanded?null:cat.id)}>
+                  <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:hasBudget?10:0}}>
+                    <div style={{width:10,height:10,borderRadius:'50%',background:cat.color||A.blue,flexShrink:0}}/>
+                    <div style={{flex:1,fontSize:15,fontWeight:600,color:A.label1}}>{cat.name}</div>
+                    <div style={{fontSize:13,color:A.label4}}>
+                      <span style={{fontWeight:700,color:hasBudget&&spent>cat.monthly_budget?A.red:A.label1}}>${spent.toFixed(2)}</span>
+                      {hasBudget&&<span style={{color:A.label4}}> of ${Number(cat.monthly_budget).toFixed(2)}</span>}
+                    </div>
+                    <button onClick={e=>{e.stopPropagation();setEditCat(cat);setCatForm({name:cat.name,monthly_budget:cat.monthly_budget||'',color:cat.color||'#3B82F6'});setCatDrawer(true);}} style={{background:'none',border:'none',color:A.label4,cursor:'pointer',fontSize:12,padding:'0 4px'}}>Edit</button>
+                  </div>
+                  {hasBudget&&(
+                    <div style={{height:6,borderRadius:3,background:A.inputBg,overflow:'hidden'}}>
+                      <div style={{height:'100%',borderRadius:3,background:barColor(spent,cat.monthly_budget),width:`${pct}%`,transition:'width .3s'}}/>
+                    </div>
+                  )}
+                </div>
+                {expanded&&(
+                  <div style={{borderTop:`1px solid ${A.sep}`}}>
+                    {catEntries.length===0?(
+                      <div style={{padding:'12px 18px',fontSize:14,color:A.label4}}>No entries this month.</div>
+                    ):catEntries.map((e,i)=>(
+                      <div key={e.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 18px',borderTop:i>0?`1px solid ${A.sep}`:'none'}}>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:14,fontWeight:500,color:A.label1}}>{e.note||'Expense'}</div>
+                          <div style={{fontSize:12,color:A.label4,marginTop:1}}>{e.date}</div>
+                        </div>
+                        <div style={{fontSize:14,fontWeight:600,color:A.label1}}>${Number(e.amount).toFixed(2)}</div>
+                        <button onClick={()=>delEntry(e.id)} style={{background:'none',border:'none',color:A.red,cursor:'pointer',fontSize:12,padding:'0 4px'}}>Del</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      <Drawer open={spendDrawer} onClose={()=>{setSpendDrawer(false);setSpendForm({amount:'',category_id:'',note:'',date:localDate()});}} title="Add Spending">
+        <FormGroup label="Amount">
+          <div style={{padding:'12px 16px'}}><Inp type="number" value={spendForm.amount} onChange={e=>setSpendForm(f=>({...f,amount:e.target.value}))} placeholder="0.00"/></div>
+        </FormGroup>
+        <FormGroup label="Category">
+          <div style={{padding:'12px 16px'}}>
+            <Sel value={spendForm.category_id} onChange={e=>setSpendForm(f=>({...f,category_id:e.target.value}))}>
+              <option value="">Select…</option>
+              {categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+            </Sel>
+          </div>
+        </FormGroup>
+        <FormGroup label="Note (optional)">
+          <div style={{padding:'12px 16px'}}><Inp value={spendForm.note} onChange={e=>setSpendForm(f=>({...f,note:e.target.value}))} placeholder="e.g. Whole Foods"/></div>
+        </FormGroup>
+        <FormGroup label="Date">
+          <div style={{padding:'12px 16px'}}><Inp type="date" value={spendForm.date} onChange={e=>setSpendForm(f=>({...f,date:e.target.value}))}/></div>
+        </FormGroup>
+        <div style={{padding:'12px 16px'}}><Btn onClick={saveSpend} full>Save</Btn></div>
+      </Drawer>
+
+      <Drawer open={catDrawer} onClose={()=>{setCatDrawer(false);setEditCat(null);setCatForm({name:'',monthly_budget:'',color:'#3B82F6'});}} title={editCat?'Edit Category':'Add Category'}>
+        <FormGroup label="Name">
+          <div style={{padding:'12px 16px'}}><Inp value={catForm.name} onChange={e=>setCatForm(f=>({...f,name:e.target.value}))} placeholder="e.g. Groceries"/></div>
+        </FormGroup>
+        <FormGroup label="Monthly Budget (optional)">
+          <div style={{padding:'12px 16px'}}><Inp type="number" value={catForm.monthly_budget} onChange={e=>setCatForm(f=>({...f,monthly_budget:e.target.value}))} placeholder="0 = no limit"/></div>
+        </FormGroup>
+        <FormGroup label="Color">
+          <div style={{padding:'12px 16px',display:'flex',gap:8,flexWrap:'wrap'}}>
+            {BUDGET_COLORS.map(c=>(
+              <button key={c} onClick={()=>setCatForm(f=>({...f,color:c}))} style={{width:26,height:26,borderRadius:'50%',background:c,border:catForm.color===c?`2px solid ${A.label1}`:'2px solid transparent',cursor:'pointer'}}/>
+            ))}
+          </div>
+        </FormGroup>
+        <div style={{padding:'12px 16px',display:'flex',gap:8}}>
+          <Btn onClick={saveCat} full>{editCat?'Save Changes':'Add Category'}</Btn>
+          {editCat&&<Btn variant="ghost" onClick={()=>delCat(editCat.id)} full>Delete</Btn>}
+        </div>
+      </Drawer>
+
+      <Drawer open={importOpen} onClose={()=>{setImportOpen(false);setImportRows(null);setImportCatId('');}} title="Import CSV">
+        <div style={{padding:'14px 16px'}}>
+          <div style={{fontSize:13,color:A.label3,marginBottom:12}}>Upload a bank statement CSV (Chase, BofA, AMEX, or generic). Only current-month expenses will be imported.</div>
+          <input type="file" accept=".csv" onChange={async e=>{
+            const file=e.target.files?.[0];
+            if(!file) return;
+            setImportLoading(true);
+            try{
+              const text=await file.text();
+              const r=await api.post('/api/budget/import/preview',{csv:text});
+              if(r?.error){toastAdd(r.error,'red');return;}
+              setImportDetected(r.detected);
+              setImportRows({rows:r.sample,all:r.all,total:r.total});
+            }catch{toastAdd('Failed to parse CSV','red');}
+            finally{setImportLoading(false);}
+          }} style={{width:'100%',marginBottom:12}}/>
+          {importLoading&&<div style={{fontSize:13,color:A.label4}}>Parsing…</div>}
+          {importRows&&(
+            <>
+              <div style={{fontSize:12,color:A.label4,marginBottom:8}}>Detected: <strong style={{color:A.label2}}>{importDetected}</strong> — {importRows.total} expense row{importRows.total!==1?'s':''} this month</div>
+              {importRows.rows.length>0&&(
+                <div style={{background:A.inputBg,borderRadius:A.rSm,overflow:'hidden',marginBottom:12}}>
+                  <div style={{display:'grid',gridTemplateColumns:'100px 1fr 80px',gap:0}}>
+                    <div style={{padding:'7px 10px',fontSize:11,fontWeight:700,color:A.label5,textTransform:'uppercase',borderBottom:`1px solid ${A.sep}`}}>Date</div>
+                    <div style={{padding:'7px 10px',fontSize:11,fontWeight:700,color:A.label5,textTransform:'uppercase',borderBottom:`1px solid ${A.sep}`}}>Note</div>
+                    <div style={{padding:'7px 10px',fontSize:11,fontWeight:700,color:A.label5,textTransform:'uppercase',textAlign:'right',borderBottom:`1px solid ${A.sep}`}}>Amount</div>
+                    {importRows.rows.map((row,i)=>(
+                      <React.Fragment key={i}>
+                        <div style={{padding:'7px 10px',fontSize:12,color:A.label2,borderTop:i>0?`1px solid ${A.sep}`:'none'}}>{row.date}</div>
+                        <div style={{padding:'7px 10px',fontSize:12,color:A.label2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',borderTop:i>0?`1px solid ${A.sep}`:'none'}}>{row.note}</div>
+                        <div style={{padding:'7px 10px',fontSize:12,color:A.label2,textAlign:'right',borderTop:i>0?`1px solid ${A.sep}`:'none'}}>${Number(row.amount).toFixed(2)}</div>
+                      </React.Fragment>
+                    ))}
+                  </div>
+                  {importRows.total>5&&<div style={{padding:'7px 10px',fontSize:12,color:A.label4,borderTop:`1px solid ${A.sep}`}}>…and {importRows.total-5} more rows</div>}
+                </div>
+              )}
+              <div style={{marginBottom:12}}>
+                <div style={{fontSize:13,fontWeight:600,color:A.label2,marginBottom:6}}>Assign to category</div>
+                <Sel value={importCatId} onChange={e=>setImportCatId(e.target.value)}>
+                  <option value="">Select category…</option>
+                  {categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+                </Sel>
+              </div>
+              <Btn full disabled={!importCatId||importLoading} onClick={async()=>{
+                if(!importCatId) return;
+                setImportLoading(true);
+                try{
+                  const r=await api.post('/api/budget/import/confirm',{rows:importRows.all,category_id:Number(importCatId)});
+                  if(r?.error){toastAdd(r.error,'red');return;}
+                  toastAdd(`Imported ${r.imported} entries`);
+                  const fresh=await api.get('/api/budget');
+                  if(fresh?.categories) setBudget(fresh);
+                  setImportOpen(false);setImportRows(null);setImportCatId('');
+                }catch{toastAdd('Import failed','red');}
+                finally{setImportLoading(false);}
+              }}>{importLoading?'Importing…':`Import ${importRows.total} entries`}</Btn>
+            </>
+          )}
+        </div>
+      </Drawer>
+    </div>
+  );
+}
+
 /* ── Recipes Screen ───────────────────────────────────────────────────────── */
 function RecipesScreen({recipes,setRecipes,toastAdd}){
   const isMobile=useIsMobile();
@@ -5713,6 +6388,7 @@ function RecipesScreen({recipes,setRecipes,toastAdd}){
   const [viewRecipe,setViewRecipe]=useState(null);
   const [form,setForm]=useState({name:'',description:'',servings:4,prep_time:0,cook_time:0,ingredients:[],steps:'',source_url:''});
   const [ingLine,setIngLine]=useState('');
+  const [search,setSearch]=useState('');
 
   const blankForm={name:'',description:'',servings:4,prep_time:0,cook_time:0,ingredients:[],steps:'',source_url:''};
 
@@ -5768,14 +6444,22 @@ function RecipesScreen({recipes,setRecipes,toastAdd}){
         <Btn onClick={openNew}>+ Add</Btn>
       </div>
 
-      {recipes.length===0?(
+      {recipes.length>5&&(
+        <div style={{marginBottom:16}}>
+          <Inp value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search recipes…"/>
+        </div>
+      )}
+
+      {(()=>{
+        const filtered=search.trim()?recipes.filter(r=>r.name.toLowerCase().includes(search.toLowerCase())||(r.description||'').toLowerCase().includes(search.toLowerCase())):recipes;
+        return recipes.length===0?(
         <Card style={{padding:'52px 24px',textAlign:'center'}}>
           <div style={{fontSize:13,fontWeight:700,color:A.label5,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:10}}>No recipes yet</div>
           <div style={{fontSize:15,color:A.label3,fontWeight:500}}>Add your family favorites and link them to the meal planner.</div>
         </Card>
       ):(
         <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'repeat(auto-fill,minmax(260px,1fr))',gap:12}}>
-          {recipes.map(r=>{
+          {filtered.map(r=>{
             const totalMin=(r.prep_time||0)+(r.cook_time||0);
             const timeStr=totalMin?`${totalMin} min`:'';
             return(
@@ -5794,7 +6478,8 @@ function RecipesScreen({recipes,setRecipes,toastAdd}){
             );
           })}
         </div>
-      )}
+      );
+      })()}
 
       {/* View modal */}
       <Modal open={!!viewRecipe} onClose={()=>setViewRecipe(null)} title={viewRecipe?.name||''} width={600}>
@@ -5866,12 +6551,736 @@ function RecipesScreen({recipes,setRecipes,toastAdd}){
   );
 }
 
-function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocery,setGrocery,meals,setMeals,icsSources,setIcsSources,inboxCount,setInboxCount,countdowns,setCountdowns,members,setMembers,photos,setPhotos,clockFormat,setClockFormat,weather,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd,setRefreshMs,parseRefreshMs,goals,setGoals,notes,setNotes,polls,setPolls,bookmarks,setBookmarks,quickActions,setQuickActions,setRotationMs,setWifiQrData,darkMode,onDarkMode,packages,setPackages,messages,setMessages,recipes,setRecipes,bills,setBills,payments,setPayments,vehicles,setVehicles,isAdmin=false}){
+/* ── Home Screen ─────────────────────────────────────────────────────────── */
+function ContactsScreen({contacts,setContacts,toastAdd}){
+  const isMobile=useIsMobile();
+  const CATS=['Home Services','Medical','Emergency','School','Neighbors','Other'];
+  const [drawer,setDrawer]=useState(false);
+  const [editContact,setEditContact]=useState(null);
+  const blank={name:'',role:'',category:'Other',phone:'',email:'',notes:''};
+  const [form,setForm]=useState(blank);
+  const [search,setSearch]=useState('');
+
+  const openNew=()=>{setEditContact(null);setForm(blank);setDrawer(true);};
+  const openEdit=c=>{setEditContact(c);setForm({name:c.name,role:c.role||'',category:c.category||'Other',phone:c.phone||'',email:c.email||'',notes:c.notes||''});setDrawer(true);};
+
+  const save=async()=>{
+    if(!form.name.trim()){toastAdd('Name required','red');return;}
+    if(editContact){
+      const r=await api.put(`/api/contacts/${editContact.id}`,form).catch(()=>null);
+      if(!r?.id){toastAdd('Failed to save','red');return;}
+      setContacts(p=>p.map(c=>c.id===r.id?r:c));
+    }else{
+      const r=await api.post('/api/contacts',form).catch(()=>null);
+      if(!r?.id){toastAdd('Failed to save','red');return;}
+      setContacts(p=>[...p,r].sort((a,b)=>a.category.localeCompare(b.category)||a.name.localeCompare(b.name)));
+    }
+    setDrawer(false);setEditContact(null);
+    toastAdd(editContact?'Contact updated':'Contact added');
+  };
+
+  const del=async id=>{
+    try{await api.del(`/api/contacts/${id}`);setContacts(p=>p.filter(c=>c.id!==id));setDrawer(false);setEditContact(null);toastAdd('Removed','blue');}
+    catch{toastAdd('Failed to remove','red');}
+  };
+
+  const filtered=search.trim()?(contacts||[]).filter(c=>c.name.toLowerCase().includes(search.toLowerCase())||c.role.toLowerCase().includes(search.toLowerCase())||c.phone.includes(search)):(contacts||[]);
+  const byCat=CATS.map(cat=>({cat,items:filtered.filter(c=>c.category===cat)})).filter(g=>g.items.length>0);
+
+  return(
+    <div>
+      <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:24}}>
+        <h1 style={{fontSize:isMobile?34:44,fontWeight:800,letterSpacing:'-.05em',lineHeight:1.05}}>Contacts</h1>
+        <Btn onClick={openNew}>+ Add</Btn>
+      </div>
+      {(contacts||[]).length>4&&(
+        <div style={{marginBottom:16}}>
+          <Inp value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search contacts…"/>
+        </div>
+      )}
+      {(contacts||[]).length===0?(
+        <Card style={{padding:'52px 24px',textAlign:'center'}}>
+          <div style={{fontSize:13,fontWeight:700,color:A.label5,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:10}}>No contacts yet</div>
+          <div style={{fontSize:15,color:A.label3,fontWeight:500}}>Add doctors, neighbors, contractors, and other important contacts.</div>
+        </Card>
+      ):(
+        byCat.length===0?(
+          <Card style={{padding:'32px 24px',textAlign:'center'}}>
+            <div style={{fontSize:14,color:A.label4}}>No results for "{search}"</div>
+          </Card>
+        ):(
+          <div style={{display:'flex',flexDirection:'column',gap:20}}>
+            {byCat.map(({cat,items})=>(
+              <div key={cat}>
+                <div style={{fontSize:12,fontWeight:700,color:A.label4,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:8}}>{cat}</div>
+                <Card style={{overflow:'hidden',padding:0}}>
+                  {items.map((c,i)=>(
+                    <div key={c.id} style={{display:'flex',alignItems:'center',gap:12,padding:'14px 18px',borderTop:i>0?`1px solid ${A.sep}`:'none'}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:15,fontWeight:600,color:A.label1}}>{c.name}</div>
+                        {c.role&&<div style={{fontSize:12,color:A.label4,marginTop:2}}>{c.role}</div>}
+                      </div>
+                      {c.phone&&<a href={`tel:${c.phone}`} style={{fontSize:13,color:A.blue,fontWeight:500,textDecoration:'none',flexShrink:0}}>{c.phone}</a>}
+                      <button onClick={()=>openEdit(c)} style={{background:'none',border:'none',color:A.label4,cursor:'pointer',fontSize:13,padding:'0 4px',flexShrink:0}}>Edit</button>
+                    </div>
+                  ))}
+                </Card>
+              </div>
+            ))}
+          </div>
+        )
+      )}
+      <Drawer open={drawer} onClose={()=>{setDrawer(false);setEditContact(null);}} title={editContact?'Edit Contact':'Add Contact'}>
+        <FormGroup label="Name"><div style={{padding:'12px 16px'}}><Inp value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} placeholder="Dr. Smith"/></div></FormGroup>
+        <FormGroup label="Role / description"><div style={{padding:'12px 16px'}}><Inp value={form.role} onChange={e=>setForm(f=>({...f,role:e.target.value}))} placeholder="Pediatrician"/></div></FormGroup>
+        <FormGroup label="Category">
+          <div style={{padding:'12px 16px'}}>
+            <select value={form.category} onChange={e=>setForm(f=>({...f,category:e.target.value}))} style={{width:'100%',padding:'10px 12px',borderRadius:A.rXs,border:`1px solid ${A.sep}`,background:A.inputBg,fontSize:15,color:A.label1}}>
+              {CATS.map(c=><option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+        </FormGroup>
+        <FormGroup label="Phone"><div style={{padding:'12px 16px'}}><Inp type="tel" value={form.phone} onChange={e=>setForm(f=>({...f,phone:e.target.value}))} placeholder="(404) 555-0100"/></div></FormGroup>
+        <FormGroup label="Email"><div style={{padding:'12px 16px'}}><Inp type="email" value={form.email} onChange={e=>setForm(f=>({...f,email:e.target.value}))} placeholder="doctor@clinic.com"/></div></FormGroup>
+        <FormGroup label="Notes (optional)"><div style={{padding:'12px 16px'}}><Inp value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))} placeholder="Office hours, insurance, etc."/></div></FormGroup>
+        <div style={{display:'flex',gap:8,marginTop:4}}>
+          <Btn onClick={save} full>{editContact?'Save Changes':'Add Contact'}</Btn>
+          {editContact&&<Btn variant="ghost" onClick={()=>del(editContact.id)} full style={{color:A.red}}>Delete</Btn>}
+        </div>
+        {!editContact&&<Btn variant="ghost" onClick={()=>setDrawer(false)} full style={{marginTop:8}}>Cancel</Btn>}
+      </Drawer>
+    </div>
+  );
+}
+
+function PetsScreen({pets,setPets,toastAdd}){
+  const isMobile=useIsMobile();
+  const PET_COLORS=['#FF9500','#34C759','#007AFF','#FF3B30','#5856D6','#FF2D55','#AF52DE','#32ADE6'];
+  const SPECIES=['Dog','Cat','Bird','Rabbit','Fish','Hamster','Guinea Pig','Reptile','Other'];
+  const REC_TYPES=['vaccine','medication','vet_visit','grooming'];
+
+  const [pDrawer,setPDrawer]=useState(false);
+  const [editPet,setEditPet]=useState(null);
+  const blankP={name:'',species:'',breed:'',birthday:'',vet_name:'',vet_phone:'',color:'#FF9500',notes:''};
+  const [pForm,setPForm]=useState(blankP);
+
+  const [rDrawer,setRDrawer]=useState(false);
+  const [rPetId,setRPetId]=useState(null);
+  const [editRec,setEditRec]=useState(null);
+  const blankR={type:'vaccine',name:'',last_done:'',interval_days:'',next_due:'',notes:''};
+  const [rForm,setRForm]=useState(blankR);
+
+  const recStatus=r=>{
+    if(!r.next_due) return 'gray';
+    const d=daysUntil(r.next_due);
+    if(d<0) return 'red';
+    if(d<=30) return 'amber';
+    return 'green';
+  };
+  const recColor=st=>({red:A.red,amber:A.amber,green:A.green,gray:A.label5}[st]);
+  const recLabel=r=>{
+    if(!r.next_due) return r.last_done?`Last: ${r.last_done}`:'No schedule';
+    const d=daysUntil(r.next_due);
+    if(d<0) return `Overdue by ${Math.abs(d)}d`;
+    if(d===0) return 'Due today';
+    return `Due in ${d}d`;
+  };
+
+  const openNewPet=()=>{setEditPet(null);setPForm(blankP);setPDrawer(true);};
+  const openEditPet=p=>{setEditPet(p);setPForm({name:p.name,species:p.species||'',breed:p.breed||'',birthday:p.birthday||'',vet_name:p.vet_name||'',vet_phone:p.vet_phone||'',color:p.color||'#FF9500',notes:p.notes||''});setPDrawer(true);};
+
+  const savePet=async()=>{
+    if(!pForm.name.trim()){toastAdd('Name required','red');return;}
+    if(editPet){
+      const r=await api.put(`/api/pets/${editPet.id}`,pForm).catch(()=>null);
+      if(!r?.id){toastAdd('Failed to save','red');return;}
+      setPets(p=>p.map(v=>v.id===r.id?{...r,records:v.records}:v));
+    }else{
+      const r=await api.post('/api/pets',pForm).catch(()=>null);
+      if(!r?.id){toastAdd('Failed to save','red');return;}
+      setPets(p=>[...p,{...r,records:[]}].sort((a,b)=>a.name.localeCompare(b.name)));
+    }
+    setPDrawer(false);setEditPet(null);
+    toastAdd(editPet?'Pet updated':'Pet added');
+  };
+
+  const delPet=async id=>{
+    try{await api.del(`/api/pets/${id}`);}catch{toastAdd('Failed to remove','red');return;}
+    setPets(p=>p.filter(v=>v.id!==id));
+    setPDrawer(false);setEditPet(null);
+    toastAdd('Pet removed','blue');
+  };
+
+  const openNewRec=pid=>{setRPetId(pid);setEditRec(null);setRForm(blankR);setRDrawer(true);};
+  const openEditRec=(pid,r)=>{setRPetId(pid);setEditRec(r);setRForm({type:r.type,name:r.name,last_done:r.last_done||'',interval_days:r.interval_days||'',next_due:r.next_due||'',notes:r.notes||''});setRDrawer(true);};
+
+  const saveRec=async()=>{
+    if(!rForm.name.trim()){toastAdd('Name required','red');return;}
+    const payload={type:rForm.type,name:rForm.name.trim(),last_done:rForm.last_done,interval_days:parseInt(rForm.interval_days)||0,next_due:rForm.next_due,notes:rForm.notes};
+    if(editRec){
+      const r=await api.put(`/api/pets/${rPetId}/records/${editRec.id}`,payload).catch(()=>null);
+      if(!r?.id){toastAdd('Failed to save','red');return;}
+      setPets(p=>p.map(v=>v.id===rPetId?{...v,records:v.records.map(x=>x.id===r.id?r:x)}:v));
+    }else{
+      const r=await api.post(`/api/pets/${rPetId}/records`,payload).catch(()=>null);
+      if(!r?.id){toastAdd('Failed to save','red');return;}
+      setPets(p=>p.map(v=>v.id===rPetId?{...v,records:[...v.records,r]}:v));
+    }
+    setRDrawer(false);setEditRec(null);
+    toastAdd(editRec?'Record updated':'Record added');
+  };
+
+  const delRec=async(pid,rid)=>{
+    try{await api.del(`/api/pets/${pid}/records/${rid}`);}catch{toastAdd('Failed to remove','red');return;}
+    setPets(p=>p.map(v=>v.id===pid?{...v,records:v.records.filter(x=>x.id!==rid)}:v));
+    setRDrawer(false);setEditRec(null);
+    toastAdd('Record removed','blue');
+  };
+
+  const markDone=async(pid,r)=>{
+    const updated=await api.post(`/api/pets/${pid}/records/${r.id}/done`,{}).catch(()=>null);
+    if(!updated?.id){toastAdd('Failed','red');return;}
+    setPets(p=>p.map(v=>v.id===pid?{...v,records:v.records.map(x=>x.id===updated.id?updated:x)}:v));
+    toastAdd('Logged');
+  };
+
+  return(
+    <div>
+      <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:24}}>
+        <h1 style={{fontSize:isMobile?34:44,fontWeight:800,letterSpacing:'-.05em',lineHeight:1.05}}>Pets</h1>
+        <Btn onClick={openNewPet}>+ Add</Btn>
+      </div>
+      {(pets||[]).length===0?(
+        <Card style={{padding:'52px 24px',textAlign:'center'}}>
+          <div style={{fontSize:13,fontWeight:700,color:A.label5,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:10}}>No pets</div>
+          <div style={{fontSize:15,color:A.label3,fontWeight:500}}>Add a pet to track vaccines, medications, vet visits, and grooming schedules.</div>
+        </Card>
+      ):(
+        <div style={{display:'flex',flexDirection:'column',gap:20}}>
+          {(pets||[]).map(pet=>(
+            <div key={pet.id}>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+                <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  <div style={{width:10,height:10,borderRadius:'50%',background:pet.color||'#FF9500',flexShrink:0}}/>
+                  <div>
+                    <span style={{fontSize:13,fontWeight:700,color:A.label2,letterSpacing:'-.01em'}}>
+                      {pet.name}{pet.species?` · ${pet.species}`:''}
+                      {pet.breed?` · ${pet.breed}`:''}
+                    </span>
+                    {pet.vet_name&&<div style={{fontSize:11,color:A.label4,marginTop:1}}>Vet: {pet.vet_name}{pet.vet_phone?` · ${pet.vet_phone}`:''}</div>}
+                  </div>
+                </div>
+                <button onClick={()=>openEditPet(pet)} style={{background:'none',border:'none',color:A.label4,cursor:'pointer',fontSize:13,padding:'0 4px'}}>Edit</button>
+              </div>
+              <Card style={{overflow:'hidden',padding:0}}>
+                {(pet.records||[]).length===0&&(
+                  <div style={{padding:'16px 18px',fontSize:14,color:A.label4}}>No records tracked yet.</div>
+                )}
+                {(pet.records||[]).map((r,i)=>{
+                  const st=recStatus(r);
+                  return(
+                    <div key={r.id} style={{display:'flex',alignItems:'center',gap:12,padding:'14px 18px',borderTop:i>0?`1px solid ${A.sep}`:'none'}}>
+                      <div style={{width:8,height:8,borderRadius:'50%',background:recColor(st),flexShrink:0}}/>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:15,fontWeight:600,color:A.label1}}>{r.name}</div>
+                        <div style={{fontSize:12,color:st==='red'?A.red:A.label5,marginTop:2}}>
+                          {recLabel(r)}{r.interval_days>0?` · every ${r.interval_days}d`:''}
+                        </div>
+                      </div>
+                      {r.interval_days>0&&<button onClick={()=>markDone(pet.id,r)} style={{background:A.inputBg,border:`1.5px solid ${A.sep}`,borderRadius:20,padding:'5px 14px',fontSize:12,fontWeight:600,color:A.label3,cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>Done</button>}
+                      <button onClick={()=>openEditRec(pet.id,r)} style={{background:'none',border:'none',color:A.label4,cursor:'pointer',fontSize:13,padding:'0 4px',flexShrink:0}}>Edit</button>
+                    </div>
+                  );
+                })}
+                <div style={{padding:'12px 18px',borderTop:(pet.records||[]).length>0?`1px solid ${A.sep}`:'none'}}>
+                  <button onClick={()=>openNewRec(pet.id)} style={{background:'none',border:'none',color:A.blue,fontSize:14,fontWeight:600,cursor:'pointer',padding:0}}>+ Add record</button>
+                </div>
+              </Card>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <Drawer open={pDrawer} onClose={()=>{setPDrawer(false);setEditPet(null);setPForm(blankP);}} title={editPet?'Edit Pet':'New Pet'}>
+        <FormGroup label="Name"><div style={{padding:'12px 16px'}}><Inp value={pForm.name} onChange={e=>setPForm(f=>({...f,name:e.target.value}))} placeholder="Buddy"/></div></FormGroup>
+        <FormGroup label="Species">
+          <div style={{padding:'12px 16px'}}>
+            <select value={pForm.species} onChange={e=>setPForm(f=>({...f,species:e.target.value}))} style={{width:'100%',padding:'10px 12px',borderRadius:A.rXs,border:`1px solid ${A.sep}`,background:A.inputBg,fontSize:15,color:A.label1}}>
+              <option value="">Select species…</option>
+              {SPECIES.map(s=><option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+        </FormGroup>
+        <FormGroup label="Breed (optional)"><div style={{padding:'12px 16px'}}><Inp value={pForm.breed} onChange={e=>setPForm(f=>({...f,breed:e.target.value}))} placeholder="Golden Retriever"/></div></FormGroup>
+        <FormGroup label="Birthday (optional)"><div style={{padding:'12px 16px'}}><Inp type="date" value={pForm.birthday} onChange={e=>setPForm(f=>({...f,birthday:e.target.value}))}/></div></FormGroup>
+        <FormGroup label="Vet name (optional)"><div style={{padding:'12px 16px'}}><Inp value={pForm.vet_name} onChange={e=>setPForm(f=>({...f,vet_name:e.target.value}))} placeholder="Dr. Johnson"/></div></FormGroup>
+        <FormGroup label="Vet phone (optional)"><div style={{padding:'12px 16px'}}><Inp type="tel" value={pForm.vet_phone} onChange={e=>setPForm(f=>({...f,vet_phone:e.target.value}))} placeholder="(404) 555-0100"/></div></FormGroup>
+        <FormGroup label="Color">
+          <div style={{padding:'12px 16px',display:'flex',gap:8,flexWrap:'wrap'}}>
+            {PET_COLORS.map(c=>(
+              <button key={c} onClick={()=>setPForm(f=>({...f,color:c}))} style={{width:28,height:28,borderRadius:'50%',background:c,border:pForm.color===c?`3px solid ${A.label1}`:`2px solid transparent`,cursor:'pointer'}}/>
+            ))}
+          </div>
+        </FormGroup>
+        <FormGroup label="Notes (optional)"><div style={{padding:'12px 16px'}}><Inp value={pForm.notes} onChange={e=>setPForm(f=>({...f,notes:e.target.value}))}/></div></FormGroup>
+        <div style={{padding:'12px 16px',display:'flex',gap:8}}>
+          <Btn onClick={savePet} full>Save</Btn>
+          {editPet&&<Btn variant="ghost" onClick={()=>delPet(editPet.id)} full>Delete</Btn>}
+        </div>
+      </Drawer>
+
+      <Drawer open={rDrawer} onClose={()=>{setRDrawer(false);setEditRec(null);setRForm(blankR);}} title={editRec?'Edit Record':'New Record'}>
+        <FormGroup label="Type">
+          <div style={{padding:'12px 16px'}}>
+            <select value={rForm.type} onChange={e=>setRForm(f=>({...f,type:e.target.value}))} style={{width:'100%',padding:'10px 12px',borderRadius:A.rXs,border:`1px solid ${A.sep}`,background:A.inputBg,fontSize:15,color:A.label1}}>
+              {REC_TYPES.map(t=><option key={t} value={t}>{t.replace('_',' ').replace(/\b\w/g,c=>c.toUpperCase())}</option>)}
+            </select>
+          </div>
+        </FormGroup>
+        <FormGroup label="Name"><div style={{padding:'12px 16px'}}><Inp value={rForm.name} onChange={e=>setRForm(f=>({...f,name:e.target.value}))} placeholder="Rabies vaccine, Heartworm…"/></div></FormGroup>
+        <FormGroup label="Last done (optional)"><div style={{padding:'12px 16px'}}><Inp type="date" value={rForm.last_done} onChange={e=>setRForm(f=>({...f,last_done:e.target.value}))}/></div></FormGroup>
+        <FormGroup label="Repeat interval in days (0 = one-time)"><div style={{padding:'12px 16px'}}><Inp type="number" min="0" value={rForm.interval_days} onChange={e=>setRForm(f=>({...f,interval_days:e.target.value}))} placeholder="365"/></div></FormGroup>
+        {(!rForm.interval_days||parseInt(rForm.interval_days)===0)&&(
+          <FormGroup label="Next due date (optional)"><div style={{padding:'12px 16px'}}><Inp type="date" value={rForm.next_due} onChange={e=>setRForm(f=>({...f,next_due:e.target.value}))}/></div></FormGroup>
+        )}
+        <FormGroup label="Notes (optional)"><div style={{padding:'12px 16px'}}><Inp value={rForm.notes} onChange={e=>setRForm(f=>({...f,notes:e.target.value}))}/></div></FormGroup>
+        <div style={{padding:'12px 16px',display:'flex',gap:8}}>
+          <Btn onClick={saveRec} full>Save</Btn>
+          {editRec&&<Btn variant="ghost" onClick={()=>delRec(rPetId,editRec.id)} full>Delete</Btn>}
+        </div>
+      </Drawer>
+    </div>
+  );
+}
+
+function HomeScreen({appliances,setAppliances,consumables,setConsumables,maintenanceItems=[],setMaintenanceItems,toastAdd}){
+  const isMobile=useIsMobile();
+  const [tab,setTab]=useState('appliances');
+  const MONTH_NAMES=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const [maintDrawer,setMaintDrawer]=useState(false);
+  const [maintEdit,setMaintEdit]=useState(null);
+  const [maintForm,setMaintForm]=useState({name:'',month:'1',notes:''});
+  const maintSort=(a,b)=>{const o={overdue:0,due_this_month:1,upcoming:2,done_this_year:3};return(o[a.status]??4)-(o[b.status]??4)||a.month-b.month;};
+
+  // ── Appliances ──────────────────────────────────────────────────────────────
+  const blankA={name:'',location:'',purchase_date:'',warranty_date:'',notes:''};
+  const [aDrawer,setADrawer]=useState(false);
+  const [editAppl,setEditAppl]=useState(null);
+  const [aForm,setAForm]=useState(blankA);
+
+  const openNewAppl=()=>{setEditAppl(null);setAForm(blankA);setADrawer(true);};
+  const openEditAppl=a=>{setEditAppl(a);setAForm({name:a.name,location:a.location||'',purchase_date:a.purchase_date||'',warranty_date:a.warranty_date||'',notes:a.notes||''});setADrawer(true);};
+
+  const saveAppl=async()=>{
+    if(!aForm.name.trim()){toastAdd('Name required','red');return;}
+    if(editAppl){
+      const r=await api.put(`/api/home/appliances/${editAppl.id}`,aForm).catch(()=>null);
+      if(!r?.id){toastAdd('Failed to save','red');return;}
+      setAppliances(p=>p.map(a=>a.id===r.id?r:a).sort(applSort));
+    }else{
+      const r=await api.post('/api/home/appliances',aForm).catch(()=>null);
+      if(!r?.id){toastAdd('Failed to save','red');return;}
+      setAppliances(p=>[...p,r].sort(applSort));
+    }
+    setADrawer(false);setEditAppl(null);
+    toastAdd(editAppl?'Appliance updated':'Appliance added');
+  };
+
+  const delAppl=async id=>{
+    try{
+      await api.del(`/api/home/appliances/${id}`);
+      setAppliances(p=>p.filter(a=>a.id!==id));
+      setADrawer(false);setEditAppl(null);
+      toastAdd('Removed','blue');
+    }catch{toastAdd('Failed to remove','red');}
+  };
+
+  const applSort=(a,b)=>{
+    const aw=a.warranty_date, bw=b.warranty_date;
+    if(!aw&&!bw) return a.name.localeCompare(b.name);
+    if(!aw) return 1;
+    if(!bw) return -1;
+    return aw.localeCompare(bw);
+  };
+
+  const warrantyBadge=a=>{
+    if(!a.warranty_date) return null;
+    const d=daysUntil(a.warranty_date);
+    if(d<0) return{label:'Expired',color:A.red,bg:A.redFill};
+    if(d<=30) return{label:`${d}d left`,color:A.amber,bg:A.amberFill};
+    return null;
+  };
+
+  // ── Consumables ─────────────────────────────────────────────────────────────
+  const SUGGESTIONS=[
+    {name:'Furnace / AC filter',interval_days:90},
+    {name:'Water filter',interval_days:180},
+    {name:'Refrigerator water filter',interval_days:180},
+    {name:'Smoke detector battery',interval_days:365},
+    {name:'Dryer vent cleaning',interval_days:365},
+    {name:'HVAC service',interval_days:365},
+  ];
+  const blankC={name:'',location:'',intervalVal:'90',intervalUnit:'days',last_replaced:'',notes:''};
+  const [cDrawer,setCDrawer]=useState(false);
+  const [editCons,setEditCons]=useState(null);
+  const [cForm,setCForm]=useState(blankC);
+  const [replacing,setReplacing]=useState(new Set());
+
+  const intervalDays=f=>{
+    const n=parseInt(f.intervalVal)||1;
+    return f.intervalUnit==='weeks'?n*7:f.intervalUnit==='months'?n*30:n;
+  };
+  const intervalFromDays=days=>{
+    if(days%30===0&&days>=30) return{intervalVal:String(days/30),intervalUnit:'months'};
+    if(days%7===0&&days>=7) return{intervalVal:String(days/7),intervalUnit:'weeks'};
+    return{intervalVal:String(days),intervalUnit:'days'};
+  };
+
+  const openNewCons=(preset=null)=>{
+    setEditCons(null);
+    if(preset){
+      const {intervalVal,intervalUnit}=intervalFromDays(preset.interval_days);
+      setCForm({...blankC,name:preset.name,intervalVal,intervalUnit});
+    }else{
+      setCForm(blankC);
+    }
+    setCDrawer(true);
+  };
+  const openEditCons=c=>{
+    setEditCons(c);
+    const {intervalVal,intervalUnit}=intervalFromDays(c.interval_days);
+    setCForm({name:c.name,location:c.location||'',intervalVal,intervalUnit,last_replaced:c.last_replaced||'',notes:c.notes||''});
+    setCDrawer(true);
+  };
+
+  const saveCons=async()=>{
+    if(!cForm.name.trim()){toastAdd('Name required','red');return;}
+    const days=intervalDays(cForm);
+    if(days<1){toastAdd('Interval must be at least 1 day','red');return;}
+    const body={name:cForm.name.trim(),location:cForm.location,interval_days:days,last_replaced:cForm.last_replaced,notes:cForm.notes};
+    if(editCons){
+      const r=await api.put(`/api/home/consumables/${editCons.id}`,body).catch(()=>null);
+      if(!r?.id){toastAdd('Failed to save','red');return;}
+      setConsumables(p=>p.map(c=>c.id===r.id?r:c).sort(consSort));
+    }else{
+      const r=await api.post('/api/home/consumables',body).catch(()=>null);
+      if(!r?.id){toastAdd('Failed to save','red');return;}
+      setConsumables(p=>[...p,r].sort(consSort));
+    }
+    setCDrawer(false);setEditCons(null);
+    toastAdd(editCons?'Item updated':'Item added');
+  };
+
+  const delCons=async id=>{
+    try{
+      await api.del(`/api/home/consumables/${id}`);
+      setConsumables(p=>p.filter(c=>c.id!==id));
+      setCDrawer(false);setEditCons(null);
+      toastAdd('Removed','blue');
+    }catch{toastAdd('Failed to remove','red');}
+  };
+
+  const markReplaced=async c=>{
+    setReplacing(s=>{const n=new Set(s);n.add(c.id);return n;});
+    try{
+      const r=await api.post(`/api/home/consumables/${c.id}/replaced`,{});
+      if(r?.id) setConsumables(p=>p.map(x=>x.id===r.id?r:x).sort(consSort));
+      else toastAdd('Failed to update','red');
+    }catch{toastAdd('Failed to update','red');}
+    setReplacing(s=>{const n=new Set(s);n.delete(c.id);return n;});
+  };
+
+  const consSort=(a,b)=>{
+    if(a.days_remaining===null&&b.days_remaining===null) return 0;
+    if(a.days_remaining===null) return 1;
+    if(b.days_remaining===null) return -1;
+    return a.days_remaining-b.days_remaining;
+  };
+
+  const statusDot=c=>{
+    if(c.status==='overdue') return A.red;
+    if(c.status==='due_soon') return A.amber;
+    return A.green;
+  };
+  const dueLabel=c=>{
+    if(c.days_remaining===null) return 'No date set';
+    if(c.days_remaining<0) return `Overdue by ${Math.abs(c.days_remaining)} day${Math.abs(c.days_remaining)===1?'':'s'}`;
+    if(c.days_remaining===0) return 'Due today';
+    return `Due in ${c.days_remaining} day${c.days_remaining===1?'':'s'}`;
+  };
+
+  const SegCtrl=({value,onChange,options})=>(
+    <div style={{display:'flex',background:A.inputBg,borderRadius:A.rXs,padding:2,gap:1}}>
+      {options.map(o=>(
+        <button key={o} onClick={()=>onChange(o)} style={{padding:'6px 16px',border:'none',borderRadius:7,background:value===o?A.cardBg:'transparent',color:value===o?A.label1:A.label3,fontSize:13,fontWeight:value===o?600:400,cursor:'pointer',boxShadow:value===o?A.shadowSm:'none',transition:'all .15s'}}>{o}</button>
+      ))}
+    </div>
+  );
+
+  return(
+    <div>
+      <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:24}}>
+        <h1 style={{fontSize:isMobile?34:44,fontWeight:800,letterSpacing:'-.05em',lineHeight:1.05}}>Home</h1>
+        <SegCtrl value={tab} onChange={setTab} options={['appliances','consumables','maintenance']}/>
+      </div>
+
+      {tab==='appliances'&&(
+        <>
+          <div style={{display:'flex',justifyContent:'flex-end',marginBottom:16}}>
+            <Btn onClick={openNewAppl}>+ Add Appliance</Btn>
+          </div>
+          {appliances.length===0?(
+            <Card style={{padding:'52px 24px',textAlign:'center'}}>
+              <div style={{fontSize:13,fontWeight:700,color:A.label5,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:10}}>No appliances yet</div>
+              <div style={{fontSize:15,color:A.label3,fontWeight:500}}>Track appliances and their warranty dates so nothing expires unnoticed.</div>
+            </Card>
+          ):(
+            <Card style={{overflow:'hidden',padding:0}}>
+              {appliances.map((a,i)=>{
+                const badge=warrantyBadge(a);
+                return(
+                  <div key={a.id} style={{display:'flex',alignItems:'center',gap:14,padding:'16px 18px',borderTop:i>0?`1px solid ${A.sep}`:'none'}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                        <span style={{fontSize:15,fontWeight:600,color:A.label1}}>{a.name}</span>
+                        {badge&&<span style={{fontSize:11,fontWeight:700,color:badge.color,background:badge.bg,padding:'2px 8px',borderRadius:A.rPill}}>{badge.label}</span>}
+                      </div>
+                      <div style={{fontSize:12,color:A.label4,marginTop:3}}>
+                        {a.location&&<span>{a.location}</span>}
+                        {a.location&&a.warranty_date&&<span> · </span>}
+                        {a.warranty_date&&<span>Warranty: {a.warranty_date}</span>}
+                        {!a.location&&!a.warranty_date&&<span style={{fontStyle:'italic'}}>No details</span>}
+                      </div>
+                    </div>
+                    <button onClick={()=>openEditAppl(a)} style={{background:'none',border:'none',color:A.label4,cursor:'pointer',fontSize:13,padding:'0 4px',flexShrink:0}}>Edit</button>
+                  </div>
+                );
+              })}
+            </Card>
+          )}
+          <Drawer open={aDrawer} onClose={()=>{setADrawer(false);setEditAppl(null);}} title={editAppl?'Edit Appliance':'Add Appliance'}>
+            <FormGroup label="Name">
+              <div style={{padding:'12px 16px'}}><Inp value={aForm.name} onChange={e=>setAForm(f=>({...f,name:e.target.value}))} placeholder="Refrigerator"/></div>
+            </FormGroup>
+            <FormGroup label="Room / Location">
+              <div style={{padding:'12px 16px'}}><Inp value={aForm.location} onChange={e=>setAForm(f=>({...f,location:e.target.value}))} placeholder="Kitchen"/></div>
+            </FormGroup>
+            <FormGroup label="Purchase date (optional)">
+              <div style={{padding:'12px 16px'}}><Inp type="date" value={aForm.purchase_date} onChange={e=>setAForm(f=>({...f,purchase_date:e.target.value}))}/></div>
+            </FormGroup>
+            <FormGroup label="Warranty expires (optional)">
+              <div style={{padding:'12px 16px'}}><Inp type="date" value={aForm.warranty_date} onChange={e=>setAForm(f=>({...f,warranty_date:e.target.value}))}/></div>
+            </FormGroup>
+            <FormGroup label="Notes (optional)">
+              <div style={{padding:'12px 16px'}}><Inp value={aForm.notes} onChange={e=>setAForm(f=>({...f,notes:e.target.value}))} placeholder="Model number, serial, etc."/></div>
+            </FormGroup>
+            <div style={{display:'flex',gap:8,marginTop:4}}>
+              <Btn onClick={saveAppl} full>{editAppl?'Save Changes':'Add Appliance'}</Btn>
+              {editAppl&&<Btn variant="ghost" onClick={()=>delAppl(editAppl.id)} full style={{color:A.red}}>Delete</Btn>}
+            </div>
+            {!editAppl&&<Btn variant="ghost" onClick={()=>setADrawer(false)} full style={{marginTop:8}}>Cancel</Btn>}
+          </Drawer>
+        </>
+      )}
+
+      {tab==='consumables'&&(
+        <>
+          <div style={{display:'flex',justifyContent:'flex-end',marginBottom:16}}>
+            <Btn onClick={()=>openNewCons()}>+ Add Item</Btn>
+          </div>
+          {consumables.length===0&&(
+            <>
+              <Card style={{padding:'36px 24px',textAlign:'center',marginBottom:16}}>
+                <div style={{fontSize:13,fontWeight:700,color:A.label5,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:10}}>No items yet</div>
+                <div style={{fontSize:15,color:A.label3,fontWeight:500}}>Track filters, batteries, and anything that needs regular replacement.</div>
+              </Card>
+              <div style={{fontSize:12,fontWeight:700,color:A.label4,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:8}}>Quick-add suggestions</div>
+              <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                {SUGGESTIONS.map(s=>(
+                  <button key={s.name} onClick={()=>openNewCons(s)} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px',background:A.cardBg,border:`1px solid ${A.sep}`,borderRadius:A.rSm,cursor:'pointer',textAlign:'left'}}>
+                    <span style={{fontSize:14,color:A.label1,fontWeight:500}}>{s.name}</span>
+                    <span style={{fontSize:12,color:A.label4}}>every {s.interval_days >= 365 ? `${s.interval_days/365}yr` : s.interval_days >= 30 ? `${s.interval_days/30}mo` : `${s.interval_days}d`}</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+          {consumables.length>0&&(
+            <>
+              <Card style={{overflow:'hidden',padding:0,marginBottom:16}}>
+                {consumables.map((c,i)=>(
+                  <div key={c.id} style={{display:'flex',alignItems:'center',gap:14,padding:'16px 18px',borderTop:i>0?`1px solid ${A.sep}`:'none',opacity:replacing.has(c.id)?0.5:1,transition:'opacity .2s'}}>
+                    <div style={{width:10,height:10,borderRadius:'50%',background:statusDot(c),flexShrink:0}}/>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:15,fontWeight:600,color:A.label1}}>{c.name}</div>
+                      <div style={{fontSize:12,color:c.status==='overdue'?A.red:c.status==='due_soon'?A.amber:A.label4,marginTop:2}}>
+                        {dueLabel(c)}{c.location&&` · ${c.location}`}
+                      </div>
+                    </div>
+                    <button onClick={()=>markReplaced(c)} disabled={replacing.has(c.id)} style={{background:A.inputBg,border:`1.5px solid ${A.sep}`,borderRadius:20,padding:'5px 14px',fontSize:12,fontWeight:600,color:A.label3,cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>
+                      {replacing.has(c.id)?'…':'Replaced'}
+                    </button>
+                    <button onClick={()=>openEditCons(c)} style={{background:'none',border:'none',color:A.label4,cursor:'pointer',fontSize:13,padding:'0 4px',flexShrink:0}}>Edit</button>
+                  </div>
+                ))}
+              </Card>
+              {consumables.length>0&&SUGGESTIONS.filter(s=>!consumables.some(c=>c.name.toLowerCase().includes(s.name.split('/')[0].toLowerCase().trim()))).length>0&&(
+                <details style={{marginTop:16}}>
+                  <summary style={{fontSize:12,fontWeight:700,color:A.label4,textTransform:'uppercase',letterSpacing:'.06em',cursor:'pointer',marginBottom:8,listStyle:'none'}}>+ More suggestions</summary>
+                  <div style={{display:'flex',flexDirection:'column',gap:8,marginTop:8}}>
+                    {SUGGESTIONS.filter(s=>!consumables.some(c=>c.name.toLowerCase().includes(s.name.split('/')[0].toLowerCase().trim()))).map(s=>(
+                      <button key={s.name} onClick={()=>openNewCons(s)} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px',background:A.cardBg,border:`1px solid ${A.sep}`,borderRadius:A.rSm,cursor:'pointer',textAlign:'left'}}>
+                        <span style={{fontSize:14,color:A.label1,fontWeight:500}}>{s.name}</span>
+                        <span style={{fontSize:12,color:A.label4}}>every {s.interval_days>=365?`${s.interval_days/365}yr`:s.interval_days>=30?`${s.interval_days/30}mo`:`${s.interval_days}d`}</span>
+                      </button>
+                    ))}
+                  </div>
+                </details>
+              )}
+            </>
+          )}
+          <Drawer open={cDrawer} onClose={()=>{setCDrawer(false);setEditCons(null);}} title={editCons?'Edit Item':'Add Item'}>
+            <FormGroup label="Name">
+              <div style={{padding:'12px 16px'}}><Inp value={cForm.name} onChange={e=>setCForm(f=>({...f,name:e.target.value}))} placeholder="Furnace filter"/></div>
+            </FormGroup>
+            <FormGroup label="Room / Location (optional)">
+              <div style={{padding:'12px 16px'}}><Inp value={cForm.location} onChange={e=>setCForm(f=>({...f,location:e.target.value}))} placeholder="Basement"/></div>
+            </FormGroup>
+            <FormGroup label="Replace every">
+              <div style={{padding:'12px 16px',display:'flex',gap:8,alignItems:'center'}}>
+                <Inp type="number" min="1" value={cForm.intervalVal} onChange={e=>setCForm(f=>({...f,intervalVal:e.target.value}))} style={{width:80}}/>
+                <select value={cForm.intervalUnit} onChange={e=>setCForm(f=>({...f,intervalUnit:e.target.value}))} style={{flex:1,padding:'10px 12px',borderRadius:A.rXs,border:`1px solid ${A.sep}`,background:A.inputBg,fontSize:15,color:A.label1}}>
+                  <option value="days">days</option>
+                  <option value="weeks">weeks</option>
+                  <option value="months">months</option>
+                </select>
+              </div>
+            </FormGroup>
+            <FormGroup label="Last replaced (optional)">
+              <div style={{padding:'12px 16px'}}><Inp type="date" value={cForm.last_replaced} onChange={e=>setCForm(f=>({...f,last_replaced:e.target.value}))}/></div>
+            </FormGroup>
+            <FormGroup label="Notes (optional)">
+              <div style={{padding:'12px 16px'}}><Inp value={cForm.notes} onChange={e=>setCForm(f=>({...f,notes:e.target.value}))} placeholder="Brand, size, etc."/></div>
+            </FormGroup>
+            <div style={{display:'flex',gap:8,marginTop:4}}>
+              <Btn onClick={saveCons} full>{editCons?'Save Changes':'Add Item'}</Btn>
+              {editCons&&<Btn variant="ghost" onClick={()=>delCons(editCons.id)} full style={{color:A.red}}>Delete</Btn>}
+            </div>
+            {!editCons&&<Btn variant="ghost" onClick={()=>setCDrawer(false)} full style={{marginTop:8}}>Cancel</Btn>}
+          </Drawer>
+        </>
+      )}
+
+      {tab==='maintenance'&&(
+        <>
+          <div style={{display:'flex',justifyContent:'flex-end',marginBottom:16}}>
+            <Btn onClick={()=>{setMaintEdit(null);setMaintForm({name:'',month:String(new Date().getMonth()+1),notes:''});setMaintDrawer(true);}}>+ Add Task</Btn>
+          </div>
+          {maintenanceItems.length===0?(
+            <Card style={{padding:'52px 24px',textAlign:'center',marginBottom:16}}>
+              <div style={{fontSize:13,fontWeight:700,color:A.label5,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:10}}>No tasks yet</div>
+              <div style={{fontSize:15,color:A.label3,fontWeight:500}}>Add annual tasks like AC service, gutter cleaning, and smoke detector checks.</div>
+            </Card>
+          ):(
+            <Card style={{overflow:'hidden',padding:0,marginBottom:16}}>
+              {maintenanceItems.map((item,i)=>{
+                const sc=item.status==='overdue'?{color:A.red,bg:A.redFill,label:'Overdue'}:item.status==='due_this_month'?{color:A.amber,bg:A.amberFill,label:'This month'}:item.status==='done_this_year'?{color:A.green,bg:A.greenFill,label:'Done'}:{color:A.label4,bg:'transparent',label:MONTH_NAMES[item.month-1]};
+                return(
+                  <div key={item.id} style={{display:'flex',alignItems:'center',gap:14,padding:'16px 18px',borderTop:i>0?`1px solid ${A.sep}`:'none',opacity:item.status==='done_this_year'?0.55:1}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                        <span style={{fontSize:15,fontWeight:600,color:A.label1}}>{item.name}</span>
+                        <span style={{fontSize:11,fontWeight:700,color:sc.color,background:sc.bg,padding:'2px 8px',borderRadius:A.rPill}}>{sc.label}</span>
+                      </div>
+                      {item.notes&&<div style={{fontSize:12,color:A.label4,marginTop:3}}>{item.notes}</div>}
+                    </div>
+                    {item.status!=='done_this_year'&&(
+                      <button onClick={async()=>{const r=await api.post(`/api/home/maintenance/${item.id}/done`,{}).catch(()=>null);if(r?.id)setMaintenanceItems(p=>p.map(x=>x.id===r.id?r:x).sort(maintSort));else toastAdd('Failed','red');}} style={{background:A.inputBg,border:`1.5px solid ${A.sep}`,borderRadius:20,padding:'5px 14px',fontSize:12,fontWeight:600,color:A.label3,cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>Done</button>
+                    )}
+                    <button onClick={()=>{setMaintEdit(item);setMaintForm({name:item.name,month:String(item.month),notes:item.notes||''});setMaintDrawer(true);}} style={{background:'none',border:'none',color:A.label4,cursor:'pointer',fontSize:13,padding:'0 4px',flexShrink:0}}>Edit</button>
+                  </div>
+                );
+              })}
+            </Card>
+          )}
+          {maintenanceItems.length===0&&(
+            <>
+              <div style={{fontSize:12,fontWeight:700,color:A.label4,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:8}}>Common tasks</div>
+              <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                {[{name:'AC / furnace service',month:5},{name:'Smoke & CO detector test',month:10},{name:'Water heater flush',month:3},{name:'Gutter cleaning',month:11},{name:'Dryer vent inspection',month:1},{name:'Chimney inspection',month:9}].map(s=>(
+                  <button key={s.name} onClick={()=>{setMaintEdit(null);setMaintForm({name:s.name,month:String(s.month),notes:''});setMaintDrawer(true);}} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px',background:A.cardBg,border:`1px solid ${A.sep}`,borderRadius:A.rSm,cursor:'pointer',textAlign:'left'}}>
+                    <span style={{fontSize:14,color:A.label1,fontWeight:500}}>{s.name}</span>
+                    <span style={{fontSize:12,color:A.label4}}>{MONTH_NAMES[s.month-1]}</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+          <Drawer open={maintDrawer} onClose={()=>{setMaintDrawer(false);setMaintEdit(null);}} title={maintEdit?'Edit Task':'Add Task'}>
+            <FormGroup label="Task name">
+              <div style={{padding:'12px 16px'}}><Inp value={maintForm.name} onChange={e=>setMaintForm(f=>({...f,name:e.target.value}))} placeholder="AC / furnace service"/></div>
+            </FormGroup>
+            <FormGroup label="Month">
+              <div style={{padding:'12px 16px'}}>
+                <select value={maintForm.month} onChange={e=>setMaintForm(f=>({...f,month:e.target.value}))} style={{width:'100%',padding:'10px 12px',borderRadius:A.rXs,border:`1px solid ${A.sep}`,background:A.inputBg,fontSize:15,color:A.label1}}>
+                  {MONTH_NAMES.map((m,i)=><option key={i+1} value={i+1}>{m}</option>)}
+                </select>
+              </div>
+            </FormGroup>
+            <FormGroup label="Notes (optional)">
+              <div style={{padding:'12px 16px'}}><Inp value={maintForm.notes} onChange={e=>setMaintForm(f=>({...f,notes:e.target.value}))} placeholder="Service company, parts needed, etc."/></div>
+            </FormGroup>
+            <div style={{display:'flex',gap:8,marginTop:4}}>
+              <Btn onClick={async()=>{
+                if(!maintForm.name.trim()){toastAdd('Name required','red');return;}
+                const body={name:maintForm.name.trim(),month:parseInt(maintForm.month),notes:maintForm.notes};
+                if(maintEdit){
+                  const r=await api.put(`/api/home/maintenance/${maintEdit.id}`,body).catch(()=>null);
+                  if(!r?.id){toastAdd('Failed to save','red');return;}
+                  setMaintenanceItems(p=>p.map(x=>x.id===r.id?r:x).sort(maintSort));
+                }else{
+                  const r=await api.post('/api/home/maintenance',body).catch(()=>null);
+                  if(!r?.id){toastAdd('Failed to save','red');return;}
+                  setMaintenanceItems(p=>[...p,r].sort(maintSort));
+                }
+                setMaintDrawer(false);setMaintEdit(null);
+                toastAdd(maintEdit?'Task updated':'Task added');
+              }} full>{maintEdit?'Save Changes':'Add Task'}</Btn>
+              {maintEdit&&<Btn variant="ghost" onClick={async()=>{try{await api.del(`/api/home/maintenance/${maintEdit.id}`);setMaintenanceItems(p=>p.filter(x=>x.id!==maintEdit.id));setMaintDrawer(false);setMaintEdit(null);toastAdd('Removed','blue');}catch{toastAdd('Failed to remove','red');}}} full style={{color:A.red}}>Delete</Btn>}
+            </div>
+            {!maintEdit&&<Btn variant="ghost" onClick={()=>setMaintDrawer(false)} full style={{marginTop:8}}>Cancel</Btn>}
+          </Drawer>
+        </>
+      )}
+    </div>
+  );
+}
+
+function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocery,setGrocery,meals,setMeals,icsSources,setIcsSources,inboxCount,setInboxCount,countdowns,setCountdowns,members,setMembers,photos,setPhotos,clockFormat,setClockFormat,weather,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd,setRefreshMs,parseRefreshMs,goals,setGoals,notes,setNotes,polls,setPolls,bookmarks,setBookmarks,quickActions,setQuickActions,setRotationMs,setWifiQrData,darkMode,onDarkMode,packages,setPackages,messages,setMessages,recipes,setRecipes,bills,setBills,payments,setPayments,vehicles,setVehicles,appliances,setAppliances,consumables,setConsumables,pets,setPets,contacts,setContacts,maintenanceItems,setMaintenanceItems,budget,setBudget,isAdmin=false}){
   const isMobile=useIsMobile();
   const [screen,setScreen]=useState('dashboard');
   const {toasts,add:toastAdd}=useToast();
   const [scrolled,setScrolled]=useState(false);
   const [serverUp,setServerUp]=useState(null);
+  const [globalSearch,setGlobalSearch]=useState('');
+  const [searchOpen,setSearchOpen]=useState(false);
+  const searchRef=useRef(null);
+  useEffect(()=>{
+    if(!searchOpen) return;
+    const handler=(e)=>{if(e.key==='Escape'){setSearchOpen(false);setGlobalSearch('');}};
+    window.addEventListener('keydown',handler);
+    return()=>window.removeEventListener('keydown',handler);
+  },[searchOpen]);
+  const searchResults=useMemo(()=>{
+    const q=globalSearch.trim().toLowerCase();
+    if(q.length<2) return null;
+    const match=(str)=>(str||'').toLowerCase().includes(q);
+    const noteMatches=(notes||[]).filter(n=>match(n.title)||match(n.content)).slice(0,4).map(n=>({type:'Notes',label:n.title,screen:'notes'}));
+    const contactMatches=(contacts||[]).filter(c=>match(c.name)||match(c.role)||match(c.phone)).slice(0,4).map(c=>({type:'Contacts',label:c.name,screen:'contacts'}));
+    const recipeMatches=(recipes||[]).filter(r=>match(r.name)).slice(0,4).map(r=>({type:'Recipes',label:r.name,screen:'recipes'}));
+    const choreMatches=(chores||[]).filter(c=>match(c.name)).slice(0,4).map(c=>({type:'Chores',label:c.name,screen:'chores'}));
+    return [...noteMatches,...contactMatches,...recipeMatches,...choreMatches];
+  },[globalSearch,notes,contacts,recipes,chores]);
   useEffect(()=>{
     const ping=()=>api.get('/api/uptime').then(()=>setServerUp(true)).catch(()=>setServerUp(false));
     ping();
@@ -5891,7 +7300,11 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
     {id:'bookmarks',label:'Bookmarks',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><path d="M3.5 2h10a1 1 0 011 1v12l-5.5-3.5L3.5 15V3a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>},
     {id:'polls',label:'Polls',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="2" y="9" width="3" height="6" rx="1" fill="currentColor" opacity=".5"/><rect x="7" y="5" width="3" height="10" rx="1" fill="currentColor" opacity=".7"/><rect x="12" y="2" width="3" height="13" rx="1" fill="currentColor"/></svg>},
     {id:'bills',label:'Bills',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="1.5" y="3" width="14" height="11" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M5 8h4M5 11h2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M11.5 6.5v4M9.5 8.5h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
+    {id:'budget',label:'Budget',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="2" y="9" width="3" height="6" rx="1" fill="currentColor" opacity=".5"/><rect x="7" y="5" width="3" height="10" rx="1" fill="currentColor" opacity=".7"/><rect x="12" y="2" width="3" height="13" rx="1" fill="currentColor"/></svg>},
     {id:'vehicles',label:'Vehicles',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><path d="M2 10l1.5-4.5A1 1 0 014.4 5h8.2a1 1 0 01.9.5L15 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><rect x="1" y="10" width="15" height="4" rx="1.5" stroke="currentColor" strokeWidth="1.5"/><circle cx="4.5" cy="14" r="1.5" fill="currentColor"/><circle cx="12.5" cy="14" r="1.5" fill="currentColor"/></svg>},
+    {id:'home',label:'Home',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><path d="M2 7.5L8.5 2 15 7.5V15a1 1 0 01-1 1H3a1 1 0 01-1-1V7.5z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><path d="M6 16v-6h5v6" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>},
+    {id:'pets',label:'Pets',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><circle cx="5" cy="4" r="1.5" fill="currentColor"/><circle cx="12" cy="4" r="1.5" fill="currentColor"/><circle cx="3" cy="8" r="1.5" fill="currentColor"/><circle cx="14" cy="8" r="1.5" fill="currentColor"/><ellipse cx="8.5" cy="12" rx="4" ry="3.5" stroke="currentColor" strokeWidth="1.5"/></svg>},
+    {id:'contacts',label:'Contacts',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><circle cx="8.5" cy="6" r="3" stroke="currentColor" strokeWidth="1.5"/><path d="M2 15c0-3.31 2.91-6 6.5-6s6.5 2.69 6.5 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
     {id:'packages',label:'Packages',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="2" y="5" width="13" height="10" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M5.5 5V3.5a3 3 0 016 0V5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M2 8.5h13" stroke="currentColor" strokeWidth="1.5"/></svg>,badge:packages?.length||0},
     {id:'messages',label:'Messages',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><path d="M2 3h13a1 1 0 011 1v8a1 1 0 01-1 1H5l-4 3V4a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>,badge:messages?.length||0},
     {id:'recipes',label:'Recipes',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><path d="M3 2h11a1 1 0 011 1v11a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.5"/><path d="M5 6h7M5 9h5M5 12h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
@@ -5900,10 +7313,10 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
   ];
 
   const screens={
-    dashboard:  <DashboardScreen events={events} setEvents={setEvents} chores={chores} grocery={grocery} meals={meals} countdowns={countdowns} weather={weather} clockFormat={clockFormat} quickActions={quickActions}/>,
+    dashboard:  <DashboardScreen events={events} setEvents={setEvents} chores={chores} grocery={grocery} meals={meals} countdowns={countdowns} weather={weather} clockFormat={clockFormat} quickActions={quickActions} bills={bills} payments={payments}/>,
     calendar:   <CalendarScreen events={events} setEvents={setEvents} icsSources={icsSources} toastAdd={toastAdd} members={members} clockFormat={clockFormat}/>,
     chores:     <ChoresScreen chores={chores} setChores={setChores} goals={goals} members={members} toastAdd={toastAdd}/>,
-    grocery:    <GroceryScreen grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} toastAdd={toastAdd}/>,
+    grocery:    <GroceryScreen grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} recipes={recipes} toastAdd={toastAdd}/>,
     countdowns: <CountdownsScreen countdowns={countdowns} setCountdowns={setCountdowns} toastAdd={toastAdd}/>,
     family:     <FamilyScreen members={members} setMembers={setMembers} toastAdd={toastAdd}/>,
     goals:      <GoalsScreen goals={goals} setGoals={setGoals} toastAdd={toastAdd}/>,
@@ -5911,7 +7324,11 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
     bookmarks:  <BookmarksScreen bookmarks={bookmarks} setBookmarks={setBookmarks} toastAdd={toastAdd}/>,
     polls:      <PollsScreen polls={polls} setPolls={setPolls} toastAdd={toastAdd}/>,
     bills:      <BillsScreen bills={bills} setBills={setBills} payments={payments} setPayments={setPayments} toastAdd={toastAdd}/>,
+    budget:     <BudgetScreen budget={budget} setBudget={setBudget} toastAdd={toastAdd}/>,
     vehicles:   <VehiclesScreen vehicles={vehicles} setVehicles={setVehicles} toastAdd={toastAdd}/>,
+    home:       <HomeScreen appliances={appliances} setAppliances={setAppliances} consumables={consumables} setConsumables={setConsumables} maintenanceItems={maintenanceItems} setMaintenanceItems={setMaintenanceItems} toastAdd={toastAdd}/>,
+    pets:       <PetsScreen pets={pets} setPets={setPets} toastAdd={toastAdd}/>,
+    contacts:   <ContactsScreen contacts={contacts} setContacts={setContacts} toastAdd={toastAdd}/>,
     packages:   <PackagesScreen packages={packages} setPackages={setPackages} toastAdd={toastAdd}/>,
     messages:   <MessagesScreen messages={messages} setMessages={setMessages} members={members} toastAdd={toastAdd}/>,
     recipes:    <RecipesScreen recipes={recipes} setRecipes={setRecipes} toastAdd={toastAdd}/>,
@@ -5997,13 +7414,45 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
       </div>
 
       <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
-        <div className="hdr" style={{height:54,background:A.cardBg,borderBottom:`1px solid ${A.sep}`,boxShadow:scrolled?A.shadowSm:'none',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 26px',flexShrink:0}}>
+        <div className="hdr" style={{height:54,background:A.cardBg,borderBottom:`1px solid ${A.sep}`,boxShadow:scrolled?A.shadowSm:'none',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 26px',flexShrink:0,position:'relative'}}>
           <span style={{fontSize:17,fontWeight:700,letterSpacing:'-.03em',color:A.label1}}>{nav.find(n=>n.id===screen)?.label}</span>
           <div style={{display:'flex',alignItems:'center',gap:14}}>
+            <button onClick={()=>{setSearchOpen(s=>!s);setGlobalSearch('');}} style={{width:30,height:30,borderRadius:'50%',background:searchOpen?A.blue:A.inputBg,border:'none',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',color:searchOpen?'#fff':A.label3}}>
+              <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" strokeWidth="1.5"/><path d="M10.5 10.5l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+            </button>
             <button onClick={()=>setScreen('settings')} style={{width:30,height:30,borderRadius:'50%',background:A.inputBg,border:'none',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',color:A.label3}}>
               <svg width="15" height="15" viewBox="0 0 17 17" fill="none"><circle cx="8.5" cy="8.5" r="2.5" stroke="currentColor" strokeWidth="1.5"/><path d="M8.5 1v2M8.5 14v2M1 8.5h2M14 8.5h2M3.05 3.05l1.42 1.42M12.53 12.53l1.42 1.42M12.53 3.05l-1.42 1.42M4.47 12.53l-1.42 1.42" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
             </button>
           </div>
+          {searchOpen&&(
+            <div ref={searchRef} style={{position:'absolute',top:54,right:0,width:380,background:A.cardBg,border:`1px solid ${A.sep}`,borderRadius:A.r,boxShadow:A.shadowLg,zIndex:200,overflow:'hidden'}}>
+              <div style={{padding:'10px 14px',borderBottom:`1px solid ${A.sep}`}}>
+                <Inp value={globalSearch} onChange={e=>setGlobalSearch(e.target.value)} placeholder="Search notes, contacts, recipes, chores…" autoFocus/>
+              </div>
+              {searchResults&&searchResults.length===0&&globalSearch.length>=2&&(
+                <div style={{padding:'18px 16px',fontSize:14,color:A.label4,textAlign:'center'}}>No results</div>
+              )}
+              {searchResults&&searchResults.length>0&&(()=>{
+                const groups={};
+                for(const r of searchResults){if(!groups[r.type]) groups[r.type]=[];groups[r.type].push(r);}
+                return Object.entries(groups).map(([type,items])=>(
+                  <div key={type}>
+                    <div style={{padding:'8px 14px 4px',fontSize:11,fontWeight:700,color:A.label4,textTransform:'uppercase',letterSpacing:'.07em'}}>{type}</div>
+                    {items.map((item,i)=>(
+                      <button key={i} onClick={()=>{setScreen(item.screen);setSearchOpen(false);setGlobalSearch('');}}
+                        style={{display:'block',width:'100%',textAlign:'left',padding:'10px 14px',border:'none',background:'none',cursor:'pointer',fontSize:14,color:A.label1,fontWeight:500,borderTop:`1px solid ${A.sep}`}}
+                        onMouseEnter={e=>e.currentTarget.style.background=A.inputBg}
+                        onMouseLeave={e=>e.currentTarget.style.background='none'}
+                      >{item.label}</button>
+                    ))}
+                  </div>
+                ));
+              })()}
+              {(!searchResults||searchResults.length===0)&&globalSearch.length<2&&(
+                <div style={{padding:'18px 16px',fontSize:14,color:A.label4,textAlign:'center'}}>Type at least 2 characters to search</div>
+              )}
+            </div>
+          )}
         </div>
         <div key={screen} className="screen fade-scroll" onScroll={e=>setScrolled(e.currentTarget.scrollTop>12)} style={{flex:1,overflowY:'auto',padding:screen==='calendar'?0:'28px 32px'}}>
           {screens[screen]}
@@ -6390,6 +7839,12 @@ function App(){
   const [bills,setBills]=useState([]);
   const [payments,setPayments]=useState([]);
   const [vehicles,setVehicles]=useState([]);
+  const [budget,setBudget]=useState({categories:[],entries:[]});
+  const [appliances,setAppliances]=useState([]);
+  const [consumables,setConsumables]=useState([]);
+  const [maintenanceItems,setMaintenanceItems]=useState([]);
+  const [pets,setPets]=useState([]);
+  const [contacts,setContacts]=useState([]);
   const [quickActions,setQuickActions]=useState([]);
   const [photos,setPhotos]=useState([]);
   const [clockFormat,setClockFormat]=useState('12h');
@@ -6466,7 +7921,13 @@ function App(){
       api.get('/api/recipes'),
       api.get('/api/bills'),
       api.get('/api/vehicles'),
-    ]).then(([ev,ch,gr,ml,ics,inb,cd,mb,ph,st,gl,nt,pl,qa,bm,pk,ms,rc,bl,veh])=>{
+      api.get('/api/home/appliances'),
+      api.get('/api/home/consumables'),
+      api.get('/api/home/maintenance'),
+      api.get('/api/pets'),
+      api.get('/api/contacts'),
+      api.get('/api/budget'),
+    ]).then(([ev,ch,gr,ml,ics,inb,cd,mb,ph,st,gl,nt,pl,qa,bm,pk,ms,rc,bl,veh,appl,cons,maint,petsData,contsData,bdg])=>{
       if(ev.status==='fulfilled'&&Array.isArray(ev.value)) setEvents(ev.value);
       if(ch.status==='fulfilled'&&Array.isArray(ch.value)) setChores(ch.value);
       if(gr.status==='fulfilled'&&Array.isArray(gr.value)) setGrocery(gr.value);
@@ -6486,6 +7947,12 @@ function App(){
       if(rc.status==='fulfilled'&&Array.isArray(rc.value)) setRecipes(rc.value);
       if(bl.status==='fulfilled'&&bl.value?.bills){setBills(bl.value.bills);setPayments(bl.value.payments||[]);}
       if(veh.status==='fulfilled'&&Array.isArray(veh.value)) setVehicles(veh.value);
+      if(appl.status==='fulfilled'&&Array.isArray(appl.value)) setAppliances(appl.value);
+      if(cons.status==='fulfilled'&&Array.isArray(cons.value)) setConsumables(cons.value);
+      if(maint.status==='fulfilled'&&Array.isArray(maint.value)) setMaintenanceItems(maint.value);
+      if(petsData.status==='fulfilled'&&Array.isArray(petsData.value)) setPets(petsData.value);
+      if(contsData.status==='fulfilled'&&Array.isArray(contsData.value)) setContacts(contsData.value);
+      if(bdg.status==='fulfilled'&&bdg.value?.categories) setBudget(bdg.value);
       if(st.status==='fulfilled'){
         const s=st.value;
         if(s.clock_format) setClockFormat(s.clock_format);
@@ -6555,8 +8022,8 @@ function App(){
   const goDisplay=()=>{localStorage.setItem('kith_mode','display');setMode('display');};
   const goManage=()=>{localStorage.setItem('kith_mode','manage');setMode('manage');};
   return mode==='display'
-    ?<DisplayMode onManage={goManage} events={events} chores={chores} setChores={setChores} meals={meals} grocery={grocery} setGrocery={setGrocery} countdowns={countdowns} photos={photos} clockFormat={clockFormat} weather={weather} nightModeStart={nightModeStart} nightModeEnd={nightModeEnd} goals={goals} notes={notes} polls={polls} rotationMs={rotationMs} wifiQrData={wifiQrData} quickActions={quickActions} members={members} packages={packages} setPackages={setPackages} messages={messages} setMessages={setMessages}/>
-    :<ManageMode onDisplay={goDisplay} onLogout={handleLogout} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources} inboxCount={inboxCount} setInboxCount={setInboxCount} countdowns={countdowns} setCountdowns={setCountdowns} members={members} setMembers={setMembers} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} weather={weather} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} goals={goals} setGoals={setGoals} notes={notes} setNotes={setNotes} polls={polls} setPolls={setPolls} bookmarks={bookmarks} setBookmarks={setBookmarks} quickActions={quickActions} setQuickActions={setQuickActions} setRotationMs={setRotationMs} setWifiQrData={setWifiQrData} darkMode={darkMode} onDarkMode={handleDarkMode} packages={packages} setPackages={setPackages} messages={messages} setMessages={setMessages} recipes={recipes} setRecipes={setRecipes} bills={bills} setBills={setBills} payments={payments} setPayments={setPayments} vehicles={vehicles} setVehicles={setVehicles} isAdmin={!!auth&&!currentMember&&!kiosk}/>;
+    ?<DisplayMode onManage={goManage} events={events} chores={chores} setChores={setChores} meals={meals} grocery={grocery} setGrocery={setGrocery} countdowns={countdowns} photos={photos} clockFormat={clockFormat} weather={weather} nightModeStart={nightModeStart} nightModeEnd={nightModeEnd} goals={goals} notes={notes} polls={polls} rotationMs={rotationMs} wifiQrData={wifiQrData} quickActions={quickActions} members={members} packages={packages} setPackages={setPackages} messages={messages} setMessages={setMessages} appliances={appliances} consumables={consumables} maintenanceItems={maintenanceItems} pets={pets}/>
+    :<ManageMode onDisplay={goDisplay} onLogout={handleLogout} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources} inboxCount={inboxCount} setInboxCount={setInboxCount} countdowns={countdowns} setCountdowns={setCountdowns} members={members} setMembers={setMembers} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} weather={weather} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} goals={goals} setGoals={setGoals} notes={notes} setNotes={setNotes} polls={polls} setPolls={setPolls} bookmarks={bookmarks} setBookmarks={setBookmarks} quickActions={quickActions} setQuickActions={setQuickActions} setRotationMs={setRotationMs} setWifiQrData={setWifiQrData} darkMode={darkMode} onDarkMode={handleDarkMode} packages={packages} setPackages={setPackages} messages={messages} setMessages={setMessages} recipes={recipes} setRecipes={setRecipes} bills={bills} setBills={setBills} payments={payments} setPayments={setPayments} vehicles={vehicles} setVehicles={setVehicles} appliances={appliances} setAppliances={setAppliances} consumables={consumables} setConsumables={setConsumables} pets={pets} setPets={setPets} contacts={contacts} setContacts={setContacts} maintenanceItems={maintenanceItems} setMaintenanceItems={setMaintenanceItems} budget={budget} setBudget={setBudget} isAdmin={!!auth&&!currentMember&&!kiosk}/>;
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);

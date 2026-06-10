@@ -593,6 +593,25 @@ app.delete('/api/chores/:id', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
+app.get('/api/chores/history', requireAuth, (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+  const rows = db.prepare(`
+    SELECT cc.*, c.name as chore_name
+    FROM chore_completions cc
+    LEFT JOIN chores c ON cc.chore_id = c.id
+    ORDER BY cc.completed_at DESC
+    LIMIT ?
+  `).all(limit);
+  res.json(rows);
+});
+
+app.get('/api/chores/:id/history', requireAuth, (req, res) => {
+  const rows = db.prepare(`
+    SELECT * FROM chore_completions WHERE chore_id=? ORDER BY completed_at DESC LIMIT 20
+  `).all(Number(req.params.id));
+  res.json(rows);
+});
+
 // ── Routes: Grocery ───────────────────────────────────────────────────────────
 app.get('/api/grocery', (req, res) => {
   res.json(db.prepare('SELECT * FROM grocery ORDER BY checked, category, created_at').all());
@@ -603,15 +622,23 @@ app.get('/api/grocery/history', requireAuth, (req, res) => {
 });
 
 app.post('/api/grocery', requireAuth, (req, res) => {
-  const { name, category } = req.body;
+  const { name, category, qty = '' } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'name is required' });
-  const r = db.prepare('INSERT INTO grocery (name,category) VALUES (?,?)').run(name.trim(), category||'Other');
+  const r = db.prepare('INSERT INTO grocery (name,category,qty) VALUES (?,?,?)').run(name.trim(), category||'Other', qty);
   const histName = name.trim().toLowerCase();
   db.prepare('INSERT INTO grocery_history (name,count,last_used) VALUES (?,1,?) ON CONFLICT(name) DO UPDATE SET count=count+1, last_used=?')
     .run(histName, localDate(), localDate());
-  const newItem = { id: r.lastInsertRowid, name: name.trim(), category: category||'Other', checked: 0 };
+  const newItem = { id: r.lastInsertRowid, name: name.trim(), category: category||'Other', qty, checked: 0 };
   broadcastSSE('grocery', { action: 'add', item: newItem });
   res.json(newItem);
+});
+
+app.put('/api/grocery/:id', requireAuth, (req, res) => {
+  const item = db.prepare('SELECT * FROM grocery WHERE id=?').get(req.params.id);
+  if (!item) return res.status(404).json({ error: 'Not found' });
+  const { qty } = req.body || {};
+  db.prepare('UPDATE grocery SET qty=? WHERE id=?').run(qty ?? item.qty, req.params.id);
+  res.json({ ...item, qty: qty ?? item.qty });
 });
 
 app.put('/api/grocery/:id/toggle', requireAuth, (req, res) => {
@@ -635,6 +662,38 @@ app.delete('/api/grocery/:id', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
+app.post('/api/grocery/from-meals', requireAuth, (req, res) => {
+  const { days } = req.body || {};
+  if (!Array.isArray(days) || days.length === 0) return res.status(400).json({ error: 'days required' });
+  const mealRows = days.map(d => db.prepare('SELECT * FROM meals WHERE day=?').get(d)).filter(Boolean);
+  const recipeIds = new Set();
+  for (const m of mealRows) {
+    if (m.dinner_recipe_id) recipeIds.add(m.dinner_recipe_id);
+    if (m.breakfast_recipe_id) recipeIds.add(m.breakfast_recipe_id);
+    if (m.lunch_recipe_id) recipeIds.add(m.lunch_recipe_id);
+  }
+  if (recipeIds.size === 0) return res.json({ added: 0, skipped: 0 });
+  const existing = new Set(db.prepare('SELECT name FROM grocery WHERE checked=0').all().map(r => r.name.toLowerCase()));
+  let added = 0, skipped = 0;
+  const ins = db.prepare("INSERT INTO grocery (name,category) VALUES (?,?)");
+  for (const rid of recipeIds) {
+    const recipe = db.prepare('SELECT * FROM recipes WHERE id=?').get(rid);
+    if (!recipe) { skipped++; continue; }
+    let ingredients;
+    try { ingredients = JSON.parse(recipe.ingredients || '[]'); } catch { ingredients = []; }
+    if (!Array.isArray(ingredients) || ingredients.length === 0) { skipped++; continue; }
+    for (const ing of ingredients) {
+      const name = (typeof ing === 'string' ? ing : (ing.name || ing.ingredient || '')).trim();
+      if (!name) continue;
+      if (existing.has(name.toLowerCase())) { skipped++; continue; }
+      ins.run(name, 'Ingredients');
+      existing.add(name.toLowerCase());
+      added++;
+    }
+  }
+  res.json({ added, skipped });
+});
+
 // ── Routes: Meals ─────────────────────────────────────────────────────────────
 app.get('/api/meals', (req, res) => {
   const order = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
@@ -648,7 +707,10 @@ app.put('/api/meals/:day', requireAuth, (req, res) => {
   const meal      = req.body?.meal      ?? existing.meal      ?? '';
   const breakfast = req.body?.breakfast ?? existing.breakfast ?? '';
   const lunch     = req.body?.lunch     ?? existing.lunch     ?? '';
-  db.prepare('INSERT OR REPLACE INTO meals (day,meal,breakfast,lunch) VALUES (?,?,?,?)').run(req.params.day, meal, breakfast, lunch);
+  const dinner_recipe_id    = req.body?.dinner_recipe_id    !== undefined ? (req.body.dinner_recipe_id||null)    : (existing.dinner_recipe_id||null);
+  const breakfast_recipe_id = req.body?.breakfast_recipe_id !== undefined ? (req.body.breakfast_recipe_id||null) : (existing.breakfast_recipe_id||null);
+  const lunch_recipe_id     = req.body?.lunch_recipe_id     !== undefined ? (req.body.lunch_recipe_id||null)     : (existing.lunch_recipe_id||null);
+  db.prepare('INSERT OR REPLACE INTO meals (day,meal,breakfast,lunch,dinner_recipe_id,breakfast_recipe_id,lunch_recipe_id) VALUES (?,?,?,?,?,?,?)').run(req.params.day, meal, breakfast, lunch, dinner_recipe_id, breakfast_recipe_id, lunch_recipe_id);
   res.json({ ok: true });
 });
 
@@ -761,6 +823,52 @@ app.post('/api/ics/sync', requireAuth, async (req, res) => {
     try { total += await syncICSSource(src); } catch (e) { /* skip */ }
   }
   res.json({ ok: true, total_events: total });
+});
+
+app.get('/api/ics/export', (req, res) => {
+  const storedToken = db.prepare("SELECT value FROM settings WHERE key='ics_export_token'").get()?.value || '';
+  if (!storedToken || req.query.token !== storedToken) return res.status(401).send('Unauthorized');
+  const events = db.prepare("SELECT * FROM events WHERE source != 'bill' ORDER BY date").all();
+  const esc = s => (s || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
+  const fmtDt = (dateStr, timeStr) => {
+    if (!timeStr || timeStr === 'All day') return `DTSTART;VALUE=DATE:${dateStr.replace(/-/g, '')}`;
+    const [h, m] = timeStr.split(':').map(Number);
+    const d = new Date(`${dateStr}T${String(h).padStart(2,'0')}:${String(m||0).padStart(2,'0')}:00`);
+    return `DTSTART:${d.toISOString().replace(/[-:]/g,'').split('.')[0]}Z`;
+  };
+  const fmtDtEnd = (dateStr, timeStr, duration) => {
+    if (!timeStr || timeStr === 'All day') {
+      const d = new Date(dateStr + 'T12:00:00');
+      d.setDate(d.getDate() + 1);
+      return `DTEND;VALUE=DATE:${localDate(d).replace(/-/g, '')}`;
+    }
+    const [h, m] = timeStr.split(':').map(Number);
+    const durH = parseInt(duration) || 1;
+    const d = new Date(`${dateStr}T${String(h).padStart(2,'0')}:${String(m||0).padStart(2,'0')}:00`);
+    d.setHours(d.getHours() + durH);
+    return `DTEND:${d.toISOString().replace(/[-:]/g,'').split('.')[0]}Z`;
+  };
+  let cal = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Kith//Family Dashboard//EN',
+    'CALSCALE:GREGORIAN',
+    'X-WR-CALNAME:Kith',
+  ];
+  for (const ev of events) {
+    const stamp = (ev.created_at || new Date().toISOString()).replace(/[-:]/g,'').replace(' ','T').split('.')[0] + 'Z';
+    cal.push('BEGIN:VEVENT');
+    cal.push(fmtDt(ev.date, ev.time));
+    cal.push(fmtDtEnd(ev.date, ev.time, ev.duration));
+    cal.push(`SUMMARY:${esc(ev.title)}`);
+    if (ev.notes) cal.push(`DESCRIPTION:${esc(ev.notes)}`);
+    cal.push(`UID:${ev.id}@kith`);
+    cal.push(`DTSTAMP:${stamp}`);
+    cal.push('END:VEVENT');
+  }
+  cal.push('END:VCALENDAR');
+  res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
+  res.send(cal.join('\r\n'));
 });
 
 // ── Routes: Push ──────────────────────────────────────────────────────────────
@@ -1065,6 +1173,43 @@ cron.schedule('0 8 * * *', async () => {
   });
 });
 
+// Home care reminders at 9am — consumables, maintenance, pets, vehicles
+async function sendHomeReminders() {
+  const subs = db.prepare('SELECT * FROM push_subscriptions').all();
+  if (!subs.length) return;
+  const items = [];
+  for (const c of db.prepare('SELECT * FROM home_consumables').all().map(computeConsumable)) {
+    if (c.status === 'overdue' || c.status === 'due_soon')
+      items.push(c.days_remaining < 0 ? `${c.name} (${Math.abs(c.days_remaining)}d overdue)` : `${c.name} (due soon)`);
+  }
+  for (const m of db.prepare('SELECT * FROM home_maintenance').all().map(computeMaintenance)) {
+    if (m.status === 'overdue') items.push(`${m.name} (overdue)`);
+    else if (m.status === 'due_this_month') items.push(`${m.name} (this month)`);
+  }
+  const petRecs = db.prepare('SELECT pr.*, p.name as pet_name FROM pet_records pr JOIN pets p ON pr.pet_id=p.id').all().map(computePetRecord);
+  for (const r of petRecs) {
+    if (r.status === 'overdue') items.push(`${r.name} for ${r.pet_name} (overdue)`);
+    else if (r.status === 'due_soon' && r.days_remaining <= 14) items.push(`${r.name} for ${r.pet_name} (${r.days_remaining}d)`);
+  }
+  const svcs = db.prepare(`SELECT vs.*, v.name as vehicle_name FROM vehicle_services vs JOIN vehicles v ON vs.vehicle_id=v.id WHERE vs.next_due_date!=''`).all();
+  for (const s of svcs) {
+    const days = homeDaysUntil(s.next_due_date);
+    if (days <= 14) items.push(days < 0 ? `${s.name} — ${s.vehicle_name} (${Math.abs(days)}d overdue)` : `${s.name} — ${s.vehicle_name} (${days}d)`);
+  }
+  if (!items.length) return;
+  await sendPushToAll({
+    title: 'Kith — Home Care',
+    body: items.slice(0, 5).join(' · ') + (items.length > 5 ? ` +${items.length - 5} more` : ''),
+    tag: 'home-reminders',
+  });
+}
+cron.schedule('0 9 * * *', sendHomeReminders);
+
+app.post('/api/reminders/test', requireAdmin, async (req, res) => {
+  await sendHomeReminders();
+  res.json({ ok: true });
+});
+
 // Evening nudge at 6pm for anything still uncompleted
 cron.schedule('0 18 * * *', async () => {
   updateChoreStatuses();
@@ -1160,10 +1305,22 @@ app.delete('/api/members/:id', requireAdmin, (req, res) => {
 app.put('/api/members/:id', requireAdmin, (req, res) => {
   const m = db.prepare('SELECT * FROM family_members WHERE id=?').get(Number(req.params.id));
   if (!m) return res.status(404).json({ error: 'Not found' });
-  const name  = req.body?.name?.trim() || m.name;
-  const color = req.body?.color || m.color;
+  const name     = req.body?.name?.trim() || m.name;
+  const color    = req.body?.color || m.color;
+  const birthday = req.body?.birthday !== undefined ? (req.body.birthday || '') : (m.birthday || '');
   const initials = name.split(/\s+/).map(w => w[0] || '').join('').toUpperCase().slice(0, 2) || m.initials;
-  db.prepare('UPDATE family_members SET name=?,color=?,initials=? WHERE id=?').run(name, color, initials, m.id);
+  db.prepare('UPDATE family_members SET name=?,color=?,initials=?,birthday=? WHERE id=?').run(name, color, initials, birthday, m.id);
+  // Update birthday event
+  db.prepare("DELETE FROM events WHERE source='birthday' AND member_id=?").run(m.id);
+  if (birthday && /^\d{4}-\d{2}-\d{2}$/.test(birthday)) {
+    const [, bMonth, bDay] = birthday.split('-').map(Number);
+    const ins = db.prepare('INSERT INTO events (title,date,time,color,source,member_id,calendar,duration,recurring_rule) VALUES (?,?,?,?,?,?,?,?,?)');
+    const today = new Date();
+    for (let y = today.getFullYear(); y <= today.getFullYear() + 2; y++) {
+      const d = new Date(y, bMonth - 1, bDay);
+      ins.run(`${name}'s Birthday`, localDate(d), 'All day', color, 'birthday', m.id, 'kith', '1h', 'Annually');
+    }
+  }
   res.json(db.prepare('SELECT * FROM family_members WHERE id=?').get(m.id));
 });
 
@@ -3057,6 +3214,408 @@ app.post('/api/vehicles/:id/services/:sid/done', requireAuth, (req, res) => {
     .get(doneDate, parseInt(miles)||0, nextDue, sid);
   broadcastSSE('vehicles', { action: 'reload' });
   res.json(row);
+});
+
+app.get('/api/vehicles/:id/mileage', requireAuth, (req, res) => {
+  res.json(db.prepare('SELECT * FROM vehicle_mileage WHERE vehicle_id=? ORDER BY date DESC, id DESC').all(Number(req.params.id)));
+});
+
+app.post('/api/vehicles/:id/mileage', requireAuth, (req, res) => {
+  const { miles, date, note='' } = req.body || {};
+  if (!miles || isNaN(Number(miles))) return res.status(400).json({ error: 'miles required' });
+  const r = db.prepare('INSERT INTO vehicle_mileage (vehicle_id,miles,date,note) VALUES (?,?,?,?)').run(Number(req.params.id), Number(miles), date || localDate(), note);
+  res.json(db.prepare('SELECT * FROM vehicle_mileage WHERE id=?').get(r.lastInsertRowid));
+});
+
+app.delete('/api/vehicles/:id/mileage/:mid', requireAuth, (req, res) => {
+  db.prepare('DELETE FROM vehicle_mileage WHERE id=? AND vehicle_id=?').run(Number(req.params.mid), Number(req.params.id));
+  res.json({ ok: true });
+});
+
+// ── Routes: Home ──────────────────────────────────────────────────────────────
+
+function homeDaysUntil(dateStr) {
+  if (!dateStr) return null;
+  const t = new Date(); t.setHours(0,0,0,0);
+  return Math.round((new Date(dateStr + 'T00:00:00') - t) / 86400000);
+}
+
+function computeConsumable(item) {
+  if (!item.last_replaced || !item.interval_days) {
+    return { ...item, next_due: null, days_remaining: null, status: 'ok' };
+  }
+  const next = new Date(item.last_replaced + 'T00:00:00');
+  next.setDate(next.getDate() + Number(item.interval_days));
+  const nextStr = localDate(next);
+  const days = homeDaysUntil(nextStr);
+  return { ...item, next_due: nextStr, days_remaining: days, status: days < 0 ? 'overdue' : days <= 7 ? 'due_soon' : 'ok' };
+}
+
+app.get('/api/home/appliances', (req, res) => {
+  const rows = db.prepare('SELECT * FROM home_appliances ORDER BY CASE WHEN warranty_date=\'\' THEN 1 ELSE 0 END, warranty_date, name').all();
+  res.json(rows);
+});
+
+app.post('/api/home/appliances', requireAuth, (req, res) => {
+  const { name, location='', purchase_date='', warranty_date='', notes='' } = req.body || {};
+  if (!name?.trim()) return res.status(400).json({ error: 'name is required' });
+  const r = db.prepare('INSERT INTO home_appliances (name,location,purchase_date,warranty_date,notes) VALUES (?,?,?,?,?)').run(name.trim(), location, purchase_date, warranty_date, notes);
+  res.json(db.prepare('SELECT * FROM home_appliances WHERE id=?').get(r.lastInsertRowid));
+});
+
+app.put('/api/home/appliances/:id', requireAuth, (req, res) => {
+  const a = db.prepare('SELECT * FROM home_appliances WHERE id=?').get(Number(req.params.id));
+  if (!a) return res.status(404).json({ error: 'Not found' });
+  const { name, location, purchase_date, warranty_date, notes } = req.body || {};
+  db.prepare('UPDATE home_appliances SET name=?,location=?,purchase_date=?,warranty_date=?,notes=? WHERE id=?')
+    .run(name?.trim() || a.name, location ?? a.location, purchase_date ?? a.purchase_date, warranty_date ?? a.warranty_date, notes ?? a.notes, a.id);
+  res.json(db.prepare('SELECT * FROM home_appliances WHERE id=?').get(a.id));
+});
+
+app.delete('/api/home/appliances/:id', requireAuth, (req, res) => {
+  db.prepare('DELETE FROM home_appliances WHERE id=?').run(Number(req.params.id));
+  res.json({ ok: true });
+});
+
+app.get('/api/home/consumables', (req, res) => {
+  const rows = db.prepare('SELECT * FROM home_consumables').all().map(computeConsumable);
+  rows.sort((a, b) => {
+    if (a.days_remaining === null && b.days_remaining === null) return 0;
+    if (a.days_remaining === null) return 1;
+    if (b.days_remaining === null) return -1;
+    return a.days_remaining - b.days_remaining;
+  });
+  res.json(rows);
+});
+
+app.post('/api/home/consumables', requireAuth, (req, res) => {
+  const { name, location='', interval_days, last_replaced='', notes='' } = req.body || {};
+  if (!name?.trim()) return res.status(400).json({ error: 'name is required' });
+  if (!interval_days || Number(interval_days) < 1) return res.status(400).json({ error: 'interval_days must be at least 1' });
+  const r = db.prepare('INSERT INTO home_consumables (name,location,interval_days,last_replaced,notes) VALUES (?,?,?,?,?)').run(name.trim(), location, Number(interval_days), last_replaced, notes);
+  res.json(computeConsumable(db.prepare('SELECT * FROM home_consumables WHERE id=?').get(r.lastInsertRowid)));
+});
+
+app.put('/api/home/consumables/:id', requireAuth, (req, res) => {
+  const c = db.prepare('SELECT * FROM home_consumables WHERE id=?').get(Number(req.params.id));
+  if (!c) return res.status(404).json({ error: 'Not found' });
+  const { name, location, interval_days, last_replaced, notes } = req.body || {};
+  db.prepare('UPDATE home_consumables SET name=?,location=?,interval_days=?,last_replaced=?,notes=? WHERE id=?')
+    .run(name?.trim() || c.name, location ?? c.location, interval_days != null ? Number(interval_days) : c.interval_days, last_replaced ?? c.last_replaced, notes ?? c.notes, c.id);
+  res.json(computeConsumable(db.prepare('SELECT * FROM home_consumables WHERE id=?').get(c.id)));
+});
+
+app.delete('/api/home/consumables/:id', requireAuth, (req, res) => {
+  db.prepare('DELETE FROM home_consumables WHERE id=?').run(Number(req.params.id));
+  res.json({ ok: true });
+});
+
+app.post('/api/home/consumables/:id/replaced', requireAuth, (req, res) => {
+  const c = db.prepare('SELECT * FROM home_consumables WHERE id=?').get(Number(req.params.id));
+  if (!c) return res.status(404).json({ error: 'Not found' });
+  db.prepare('UPDATE home_consumables SET last_replaced=? WHERE id=?').run(localDate(), c.id);
+  res.json(computeConsumable(db.prepare('SELECT * FROM home_consumables WHERE id=?').get(c.id)));
+});
+
+// ── Home: Maintenance ─────────────────────────────────────────────────────────
+
+function computeMaintenance(item) {
+  const today = new Date();
+  const thisYear = today.getFullYear();
+  const thisMonth = today.getMonth() + 1;
+  const doneThisYear = item.last_done && item.last_done.startsWith(String(thisYear));
+  let status, nextDue;
+  if (doneThisYear) {
+    status = 'done_this_year';
+    nextDue = `${thisYear + 1}-${String(item.month).padStart(2, '0')}-01`;
+  } else if (item.month < thisMonth) {
+    status = 'overdue';
+    nextDue = `${thisYear}-${String(item.month).padStart(2, '0')}-01`;
+  } else if (item.month === thisMonth) {
+    status = 'due_this_month';
+    nextDue = `${thisYear}-${String(item.month).padStart(2, '0')}-01`;
+  } else {
+    status = 'upcoming';
+    nextDue = `${thisYear}-${String(item.month).padStart(2, '0')}-01`;
+  }
+  return { ...item, next_due: nextDue, days_remaining: homeDaysUntil(nextDue), status };
+}
+
+app.get('/api/home/maintenance', (req, res) => {
+  const statusOrder = { overdue: 0, due_this_month: 1, upcoming: 2, done_this_year: 3 };
+  const rows = db.prepare('SELECT * FROM home_maintenance ORDER BY month').all().map(computeMaintenance);
+  rows.sort((a, b) => (statusOrder[a.status] ?? 4) - (statusOrder[b.status] ?? 4) || a.month - b.month);
+  res.json(rows);
+});
+
+app.post('/api/home/maintenance', requireAuth, (req, res) => {
+  const { name, month, notes = '' } = req.body || {};
+  if (!name?.trim()) return res.status(400).json({ error: 'name is required' });
+  const m = parseInt(month);
+  if (!m || m < 1 || m > 12) return res.status(400).json({ error: 'month must be 1–12' });
+  const r = db.prepare('INSERT INTO home_maintenance (name,month,notes) VALUES (?,?,?)').run(name.trim(), m, notes);
+  res.json(computeMaintenance(db.prepare('SELECT * FROM home_maintenance WHERE id=?').get(r.lastInsertRowid)));
+});
+
+app.put('/api/home/maintenance/:id', requireAuth, (req, res) => {
+  const item = db.prepare('SELECT * FROM home_maintenance WHERE id=?').get(Number(req.params.id));
+  if (!item) return res.status(404).json({ error: 'Not found' });
+  const { name, month, notes } = req.body || {};
+  const m = month != null ? parseInt(month) : item.month;
+  if (m < 1 || m > 12) return res.status(400).json({ error: 'month must be 1–12' });
+  db.prepare('UPDATE home_maintenance SET name=?,month=?,notes=? WHERE id=?').run(name?.trim() || item.name, m, notes ?? item.notes, item.id);
+  res.json(computeMaintenance(db.prepare('SELECT * FROM home_maintenance WHERE id=?').get(item.id)));
+});
+
+app.delete('/api/home/maintenance/:id', requireAuth, (req, res) => {
+  db.prepare('DELETE FROM home_maintenance WHERE id=?').run(Number(req.params.id));
+  res.json({ ok: true });
+});
+
+app.post('/api/home/maintenance/:id/done', requireAuth, (req, res) => {
+  const item = db.prepare('SELECT * FROM home_maintenance WHERE id=?').get(Number(req.params.id));
+  if (!item) return res.status(404).json({ error: 'Not found' });
+  db.prepare('UPDATE home_maintenance SET last_done=? WHERE id=?').run(localDate(), item.id);
+  res.json(computeMaintenance(db.prepare('SELECT * FROM home_maintenance WHERE id=?').get(item.id)));
+});
+
+// ── Pets ──────────────────────────────────────────────────────────────────────
+
+function computePetRecord(r) {
+  let next_due = r.next_due || '';
+  if (r.interval_days > 0 && r.last_done) {
+    const next = new Date(r.last_done + 'T00:00:00');
+    next.setDate(next.getDate() + Number(r.interval_days));
+    next_due = localDate(next);
+  }
+  if (!next_due) return { ...r, next_due: '', days_remaining: null, status: 'ok' };
+  const days = homeDaysUntil(next_due);
+  return { ...r, next_due, days_remaining: days, status: days < 0 ? 'overdue' : days <= 30 ? 'due_soon' : 'ok' };
+}
+
+app.get('/api/pets', requireAuth, (req, res) => {
+  const pets = db.prepare('SELECT * FROM pets ORDER BY name').all();
+  const getRecords = db.prepare('SELECT * FROM pet_records WHERE pet_id=? ORDER BY type, name');
+  res.json(pets.map(p => ({ ...p, records: getRecords.all(p.id).map(computePetRecord) })));
+});
+
+app.post('/api/pets', requireAuth, (req, res) => {
+  const { name, species='', breed='', birthday='', vet_name='', vet_phone='', color='#FF9500', notes='' } = req.body || {};
+  if (!name?.trim()) return res.status(400).json({ error: 'name is required' });
+  const r = db.prepare('INSERT INTO pets (name,species,breed,birthday,vet_name,vet_phone,color,notes) VALUES (?,?,?,?,?,?,?,?)').run(name.trim(), species, breed, birthday, vet_name, vet_phone, color, notes);
+  res.json({ ...db.prepare('SELECT * FROM pets WHERE id=?').get(r.lastInsertRowid), records: [] });
+});
+
+app.put('/api/pets/:id', requireAuth, (req, res) => {
+  const p = db.prepare('SELECT * FROM pets WHERE id=?').get(Number(req.params.id));
+  if (!p) return res.status(404).json({ error: 'Not found' });
+  const { name, species, breed, birthday, vet_name, vet_phone, color, notes } = req.body || {};
+  db.prepare('UPDATE pets SET name=?,species=?,breed=?,birthday=?,vet_name=?,vet_phone=?,color=?,notes=? WHERE id=?')
+    .run(name?.trim()||p.name, species??p.species, breed??p.breed, birthday??p.birthday, vet_name??p.vet_name, vet_phone??p.vet_phone, color??p.color, notes??p.notes, p.id);
+  res.json(db.prepare('SELECT * FROM pets WHERE id=?').get(p.id));
+});
+
+app.delete('/api/pets/:id', requireAuth, (req, res) => {
+  db.prepare('DELETE FROM pet_records WHERE pet_id=?').run(Number(req.params.id));
+  db.prepare('DELETE FROM pets WHERE id=?').run(Number(req.params.id));
+  res.json({ ok: true });
+});
+
+app.post('/api/pets/:id/records', requireAuth, (req, res) => {
+  const { type='vaccine', name, last_done='', interval_days=0, next_due='', notes='' } = req.body || {};
+  if (!name?.trim()) return res.status(400).json({ error: 'name is required' });
+  const r = db.prepare('INSERT INTO pet_records (pet_id,type,name,last_done,interval_days,next_due,notes) VALUES (?,?,?,?,?,?,?)').run(Number(req.params.id), type, name.trim(), last_done, Number(interval_days)||0, next_due, notes);
+  res.json(computePetRecord(db.prepare('SELECT * FROM pet_records WHERE id=?').get(r.lastInsertRowid)));
+});
+
+app.put('/api/pets/:id/records/:rid', requireAuth, (req, res) => {
+  const r = db.prepare('SELECT * FROM pet_records WHERE id=? AND pet_id=?').get(Number(req.params.rid), Number(req.params.id));
+  if (!r) return res.status(404).json({ error: 'Not found' });
+  const { type, name, last_done, interval_days, next_due, notes } = req.body || {};
+  db.prepare('UPDATE pet_records SET type=?,name=?,last_done=?,interval_days=?,next_due=?,notes=? WHERE id=?')
+    .run(type??r.type, name?.trim()||r.name, last_done??r.last_done, interval_days!=null?Number(interval_days):r.interval_days, next_due??r.next_due, notes??r.notes, r.id);
+  res.json(computePetRecord(db.prepare('SELECT * FROM pet_records WHERE id=?').get(r.id)));
+});
+
+app.delete('/api/pets/:id/records/:rid', requireAuth, (req, res) => {
+  db.prepare('DELETE FROM pet_records WHERE id=? AND pet_id=?').run(Number(req.params.rid), Number(req.params.id));
+  res.json({ ok: true });
+});
+
+app.post('/api/pets/:id/records/:rid/done', requireAuth, (req, res) => {
+  const r = db.prepare('SELECT * FROM pet_records WHERE id=? AND pet_id=?').get(Number(req.params.rid), Number(req.params.id));
+  if (!r) return res.status(404).json({ error: 'Not found' });
+  db.prepare('UPDATE pet_records SET last_done=? WHERE id=?').run(localDate(), r.id);
+  res.json(computePetRecord(db.prepare('SELECT * FROM pet_records WHERE id=?').get(r.id)));
+});
+
+// ── Contacts ──────────────────────────────────────────────────────────────────
+
+app.get('/api/contacts', requireAuth, (req, res) => {
+  res.json(db.prepare('SELECT * FROM contacts ORDER BY category, name').all());
+});
+
+app.post('/api/contacts', requireAuth, (req, res) => {
+  const { name, role='', category='Other', phone='', email='', notes='' } = req.body || {};
+  if (!name?.trim()) return res.status(400).json({ error: 'name is required' });
+  const r = db.prepare('INSERT INTO contacts (name,role,category,phone,email,notes) VALUES (?,?,?,?,?,?)').run(name.trim(), role, category, phone, email, notes);
+  res.json(db.prepare('SELECT * FROM contacts WHERE id=?').get(r.lastInsertRowid));
+});
+
+app.put('/api/contacts/:id', requireAuth, (req, res) => {
+  const c = db.prepare('SELECT * FROM contacts WHERE id=?').get(Number(req.params.id));
+  if (!c) return res.status(404).json({ error: 'Not found' });
+  const { name, role, category, phone, email, notes } = req.body || {};
+  db.prepare('UPDATE contacts SET name=?,role=?,category=?,phone=?,email=?,notes=? WHERE id=?')
+    .run(name?.trim()||c.name, role??c.role, category??c.category, phone??c.phone, email??c.email, notes??c.notes, c.id);
+  res.json(db.prepare('SELECT * FROM contacts WHERE id=?').get(c.id));
+});
+
+app.delete('/api/contacts/:id', requireAuth, (req, res) => {
+  db.prepare('DELETE FROM contacts WHERE id=?').run(Number(req.params.id));
+  res.json({ ok: true });
+});
+
+// ── Routes: Budget ────────────────────────────────────────────────────────────
+
+app.get('/api/budget', requireAuth, (req, res) => {
+  const categories = db.prepare('SELECT * FROM budget_categories ORDER BY name').all();
+  const now = new Date();
+  const monthStart = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
+  const monthEnd = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-31`;
+  const entries = db.prepare('SELECT * FROM budget_entries WHERE date >= ? AND date <= ? ORDER BY date DESC').all(monthStart, monthEnd);
+  res.json({ categories, entries });
+});
+
+app.post('/api/budget/categories', requireAuth, (req, res) => {
+  const { name, monthly_budget=0, color='#3B82F6' } = req.body || {};
+  if (!name?.trim()) return res.status(400).json({ error: 'name required' });
+  const r = db.prepare('INSERT INTO budget_categories (name,monthly_budget,color) VALUES (?,?,?)').run(name.trim(), Number(monthly_budget)||0, color);
+  res.json(db.prepare('SELECT * FROM budget_categories WHERE id=?').get(r.lastInsertRowid));
+});
+
+app.put('/api/budget/categories/:id', requireAuth, (req, res) => {
+  const c = db.prepare('SELECT * FROM budget_categories WHERE id=?').get(Number(req.params.id));
+  if (!c) return res.status(404).json({ error: 'Not found' });
+  const { name, monthly_budget, color } = req.body || {};
+  db.prepare('UPDATE budget_categories SET name=?,monthly_budget=?,color=? WHERE id=?')
+    .run(name?.trim()||c.name, monthly_budget!=null?Number(monthly_budget):c.monthly_budget, color??c.color, c.id);
+  res.json(db.prepare('SELECT * FROM budget_categories WHERE id=?').get(c.id));
+});
+
+app.delete('/api/budget/categories/:id', requireAuth, (req, res) => {
+  db.prepare('DELETE FROM budget_entries WHERE category_id=?').run(Number(req.params.id));
+  db.prepare('DELETE FROM budget_categories WHERE id=?').run(Number(req.params.id));
+  res.json({ ok: true });
+});
+
+app.post('/api/budget/entries', requireAuth, (req, res) => {
+  const { category_id, amount, note='', date } = req.body || {};
+  if (!category_id || !amount || isNaN(Number(amount))) return res.status(400).json({ error: 'category_id and amount required' });
+  const r = db.prepare('INSERT INTO budget_entries (category_id,amount,note,date) VALUES (?,?,?,?)').run(Number(category_id), Number(amount), note, date || localDate());
+  res.json(db.prepare('SELECT * FROM budget_entries WHERE id=?').get(r.lastInsertRowid));
+});
+
+app.delete('/api/budget/entries/:id', requireAuth, (req, res) => {
+  db.prepare('DELETE FROM budget_entries WHERE id=?').run(Number(req.params.id));
+  res.json({ ok: true });
+});
+
+function parseCSV(text) {
+  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter(l => l.trim());
+  const parseRow = line => {
+    const cols = [];
+    let cur = '', inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (c === '"') { if (inQ && line[i+1] === '"') { cur += '"'; i++; } else inQ = !inQ; }
+      else if (c === ',' && !inQ) { cols.push(cur); cur = ''; }
+      else cur += c;
+    }
+    cols.push(cur);
+    return cols.map(s => s.trim());
+  };
+  if (!lines.length) return { headers: [], rows: [] };
+  const headers = parseRow(lines[0]);
+  const rows = lines.slice(1).map(l => parseRow(l));
+  return { headers, rows };
+}
+
+function detectFormat(headers) {
+  const h = headers.map(s => s.toLowerCase());
+  if (h.some(s => s.includes('transaction date') || s.includes('post date'))) return 'chase';
+  if (h.some(s => s === 'charge' || s.includes('debit'))) return 'amex';
+  return 'generic';
+}
+
+function normalizeRows(headers, rows, format) {
+  const h = headers.map(s => s.toLowerCase());
+  const idx = name => h.findIndex(s => s.includes(name));
+  let dateIdx, descIdx, amtIdx;
+  if (format === 'chase') {
+    dateIdx = idx('transaction date') !== -1 ? idx('transaction date') : idx('post date');
+    descIdx = idx('description');
+    amtIdx  = idx('amount');
+  } else if (format === 'amex') {
+    dateIdx = idx('date');
+    descIdx = idx('description');
+    amtIdx  = idx('amount') !== -1 ? idx('amount') : idx('charge');
+  } else {
+    dateIdx = h.findIndex(s => s.includes('date'));
+    descIdx = h.findIndex(s => s.includes('desc') || s.includes('memo') || s.includes('name'));
+    amtIdx  = h.findIndex(s => s.includes('amount') || s.includes('charge') || s.includes('debit'));
+    if (descIdx === -1) descIdx = (dateIdx === 0) ? 1 : 0;
+  }
+  const today = new Date();
+  const curMonth = today.getMonth();
+  const curYear = today.getFullYear();
+  const out = [];
+  for (const row of rows) {
+    if (!row.length || row.every(c => !c)) continue;
+    const rawDate = dateIdx >= 0 ? row[dateIdx] : '';
+    const rawAmt  = amtIdx >= 0 ? row[amtIdx] : '';
+    const rawDesc = descIdx >= 0 ? row[descIdx] : '';
+    if (!rawDate || !rawAmt) continue;
+    // Parse date — handle MM/DD/YYYY and YYYY-MM-DD
+    let d;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) d = new Date(rawDate + 'T12:00:00');
+    else {
+      const parts = rawDate.split(/[\/\-]/);
+      if (parts.length === 3) {
+        if (parts[0].length === 4) d = new Date(`${parts[0]}-${parts[1].padStart(2,'0')}-${parts[2].padStart(2,'0')}T12:00:00`);
+        else d = new Date(`${parts[2]}-${parts[0].padStart(2,'0')}-${parts[1].padStart(2,'0')}T12:00:00`);
+      }
+    }
+    if (!d || isNaN(d)) continue;
+    if (d.getMonth() !== curMonth || d.getFullYear() !== curYear) continue;
+    const dateStr = localDate(d);
+    let amt = parseFloat(rawAmt.replace(/[$,\s]/g, ''));
+    if (isNaN(amt) || amt === 0) continue;
+    // Negative = spending for all formats; positive = credit/payment (skip)
+    if (amt > 0) continue;
+    amt = Math.abs(amt);
+    out.push({ date: dateStr, note: rawDesc, amount: amt });
+  }
+  return out;
+}
+
+app.post('/api/budget/import/preview', requireAdmin, (req, res) => {
+  const { csv } = req.body || {};
+  if (!csv) return res.status(400).json({ error: 'csv required' });
+  const { headers, rows } = parseCSV(csv);
+  if (!headers.length) return res.status(400).json({ error: 'Empty CSV' });
+  const detected = detectFormat(headers);
+  const normalized = normalizeRows(headers, rows, detected);
+  res.json({ headers, sample: normalized.slice(0, 5), all: normalized, detected, total: normalized.length });
+});
+
+app.post('/api/budget/import/confirm', requireAdmin, (req, res) => {
+  const { rows, category_id } = req.body || {};
+  if (!Array.isArray(rows) || !category_id) return res.status(400).json({ error: 'rows and category_id required' });
+  const ins = db.prepare('INSERT INTO budget_entries (category_id,amount,note,date) VALUES (?,?,?,?)');
+  const insert = db.transaction(list => { for (const r of list) ins.run(Number(category_id), Number(r.amount), r.note||'', r.date); });
+  insert(rows);
+  res.json({ imported: rows.length });
 });
 
 // ── Routes: Messages ──────────────────────────────────────────────────────────

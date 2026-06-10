@@ -256,6 +256,7 @@ CREATE TABLE IF NOT EXISTS vehicle_services (
 
 // migrations — safe to run on every boot
 try { db.exec('ALTER TABLE events ADD COLUMN member_id INTEGER'); } catch {}
+try { db.exec("ALTER TABLE family_members ADD COLUMN birthday TEXT DEFAULT ''"); } catch {}
 try { db.exec(`ALTER TABLE events ADD COLUMN end_time TEXT DEFAULT ''`); } catch {}
 try { db.exec(`ALTER TABLE events ADD COLUMN recurring_rule TEXT DEFAULT ''`); } catch {}
 try { db.exec('ALTER TABLE family_members ADD COLUMN pin_hash TEXT'); } catch {}
@@ -269,12 +270,98 @@ try { db.exec('ALTER TABLE chores ADD COLUMN streak INTEGER DEFAULT 0'); } catch
 try { db.exec("ALTER TABLE family_members ADD COLUMN reward TEXT DEFAULT ''"); } catch {}
 try { db.exec("ALTER TABLE meals ADD COLUMN breakfast TEXT DEFAULT ''"); } catch {}
 try { db.exec("ALTER TABLE vehicles ADD COLUMN vin TEXT DEFAULT ''"); } catch {}
+try { db.exec("ALTER TABLE grocery ADD COLUMN qty TEXT DEFAULT ''"); } catch {}
 try { db.exec("ALTER TABLE meals ADD COLUMN lunch TEXT DEFAULT ''"); } catch {}
+try { db.exec("ALTER TABLE meals ADD COLUMN dinner_recipe_id INTEGER"); } catch {}
+try { db.exec("ALTER TABLE meals ADD COLUMN breakfast_recipe_id INTEGER"); } catch {}
+try { db.exec("ALTER TABLE meals ADD COLUMN lunch_recipe_id INTEGER"); } catch {}
 // Grocery quick-add history
 db.exec(`CREATE TABLE IF NOT EXISTS grocery_history (
   name TEXT PRIMARY KEY,
   count INTEGER DEFAULT 1,
   last_used TEXT
+)`)
+db.exec(`CREATE TABLE IF NOT EXISTS home_appliances (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  location TEXT DEFAULT '',
+  purchase_date TEXT DEFAULT '',
+  warranty_date TEXT DEFAULT '',
+  notes TEXT DEFAULT '',
+  created_at TEXT DEFAULT (datetime('now'))
+)`)
+db.exec(`CREATE TABLE IF NOT EXISTS home_consumables (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  location TEXT DEFAULT '',
+  interval_days INTEGER NOT NULL DEFAULT 90,
+  last_replaced TEXT DEFAULT '',
+  notes TEXT DEFAULT '',
+  created_at TEXT DEFAULT (datetime('now'))
+)`)
+db.exec(`CREATE TABLE IF NOT EXISTS home_maintenance (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  month INTEGER NOT NULL,
+  notes TEXT DEFAULT '',
+  last_done TEXT DEFAULT '',
+  created_at TEXT DEFAULT (datetime('now'))
+)`)
+db.exec(`CREATE TABLE IF NOT EXISTS pets (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  species TEXT DEFAULT '',
+  breed TEXT DEFAULT '',
+  birthday TEXT DEFAULT '',
+  vet_name TEXT DEFAULT '',
+  vet_phone TEXT DEFAULT '',
+  color TEXT DEFAULT '#FF9500',
+  notes TEXT DEFAULT '',
+  created_at TEXT DEFAULT (datetime('now'))
+)`)
+db.exec(`CREATE TABLE IF NOT EXISTS pet_records (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  pet_id INTEGER NOT NULL,
+  type TEXT NOT NULL,
+  name TEXT NOT NULL,
+  last_done TEXT DEFAULT '',
+  interval_days INTEGER DEFAULT 0,
+  next_due TEXT DEFAULT '',
+  notes TEXT DEFAULT '',
+  created_at TEXT DEFAULT (datetime('now'))
+)`)
+db.exec(`CREATE TABLE IF NOT EXISTS contacts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  role TEXT DEFAULT '',
+  category TEXT DEFAULT 'Other',
+  phone TEXT DEFAULT '',
+  email TEXT DEFAULT '',
+  notes TEXT DEFAULT '',
+  created_at TEXT DEFAULT (datetime('now'))
+)`)
+db.exec(`CREATE TABLE IF NOT EXISTS vehicle_mileage (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  vehicle_id INTEGER NOT NULL,
+  miles INTEGER NOT NULL,
+  date TEXT NOT NULL,
+  note TEXT DEFAULT '',
+  created_at TEXT DEFAULT (datetime('now'))
+)`)
+db.exec(`CREATE TABLE IF NOT EXISTS budget_categories (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  monthly_budget REAL DEFAULT 0,
+  color TEXT DEFAULT '#3B82F6',
+  created_at TEXT DEFAULT (datetime('now'))
+)`)
+db.exec(`CREATE TABLE IF NOT EXISTS budget_entries (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  category_id INTEGER NOT NULL,
+  amount REAL NOT NULL,
+  note TEXT DEFAULT '',
+  date TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now'))
 )`)
 db.prepare("UPDATE events SET calendar='kith' WHERE calendar IN ('personal','work','family','hearth')").run();
 db.prepare("UPDATE events SET time='All day' WHERE time IS NULL OR time=''").run();
@@ -348,6 +435,7 @@ const defaults = {
   homey_sensor_devices: '',
   homey_person_devices: '',
   homey_climate_device: '',
+  ics_export_token: require('crypto').randomBytes(16).toString('hex'),
 };
 const insSetting = db.prepare('INSERT OR IGNORE INTO settings (key,value) VALUES (?,?)');
 for (const [k, v] of Object.entries(defaults)) insSetting.run(k, v);

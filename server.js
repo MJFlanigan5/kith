@@ -338,8 +338,9 @@ app.post('/api/auth/login', async (req, res) => {
   if (!member.pin_hash) return res.status(401).json({ error: 'PIN not set for this member' });
   if (!await bcrypt.compare(String(pin || ''), member.pin_hash))
     return res.status(401).json({ error: 'Wrong PIN' });
-  const token = jwt.sign({ sub: member.id, name: member.name, role: 'member' }, getJwtSecret(), { expiresIn: '30d' });
-  res.json({ token, member: { id: member.id, name: member.name, color: member.color, initials: member.initials } });
+  const family_role = member.family_role || 'adult';
+  const token = jwt.sign({ sub: member.id, name: member.name, role: 'member', family_role }, getJwtSecret(), { expiresIn: '30d' });
+  res.json({ token, member: { id: member.id, name: member.name, color: member.color, initials: member.initials, family_role } });
 });
 
 app.post('/api/auth/admin', async (req, res) => {
@@ -588,6 +589,25 @@ app.put('/api/chores/:id/done', requireAuth, (req, res) => {
   res.json({ done: storedDone, completed: done === 1, next_due: nextDue, status: newStatus, points_earned: done ? (c.points || 1) : 0, streak: newStreak });
 });
 
+app.post('/api/chores/:id/photo', requireAuth, (req, res) => {
+  const id = Number(req.params.id);
+  const { data, filename = 'photo.jpg' } = req.body || {};
+  if (!data?.startsWith('data:image/')) return res.status(400).json({ error: 'image data required' });
+  const ext = (filename.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z]/g, '') || 'jpg';
+  const safe = `${Date.now()}-${ext}.${ext}`;
+  try {
+    fs.writeFileSync(path.join(PHOTOS_DIR, safe), Buffer.from(data.split(',')[1], 'base64'));
+    const memberId = req.user.sub === 'admin' ? null : Number(req.user.sub);
+    const completion = db.prepare("SELECT id FROM chore_completions WHERE chore_id=? ORDER BY completed_at DESC LIMIT 1").get(id);
+    if (completion) {
+      db.prepare("UPDATE chore_completions SET photo_filename=? WHERE id=?").run(safe, completion.id);
+    }
+    res.json({ ok: true, filename: safe });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.delete('/api/chores/:id', requireAdmin, (req, res) => {
   db.prepare('DELETE FROM chores WHERE id=?').run(req.params.id);
   res.json({ ok: true });
@@ -712,6 +732,25 @@ app.put('/api/meals/:day', requireAuth, (req, res) => {
   const lunch_recipe_id     = req.body?.lunch_recipe_id     !== undefined ? (req.body.lunch_recipe_id||null)     : (existing.lunch_recipe_id||null);
   db.prepare('INSERT OR REPLACE INTO meals (day,meal,breakfast,lunch,dinner_recipe_id,breakfast_recipe_id,lunch_recipe_id) VALUES (?,?,?,?,?,?,?)').run(req.params.day, meal, breakfast, lunch, dinner_recipe_id, breakfast_recipe_id, lunch_recipe_id);
   res.json({ ok: true });
+});
+
+// ── Routes: Meal AI Suggest ───────────────────────────────────────────────────
+app.post('/api/meals/suggest', requireAuth, async (req, res) => {
+  try {
+    const pantry = db.prepare('SELECT name, quantity, unit FROM pantry_items WHERE quantity > 0').all();
+    const recent_meals = db.prepare("SELECT DISTINCT meal FROM meals WHERE meal != '' AND meal IS NOT NULL").all();
+    const result = await callAi(
+      'You are a meal planning assistant. Given pantry items and recent meals, suggest 7 dinners. Return a JSON array with exactly 7 items: [{day:"Monday",meal:"...",reason:"..."}]. Use the days Monday through Sunday. Avoid recent meals. Use pantry items where possible.',
+      JSON.stringify({ pantry, recent_meals })
+    );
+    if (!result || !Array.isArray(result)) {
+      return res.status(500).json({ error: 'AI unavailable' });
+    }
+    res.json({ meals: result });
+  } catch (e) {
+    console.error('[ai] meal suggest error:', e?.message);
+    res.status(500).json({ error: 'AI unavailable' });
+  }
 });
 
 // ── Routes: Inbox ─────────────────────────────────────────────────────────────
@@ -1305,11 +1344,12 @@ app.delete('/api/members/:id', requireAdmin, (req, res) => {
 app.put('/api/members/:id', requireAdmin, (req, res) => {
   const m = db.prepare('SELECT * FROM family_members WHERE id=?').get(Number(req.params.id));
   if (!m) return res.status(404).json({ error: 'Not found' });
-  const name     = req.body?.name?.trim() || m.name;
-  const color    = req.body?.color || m.color;
-  const birthday = req.body?.birthday !== undefined ? (req.body.birthday || '') : (m.birthday || '');
-  const initials = name.split(/\s+/).map(w => w[0] || '').join('').toUpperCase().slice(0, 2) || m.initials;
-  db.prepare('UPDATE family_members SET name=?,color=?,initials=?,birthday=? WHERE id=?').run(name, color, initials, birthday, m.id);
+  const name        = req.body?.name?.trim() || m.name;
+  const color       = req.body?.color || m.color;
+  const birthday    = req.body?.birthday !== undefined ? (req.body.birthday || '') : (m.birthday || '');
+  const family_role = req.body?.family_role !== undefined ? (req.body.family_role || 'adult') : (m.family_role || 'adult');
+  const initials    = name.split(/\s+/).map(w => w[0] || '').join('').toUpperCase().slice(0, 2) || m.initials;
+  db.prepare('UPDATE family_members SET name=?,color=?,initials=?,birthday=?,family_role=? WHERE id=?').run(name, color, initials, birthday, family_role, m.id);
   // Update birthday event
   db.prepare("DELETE FROM events WHERE source='birthday' AND member_id=?").run(m.id);
   if (birthday && /^\d{4}-\d{2}-\d{2}$/.test(birthday)) {
@@ -4671,6 +4711,40 @@ app.post('/api/imap/test', requireAuth, async (req, res) => {
     res.json({ ok: true });
   } catch (e) {
     res.status(400).json({ error: e?.message || 'Connection failed' });
+  }
+});
+
+// ── Routes: Data Export ───────────────────────────────────────────────────────
+app.get('/api/export', requireAuth, (req, res) => {
+  try {
+    const data = {
+      exported_at: new Date().toISOString(),
+      events:              db.prepare('SELECT * FROM events').all(),
+      chores:              db.prepare('SELECT * FROM chores').all(),
+      grocery:             db.prepare('SELECT * FROM grocery').all(),
+      meals:               db.prepare('SELECT * FROM meals').all(),
+      pantry_items:        db.prepare('SELECT * FROM pantry_items').all(),
+      subscriptions:       db.prepare('SELECT * FROM subscriptions').all(),
+      projects:            db.prepare('SELECT * FROM projects').all(),
+      shared_lists:        db.prepare('SELECT * FROM shared_lists').all(),
+      shared_list_items:   db.prepare('SELECT * FROM shared_list_items').all(),
+      budget_categories:   db.prepare('SELECT * FROM budget_categories').all(),
+      budget_entries:      db.prepare('SELECT * FROM budget_entries').all(),
+      bills:               db.prepare('SELECT * FROM bills').all(),
+      bill_payments:       db.prepare('SELECT * FROM bill_payments').all(),
+      vehicles:            db.prepare('SELECT * FROM vehicles').all(),
+      emergency_info:      db.prepare('SELECT * FROM emergency_info').all(),
+      family_members:      db.prepare('SELECT id,name,color,initials,birthday,monthly_goal,reward,family_role,created_at FROM family_members').all(),
+      contacts:            db.prepare('SELECT * FROM contacts').all(),
+      pets:                db.prepare('SELECT * FROM pets').all(),
+      recipes:             db.prepare('SELECT * FROM recipes').all(),
+      notes:               db.prepare('SELECT * FROM notes').all(),
+      bookmarks:           db.prepare('SELECT * FROM bookmarks').all(),
+    };
+    res.setHeader('Content-Disposition', 'attachment; filename="hearth-export.json"');
+    res.json(data);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 

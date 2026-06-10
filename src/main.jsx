@@ -376,7 +376,7 @@ function FamilyScreen({members,setMembers,toastAdd}){
   const [goalId,setGoalId]=useState(null);
   const [goalForm,setGoalForm]=useState({monthly_goal:'',reward:''});
   const [editId,setEditId]=useState(null);
-  const [editForm,setEditForm]=useState({name:'',color:'#007AFF',birthday:''});
+  const [editForm,setEditForm]=useState({name:'',color:'#007AFF',birthday:'',family_role:'adult'});
   const [health,setHealth]=useState({});
   const [healthEdit,setHealthEdit]=useState(null);
   const blankHealth={blood_type:'',allergies:'',medications:'',conditions:'',doctor_name:'',doctor_phone:'',insurance_provider:'',insurance_id:'',notes:''};
@@ -427,7 +427,7 @@ function FamilyScreen({members,setMembers,toastAdd}){
   };
   const saveEdit=async()=>{
     if(!editForm.name.trim()) return;
-    const r=await api.put(`/api/members/${editId}`,{name:editForm.name,color:editForm.color,birthday:editForm.birthday||''});
+    const r=await api.put(`/api/members/${editId}`,{name:editForm.name,color:editForm.color,birthday:editForm.birthday||'',family_role:editForm.family_role||'adult'});
     if(!r?.id){toastAdd('Failed to update','red');return;}
     setMembers(p=>p.map(m=>m.id===editId?r:m));
     setEditId(null);
@@ -499,7 +499,7 @@ function FamilyScreen({members,setMembers,toastAdd}){
                   {m.monthly_goal>0&&<div style={{fontSize:12,color:A.label4,marginTop:2}}>{m.monthly_goal} pt goal{m.reward?` · ${m.reward}`:''}</div>}
                   {m.birthday&&<div style={{fontSize:12,color:A.label5,marginTop:1}}>{new Date(m.birthday+'T12:00:00').toLocaleDateString(undefined,{month:'long',day:'numeric'})}</div>}
                 </div>
-                <button onClick={()=>{setEditId(editId===m.id?null:m.id);setEditForm({name:m.name,color:m.color,birthday:m.birthday||''});}} style={{background:'none',border:'none',color:A.blue,fontSize:13,cursor:'pointer',fontWeight:500}}>
+                <button onClick={()=>{setEditId(editId===m.id?null:m.id);setEditForm({name:m.name,color:m.color,birthday:m.birthday||'',family_role:m.family_role||'adult'});}} style={{background:'none',border:'none',color:A.blue,fontSize:13,cursor:'pointer',fontWeight:500}}>
                   {editId===m.id?'Cancel':'Edit'}
                 </button>
                 <button onClick={()=>{setGoalId(goalId===m.id?null:m.id);setGoalForm({monthly_goal:m.monthly_goal||'',reward:m.reward||''});}} style={{background:'none',border:'none',color:A.blue,fontSize:13,cursor:'pointer',fontWeight:500}}>
@@ -520,9 +520,16 @@ function FamilyScreen({members,setMembers,toastAdd}){
                     <Inp value={editForm.name} onChange={e=>setEditForm(p=>({...p,name:e.target.value}))} placeholder="Name"/>
                     <Btn sm onClick={saveEdit}>Save</Btn>
                   </div>
-                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8,marginTop:8}}>
                     <div style={{fontSize:12,color:A.label4,flexShrink:0}}>Birthday</div>
                     <Inp type="date" value={editForm.birthday||''} onChange={e=>setEditForm(p=>({...p,birthday:e.target.value}))} style={{flex:1}}/>
+                  </div>
+                  <div style={{display:'flex',alignItems:'center',gap:8,marginTop:8}}>
+                    <div style={{fontSize:12,color:A.label4,flexShrink:0}}>Role</div>
+                    <select value={editForm.family_role||'adult'} onChange={e=>setEditForm(p=>({...p,family_role:e.target.value}))} style={{flex:1,padding:'8px 10px',borderRadius:A.rXs,border:`1px solid ${A.sep}`,background:A.inputBg,fontSize:14,color:A.label1}}>
+                      <option value="adult">Adult</option>
+                      <option value="kid">Kid</option>
+                    </select>
                   </div>
                 </div>
               )}
@@ -3349,6 +3356,8 @@ function ChoresScreen({chores,setChores,goals=[],members=[],toastAdd}){
   const [choreConfetti,setChoreConfetti]=useState(false);
   const [tab,setTab]=useState('chores');
   const [choreHistory,setChoreHistory]=useState([]);
+  const [photoChoreId,setPhotoChoreId]=useState(null);
+  const [photoFile,setPhotoFile]=useState(null);
   useEffect(()=>{
     if(tab==='history') api.get('/api/chores/history?limit=50').then(d=>Array.isArray(d)&&setChoreHistory(d)).catch(()=>{});
   },[tab]);
@@ -3413,8 +3422,23 @@ function ChoresScreen({chores,setChores,goals=[],members=[],toastAdd}){
         toastAdd(`${c.name} done!`);
         setChoreConfetti(true);
         setTimeout(()=>setChoreConfetti(false),2500);
+        setPhotoChoreId(c.id);
+        setPhotoFile(null);
       }
     }catch{toastAdd('Failed to update','red');}
+  };
+
+  const submitChorePhoto=async()=>{
+    if(!photoFile||!photoChoreId) return;
+    const reader=new FileReader();
+    reader.onload=async(e)=>{
+      try{
+        await api.post(`/api/chores/${photoChoreId}/photo`,{data:e.target.result,filename:photoFile.name});
+        toastAdd('Photo saved!','green');
+      }catch{toastAdd('Failed to save photo','red');}
+      setPhotoChoreId(null);setPhotoFile(null);
+    };
+    reader.readAsDataURL(photoFile);
   };
 
   const statePill=s=>{
@@ -3572,6 +3596,19 @@ function ChoresScreen({chores,setChores,goals=[],members=[],toastAdd}){
           </>
         )}
       </Card>}
+      {photoChoreId&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:400,display:'flex',alignItems:'center',justifyContent:'center',padding:24}}>
+          <div style={{background:A.cardBg,borderRadius:A.r,padding:24,width:'100%',maxWidth:340,boxShadow:A.shadowLg}}>
+            <div style={{fontSize:16,fontWeight:700,color:A.label1,marginBottom:6}}>Add a completion photo?</div>
+            <div style={{fontSize:13,color:A.label4,marginBottom:16}}>Optional — capture proof of completion.</div>
+            <input type="file" accept="image/*" capture="environment" onChange={e=>setPhotoFile(e.target.files?.[0]||null)} style={{fontSize:14,marginBottom:16,width:'100%'}}/>
+            <div style={{display:'flex',gap:8}}>
+              <Btn onClick={submitChorePhoto} full disabled={!photoFile}>Add Photo</Btn>
+              <Btn variant="ghost" onClick={()=>{setPhotoChoreId(null);setPhotoFile(null);}} full>Skip</Btn>
+            </div>
+          </div>
+        </div>
+      )}
       <Drawer open={drawerOpen} onClose={()=>{setDrawerOpen(false);setEditChore(null);}} title={editChore?'Edit Chore':'Add Chore'}>
         <FormGroup label="Details">
           <div style={{padding:'12px 16px'}}><Inp value={form.name} onChange={e=>setForm(p=>({...p,name:e.target.value}))} placeholder="Chore name"/></div>
@@ -3662,6 +3699,7 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,recipes=[],toastAdd}){
   const [recipePickerTarget,setRecipePickerTarget]=useState(null);
   const [recipeSearch,setRecipeSearch]=useState('');
   const [fromMealsLoading,setFromMealsLoading]=useState(false);
+  const [aiMealLoading,setAiMealLoading]=useState(false);
 
   useEffect(()=>()=>{Object.values(removeTimers.current).forEach(clearTimeout)},[]);
   useEffect(()=>{api.get('/api/grocery/history').then(r=>Array.isArray(r)&&setHistory(r)).catch(()=>{})},[]);
@@ -3822,6 +3860,25 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,recipes=[],toastAdd}){
       <div>
         <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',marginBottom:4}}>
           <h2 style={{fontSize:18,fontWeight:700,letterSpacing:'-.01em'}}>Meal Plan</h2>
+          <div style={{display:'flex',gap:10,alignItems:'center'}}>
+          <button onClick={async()=>{
+            setAiMealLoading(true);
+            try{
+              const r=await api.post('/api/meals/suggest',{});
+              if(r?.error){toastAdd(r.error||'AI unavailable','red');}
+              else if(Array.isArray(r?.meals)){
+                const DAY_DATES={Monday:0,Tuesday:1,Wednesday:2,Thursday:3,Friday:4,Saturday:5,Sunday:6};
+                const DAY_ABBR={Monday:'Mon',Tuesday:'Tue',Wednesday:'Wed',Thursday:'Thu',Friday:'Fri',Saturday:'Sat',Sunday:'Sun'};
+                for(const m of r.meals){
+                  const abbr=DAY_ABBR[m.day]||m.day;
+                  await api.put(`/api/meals/${abbr}`,{meal:m.meal,breakfast:'',lunch:''}).catch(()=>{});
+                  setMeals(p=>p.map(mx=>mx.day===abbr?{...mx,meal:m.meal}:mx));
+                }
+                toastAdd('Week planned!','green');
+              }
+            }catch{toastAdd('AI unavailable','red');}
+            setAiMealLoading(false);
+          }} disabled={aiMealLoading} style={{fontSize:12,color:aiMealLoading?A.label5:A.indigo,background:'none',border:'none',cursor:aiMealLoading?'default':'pointer',fontWeight:500,flexShrink:0}}>{aiMealLoading?'Planning…':'Suggest week'}</button>
           <button onClick={async()=>{
             setFromMealsLoading(true);
             try{
@@ -3837,6 +3894,7 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,recipes=[],toastAdd}){
             }catch{toastAdd('Failed','red');}
             setFromMealsLoading(false);
           }} style={{fontSize:12,color:A.blue,background:'none',border:'none',cursor:'pointer',fontWeight:500,flexShrink:0}}>{fromMealsLoading?'Adding…':'Add to grocery'}</button>
+          </div>
         </div>
         <p style={{color:A.label4,fontSize:14,marginBottom:14}}>This week</p>
         <Card>
@@ -5233,6 +5291,20 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
           {!hasNextdnsKey&&<div style={{fontSize:11,color:A.amber,marginBottom:6}}>Add NextDNS API key in Integrations to enable</div>}
           <Inp value={nextdnsProfile} onChange={e=>setNextdnsProfile(e.target.value)} onBlur={e=>saveSetting('nextdns_profile_id',e.target.value)} onKeyDown={e=>e.key==='Enter'&&saveSetting('nextdns_profile_id',nextdnsProfile)} placeholder="e.g. abc123 — leave blank to disable" disabled={!hasNextdnsKey}/>
           <div style={{fontSize:11,color:A.label5,marginTop:4}}>Find your profile ID at my.nextdns.io.</div>
+        </div>
+      </FormGroup>
+
+      <FormGroup label="Data Export">
+        <div style={{padding:'14px 16px'}}>
+          <div style={{fontSize:14,color:A.label3,marginBottom:12}}>Download a full JSON export of your Kith data — events, chores, grocery, meals, subscriptions, and more.</div>
+          <Btn sm onClick={async()=>{
+            try{
+              const blob=await fetch('/api/export',{headers:{Authorization:`Bearer ${localStorage.getItem('kith_token')||''}`}}).then(r=>r.blob());
+              const url=URL.createObjectURL(blob);
+              const a=document.createElement('a');a.href=url;a.download='hearth-export.json';a.click();URL.revokeObjectURL(url);
+              toastAdd('Export downloaded');
+            }catch{toastAdd('Export failed','red');}
+          }}>Export Data</Btn>
         </div>
       </FormGroup>
 
@@ -7709,6 +7781,7 @@ function SubscriptionsScreen({subscriptions,setSubscriptions,toastAdd}){
   const totalMonthly=active.reduce((s,x)=>s+monthlyEquiv(x),0);
   const totalAnnual=totalMonthly*12;
   const sorted=[...active].sort((a,b)=>monthlyEquiv(b)-monthlyEquiv(a));
+  const overdueSubCount=(subscriptions||[]).filter(s=>s.active&&s.next_billing&&new Date(s.next_billing)<new Date()).length;
   const byCat=CATEGORIES.map(cat=>({cat,items:sorted.filter(s=>(s.category||'Other')===cat)})).filter(g=>g.items.length>0);
   const trialBadge=s=>{
     if(!s.trial_ends) return null;
@@ -7744,6 +7817,7 @@ function SubscriptionsScreen({subscriptions,setSubscriptions,toastAdd}){
   };
   const Row=({s})=>{
     const trial=trialBadge(s);
+    const isOverdue=s.active&&s.next_billing&&new Date(s.next_billing)<new Date();
     return(
       <div style={{display:'flex',alignItems:'center',gap:12,padding:'14px 18px'}}>
         <div style={{width:10,height:10,borderRadius:'50%',background:s.color||'#5856D6',flexShrink:0}}/>
@@ -7751,6 +7825,7 @@ function SubscriptionsScreen({subscriptions,setSubscriptions,toastAdd}){
           <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
             <span style={{fontSize:15,fontWeight:600,color:A.label1}}>{s.name}</span>
             {trial&&<span style={{fontSize:11,fontWeight:700,color:A.amber,background:A.amberFill,padding:'2px 8px',borderRadius:A.rPill}}>{trial}</span>}
+            {isOverdue&&<span style={{fontSize:11,fontWeight:700,color:A.red,background:A.redFill,padding:'2px 8px',borderRadius:A.rPill}}>Review</span>}
           </div>
           <div style={{fontSize:12,color:A.label4,marginTop:2}}>
             {fmtMoney(s.amount)}{cycleLabel(s.billing_cycle)}{s.next_billing&&` · next ${s.next_billing}`}
@@ -7767,6 +7842,11 @@ function SubscriptionsScreen({subscriptions,setSubscriptions,toastAdd}){
         <h1 style={{fontSize:isMobile?34:44,fontWeight:800,letterSpacing:'-.05em',lineHeight:1.05}}>Subscriptions</h1>
         <Btn onClick={openNew}>+ Add</Btn>
       </div>
+      {overdueSubCount>0&&(
+        <div style={{background:'#fef2f2',border:'1px solid #fca5a5',borderRadius:8,padding:'10px 14px',marginBottom:12,fontSize:13}}>
+          {overdueSubCount} subscription{overdueSubCount>1?'s':''} may need review — billing date has passed.
+        </div>
+      )}
       <div style={{display:'flex',gap:12,marginBottom:20,flexWrap:'wrap'}}>
         <Card style={{padding:'14px 18px',flex:1,minWidth:160}}>
           <div style={{fontSize:11,fontWeight:700,color:A.label4,textTransform:'uppercase',letterSpacing:'.06em'}}>Monthly</div>
@@ -8622,7 +8702,14 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
     return()=>clearInterval(id);
   },[]);
 
-  const nav=[
+  // Decode JWT payload to check family_role for kid mode
+  const _jwtPayload=useMemo(()=>{
+    try{const t=localStorage.getItem('kith_token')||'';const p=t.split('.')[1];if(!p) return null;return JSON.parse(atob(p.replace(/-/g,'+').replace(/_/g,'/')));}catch{return null;}
+  },[]);
+  const isKidMode=_jwtPayload?.role==='member'&&_jwtPayload?.family_role==='kid';
+  const KID_SCREENS=new Set(['dashboard','chores','grocery','calendar']);
+
+  const allNav=[
     {id:'dashboard',label:'Dashboard',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="1" y="1" width="6" height="6" rx="2" fill="currentColor" opacity=".9"/><rect x="10" y="1" width="6" height="6" rx="2" fill="currentColor" opacity=".9"/><rect x="1" y="10" width="6" height="6" rx="2" fill="currentColor" opacity=".9"/><rect x="10" y="10" width="6" height="6" rx="2" fill="currentColor" opacity=".9"/></svg>},
     {id:'calendar',label:'Calendar',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="1.5" y="3.5" width="14" height="12" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M1.5 7h14" stroke="currentColor" strokeWidth="1.5"/><path d="M5.5 1.5v3M11.5 1.5v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
     {id:'chores',label:'Chores',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="2" y="1.5" width="13" height="14" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M5.5 7l2 2 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M5.5 11h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
@@ -8651,6 +8738,7 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
     {id:'inbox',label:'Inbox',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="1.5" y="3.5" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M1.5 6.5l7 4 7-4" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>,badge:inboxCount},
     {id:'settings',label:'Settings',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><circle cx="8.5" cy="8.5" r="2.5" stroke="currentColor" strokeWidth="1.5"/><path d="M8.5 1v2M8.5 14v2M1 8.5h2M14 8.5h2M3.05 3.05l1.42 1.42M12.53 12.53l1.42 1.42M12.53 3.05l-1.42 1.42M4.47 12.53l-1.42 1.42" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
   ];
+  const nav=isKidMode?allNav.filter(item=>KID_SCREENS.has(item.id)):allNav;
 
   const screens={
     dashboard:  <DashboardScreen events={events} setEvents={setEvents} chores={chores} grocery={grocery} meals={meals} countdowns={countdowns} weather={weather} clockFormat={clockFormat} quickActions={quickActions} bills={bills} payments={payments} projects={projects} subscriptions={subscriptions} pantry={pantry}/>,

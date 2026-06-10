@@ -489,6 +489,10 @@ if (!_wiz) {
   if (_hasMembers || _hasCity) db.prepare("INSERT INTO settings (key,value) VALUES (?,?)").run('wizard_completed','1');
 }
 
+// Sprint 9 migrations
+try { db.prepare("ALTER TABLE chore_completions ADD COLUMN photo_filename TEXT").run(); } catch(e) {}
+try { db.prepare("ALTER TABLE family_members ADD COLUMN family_role TEXT DEFAULT 'adult'").run(); } catch(e) {}
+
 // ── Seed data removed — app starts empty for real use ────────────────────────
 // Meals table needs rows to exist for the meal planner (one row per day, blank)
 if (!db.prepare('SELECT COUNT(*) as c FROM meals').get().c) {

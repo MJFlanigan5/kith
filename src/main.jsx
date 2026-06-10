@@ -6425,8 +6425,7 @@ function RecipesScreen({recipes,setRecipes,toastAdd}){
   };
 
   const del=async id=>{
-    const r=await api.del(`/api/recipes/${id}`).catch(()=>null);
-    if(r===null){toastAdd('Delete failed','red');return;}
+    try{await api.del(`/api/recipes/${id}`);}catch{toastAdd('Delete failed','red');return;}
     setRecipes(p=>p.filter(x=>x.id!==id));
     setViewRecipe(null);
     toastAdd('Recipe deleted','blue');
@@ -7267,9 +7266,11 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
   const searchRef=useRef(null);
   useEffect(()=>{
     if(!searchOpen) return;
-    const handler=(e)=>{if(e.key==='Escape'){setSearchOpen(false);setGlobalSearch('');}};
-    window.addEventListener('keydown',handler);
-    return()=>window.removeEventListener('keydown',handler);
+    const onKey=(e)=>{if(e.key==='Escape'){setSearchOpen(false);setGlobalSearch('');}};
+    const onPointer=(e)=>{if(searchRef.current&&!searchRef.current.contains(e.target)){setSearchOpen(false);setGlobalSearch('');}};
+    window.addEventListener('keydown',onKey);
+    window.addEventListener('pointerdown',onPointer);
+    return()=>{window.removeEventListener('keydown',onKey);window.removeEventListener('pointerdown',onPointer);};
   },[searchOpen]);
   const searchResults=useMemo(()=>{
     const q=globalSearch.trim().toLowerCase();

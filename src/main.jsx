@@ -594,7 +594,7 @@ function PresenceBar({duration,color}){
 }
 
 /* ── Display Mode ────────────────────────────────────────────────────── */
-function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,countdowns,photos=[],weather,clockFormat='12h',nightModeStart='23:00',nightModeEnd='06:00',goals=[],notes=[],polls=[],rotationMs=10000,wifiQrData=null,quickActions=[],members=[],packages=[],setPackages,messages=[],setMessages,appliances=[],consumables=[],maintenanceItems=[],pets=[]}){
+function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,countdowns,photos=[],weather,clockFormat='12h',nightModeStart='23:00',nightModeEnd='06:00',goals=[],notes=[],polls=[],rotationMs=10000,wifiQrData=null,quickActions=[],members=[],packages=[],setPackages,messages=[],setMessages,appliances=[],consumables=[],maintenanceItems=[],pets=[],subscriptions=[],pantry=[],projects=[]}){
   const isMobile=useIsMobile();
   const now=useClock();
   const [liveGames,setLiveGames]=useState([]);
@@ -848,6 +848,16 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
   const urgentConsumables=useMemo(()=>(consumables||[]).filter(c=>c.status==='overdue'||c.status==='due_soon').sort((a,b)=>(a.days_remaining??Infinity)-(b.days_remaining??Infinity)),[consumables]);
   const urgentMaintenance=useMemo(()=>(maintenanceItems||[]).filter(m=>m.status==='overdue'||m.status==='due_this_month'),[maintenanceItems]);
   const urgentPetRecords=useMemo(()=>(pets||[]).flatMap(p=>(p.records||[]).filter(r=>r.status==='overdue'||(r.status==='due_soon'&&r.days_remaining<=14)).map(r=>({...r,pet_name:p.name,pet_color:p.color||'#FF9500'}))).sort((a,b)=>(a.days_remaining??Infinity)-(b.days_remaining??Infinity)),[pets]);
+  const monthlySubTotal=(subscriptions||[]).filter(s=>s.active).reduce((sum,s)=>{
+    const a=Number(s.amount)||0;
+    if(s.billing_cycle==='annual') return sum+a/12;
+    if(s.billing_cycle==='weekly') return sum+a*52/12;
+    if(s.billing_cycle==='quarterly') return sum+a/3;
+    return sum+a;
+  },0);
+  const activeSubCount=(subscriptions||[]).filter(s=>s.active).length;
+  const lowPantryItems=(pantry||[]).filter(p=>p.expiry_status==='expired'||p.expiry_status==='expiring_soon'||(p.low_stock_at>0&&Number(p.quantity)<=Number(p.low_stock_at)));
+  const inProgressProjects=(projects||[]).filter(p=>p.status==='in_progress');
   const centerPanels=[
     'dinner',
     ...(dueC.length>0?['chores']:[]),
@@ -889,6 +899,9 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
     ...(urgentMaintenance.length>0?['w_home_maintenance']:[]),
     ...(urgentPetRecords.length>0?['w_pets']:[]),
     ...(emergencyHasValue?['w_emergency']:[]),
+    ...(activeSubCount>0?['w_subscriptions']:[]),
+    ...(lowPantryItems.length>0?['w_pantry']:[]),
+    ...(inProgressProjects.length>0?['w_projects']:[]),
   ];
   const activePanelId=centerPanels[centerIdx%Math.max(1,centerPanels.length)];
   useEffect(()=>{
@@ -2022,6 +2035,71 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
                         </div>
                       </>
                     );})()}
+                    {visiblePanelId==='w_subscriptions'&&activeSubCount>0&&(
+                      <>
+                        <WLabel>Subscriptions</WLabel>
+                        <div style={{flex:1,display:'flex',flexDirection:'column',gap:10,marginTop:4}}>
+                          <div style={{fontSize:isTV?38:28,fontWeight:800,color:D.t1,letterSpacing:'-.02em',lineHeight:1}}>
+                            ${monthlySubTotal.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}
+                            <span style={{fontSize:14,fontWeight:400,color:D.t3}}>/mo</span>
+                          </div>
+                          <div style={{fontSize:13,color:D.t3}}>{activeSubCount} active subscription{activeSubCount===1?'':'s'}</div>
+                          <div style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:6,marginTop:4}}>
+                            {[...(subscriptions||[])].filter(s=>s.active).sort((a,b)=>{
+                              const me=s=>{const am=Number(s.amount)||0;if(s.billing_cycle==='annual')return am/12;if(s.billing_cycle==='weekly')return am*52/12;if(s.billing_cycle==='quarterly')return am/3;return am;};
+                              return me(b)-me(a);
+                            }).slice(0,6).map(s=>(
+                              <div key={s.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',background:'rgba(255,255,255,0.05)',borderRadius:8}}>
+                                <div style={{width:8,height:8,borderRadius:'50%',background:s.color||'#5856D6',flexShrink:0}}/>
+                                <span style={{flex:1,fontSize:13,color:D.t2,fontWeight:500}}>{s.name}</span>
+                                <span style={{fontSize:12,color:D.t3}}>${Number(s.amount||0).toFixed(2)}{({monthly:'/mo',annual:'/yr',weekly:'/wk',quarterly:'/qtr'})[s.billing_cycle]||''}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                    {visiblePanelId==='w_pantry'&&lowPantryItems.length>0&&(
+                      <>
+                        <WLabel>Pantry alert</WLabel>
+                        <div style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:8,marginTop:4}}>
+                          {lowPantryItems.slice(0,8).map(p=>{
+                            const isExpired=p.expiry_status==='expired';
+                            const isExpiring=p.expiry_status==='expiring_soon';
+                            const label=isExpired?'Expired':isExpiring?(p.days_until_expiry===0?'Today':`${p.days_until_expiry}d`):'Low';
+                            const color=isExpired?A.red:A.amber;
+                            return(
+                              <div key={p.id} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',background:'rgba(255,255,255,0.05)',borderRadius:10}}>
+                                <div style={{flex:1,minWidth:0}}>
+                                  <div style={{fontSize:isTV?18:14,fontWeight:600,color:D.t1}}>{p.name}</div>
+                                  <div style={{fontSize:11,color:D.t3,marginTop:1}}>{p.location||'Pantry'} · {p.quantity}{p.unit?` ${p.unit}`:''}</div>
+                                </div>
+                                <span style={{fontSize:11,fontWeight:700,color,flexShrink:0}}>{label}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
+                    {visiblePanelId==='w_projects'&&inProgressProjects.length>0&&(
+                      <>
+                        <WLabel>Projects in progress</WLabel>
+                        <div style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:8,marginTop:4}}>
+                          {inProgressProjects.slice(0,6).map(p=>{
+                            const daysLeft=p.due_date?daysUntil(p.due_date):null;
+                            return(
+                              <div key={p.id} style={{padding:'10px 14px',background:'rgba(255,255,255,0.05)',borderRadius:10}}>
+                                <div style={{fontSize:isTV?18:14,fontWeight:600,color:D.t1,lineHeight:1.3}}>{p.title}</div>
+                                <div style={{fontSize:11,color:D.t3,marginTop:2,display:'flex',gap:8}}>
+                                  {p.cost_estimate>0&&<span>${Number(p.cost_estimate).toLocaleString()} est.</span>}
+                                  {daysLeft!==null&&<span style={{color:daysLeft<0?A.red:daysLeft<=3?A.amber:D.t3}}>{daysLeft<0?`${Math.abs(daysLeft)}d overdue`:daysLeft===0?'Due today':`${daysLeft}d left`}</span>}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
                     </div>
                   </Widget>
                 </div>
@@ -2164,7 +2242,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
 }
 
 /* ── Dashboard ───────────────────────────────────────────────────────── */
-function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weather,clockFormat='12h',quickActions=[],bills=[],payments=[]}){
+function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weather,clockFormat='12h',quickActions=[],bills=[],payments=[],projects=[],subscriptions=[],pantry=[]}){
   const isMobile=useIsMobile();
   const now=useClock();
   const [news,setNews]=useState([]);
@@ -2222,6 +2300,21 @@ function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weath
     const db=b.recurrence==='monthly'?b.due_day-now.getDate():daysUntil(b.due_date);
     return da-db;
   }),[bills,paidSet,now]);
+
+  const projectsDueSoon=useMemo(()=>(projects||[]).filter(p=>{
+    if(p.status==='done'||!p.due_date) return false;
+    const d=daysUntil(p.due_date);
+    return d>=0&&d<=7;
+  }).sort((a,b)=>daysUntil(a.due_date)-daysUntil(b.due_date)),[projects]);
+
+  const subsBillingSoon=useMemo(()=>(subscriptions||[]).filter(s=>{
+    if(!s.active||!s.next_billing) return false;
+    const d=daysUntil(s.next_billing);
+    return d>=0&&d<=7;
+  }).sort((a,b)=>daysUntil(a.next_billing)-daysUntil(b.next_billing)),[subscriptions]);
+
+  const expiringPantry=useMemo(()=>(pantry||[]).filter(p=>p.expiry_status==='expired'||p.expiry_status==='expiring_soon')
+    .sort((a,b)=>(a.days_until_expiry??999)-(b.days_until_expiry??999)),[pantry]);
 
   useEffect(()=>{
     api.get('/api/chores/leaderboard').then(d=>setLeaderboard(Array.isArray(d)?d:[])).catch(()=>{});
@@ -2444,6 +2537,52 @@ function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weath
                 <span style={{flex:1,fontSize:14,fontWeight:600,color:A.label1}}>{b.name}</span>
                 {Number(b.amount)>0&&<span style={{fontSize:13,color:A.label3,fontVariantNumeric:'tabular-nums'}}>${Number(b.amount).toFixed(2)}</span>}
                 <span style={{fontSize:12,color:d===0?A.red:A.amber,fontWeight:600,flexShrink:0}}>{d===0?'Today':`${d}d`}</span>
+              </div>
+            );
+          })}
+        </Card>
+      )}
+      {projectsDueSoon.length>0&&(
+        <Card style={{marginBottom:12,padding:0,overflow:'hidden'}}>
+          <div style={{padding:'10px 16px',fontSize:11,fontWeight:700,color:A.label3,textTransform:'uppercase',letterSpacing:'.07em',borderBottom:`1px solid ${A.sep}`}}>Projects Due This Week</div>
+          {projectsDueSoon.map((p,i)=>{
+            const d=daysUntil(p.due_date);
+            return(
+              <div key={p.id} style={{display:'flex',alignItems:'center',gap:12,padding:'13px 16px',borderTop:i>0?`1px solid ${A.sep}`:'none'}}>
+                <span style={{flex:1,fontSize:14,fontWeight:600,color:A.label1}}>{p.title}</span>
+                {p.cost_estimate>0&&<span style={{fontSize:13,color:A.label3}}>${Number(p.cost_estimate).toLocaleString()}</span>}
+                <span style={{fontSize:12,color:d===0?A.red:A.amber,fontWeight:600,flexShrink:0}}>{d===0?'Today':`${d}d`}</span>
+              </div>
+            );
+          })}
+        </Card>
+      )}
+      {subsBillingSoon.length>0&&(
+        <Card style={{marginBottom:12,padding:0,overflow:'hidden'}}>
+          <div style={{padding:'10px 16px',fontSize:11,fontWeight:700,color:A.label3,textTransform:'uppercase',letterSpacing:'.07em',borderBottom:`1px solid ${A.sep}`}}>Subscriptions Billing This Week</div>
+          {subsBillingSoon.map((s,i)=>{
+            const d=daysUntil(s.next_billing);
+            return(
+              <div key={s.id} style={{display:'flex',alignItems:'center',gap:12,padding:'13px 16px',borderTop:i>0?`1px solid ${A.sep}`:'none'}}>
+                <div style={{width:10,height:10,borderRadius:'50%',background:s.color||'#5856D6',flexShrink:0}}/>
+                <span style={{flex:1,fontSize:14,fontWeight:600,color:A.label1}}>{s.name}</span>
+                <span style={{fontSize:13,color:A.label3}}>${Number(s.amount||0).toFixed(2)}</span>
+                <span style={{fontSize:12,color:d===0?A.red:A.amber,fontWeight:600,flexShrink:0}}>{d===0?'Today':`${d}d`}</span>
+              </div>
+            );
+          })}
+        </Card>
+      )}
+      {expiringPantry.length>0&&(
+        <Card style={{marginBottom:12,padding:0,overflow:'hidden'}}>
+          <div style={{padding:'10px 16px',fontSize:11,fontWeight:700,color:A.label3,textTransform:'uppercase',letterSpacing:'.07em',borderBottom:`1px solid ${A.sep}`}}>Pantry Expiring</div>
+          {expiringPantry.slice(0,5).map((p,i)=>{
+            const isExpired=p.expiry_status==='expired';
+            return(
+              <div key={p.id} style={{display:'flex',alignItems:'center',gap:12,padding:'13px 16px',borderTop:i>0?`1px solid ${A.sep}`:'none'}}>
+                <span style={{flex:1,fontSize:14,fontWeight:600,color:A.label1}}>{p.name}</span>
+                <span style={{fontSize:12,color:A.label4}}>{p.quantity}{p.unit?` ${p.unit}`:''} · {p.location||'Pantry'}</span>
+                <span style={{fontSize:12,color:isExpired?A.red:A.amber,fontWeight:600,flexShrink:0}}>{isExpired?'Expired':p.days_until_expiry===0?'Today':`${p.days_until_expiry}d`}</span>
               </div>
             );
           })}
@@ -7570,7 +7709,7 @@ function SubscriptionsScreen({subscriptions,setSubscriptions,toastAdd}){
   const totalMonthly=active.reduce((s,x)=>s+monthlyEquiv(x),0);
   const totalAnnual=totalMonthly*12;
   const sorted=[...active].sort((a,b)=>monthlyEquiv(b)-monthlyEquiv(a));
-  const byCat=CATEGORIES.map(cat=>({cat,items:sorted.filter(s=>s.category===cat)})).filter(g=>g.items.length>0);
+  const byCat=CATEGORIES.map(cat=>({cat,items:sorted.filter(s=>(s.category||'Other')===cat)})).filter(g=>g.items.length>0);
   const trialBadge=s=>{
     if(!s.trial_ends) return null;
     const d=daysUntil(s.trial_ends);
@@ -7721,6 +7860,9 @@ function ListsScreen({toastAdd}){
   const blank={name:'',emoji:'📋'};
   const [form,setForm]=useState(blank);
   const [newItem,setNewItem]=useState('');
+  const [editListDrawer,setEditListDrawer]=useState(false);
+  const [editListTarget,setEditListTarget]=useState(null);
+  const [editListForm,setEditListForm]=useState({name:'',emoji:'📋'});
   useEffect(()=>{
     api.get('/api/lists').then(d=>{if(Array.isArray(d)) setLists(d);}).catch(()=>{});
   },[]);
@@ -7740,6 +7882,15 @@ function ListsScreen({toastAdd}){
   const delList=async id=>{
     try{await api.del(`/api/lists/${id}`);setLists(p=>p.filter(l=>l.id!==id));setActiveList(null);toastAdd('List removed','blue');}
     catch{toastAdd('Failed to remove','red');}
+  };
+  const saveListEdit=async()=>{
+    if(!editListForm.name.trim()){toastAdd('Name required','red');return;}
+    const r=await api.put(`/api/lists/${editListTarget.id}`,editListForm).catch(()=>null);
+    if(!r?.id){toastAdd('Failed to save','red');return;}
+    setLists(p=>p.map(l=>l.id===r.id?r:l));
+    if(activeList?.id===r.id) setActiveList(r);
+    setEditListDrawer(false);setEditListTarget(null);
+    toastAdd('List updated');
   };
   const addItem=async()=>{
     if(!newItem.trim()||!activeList) return;
@@ -7785,7 +7936,8 @@ function ListsScreen({toastAdd}){
         <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:24}}>
           <button onClick={()=>setActiveList(null)} style={{background:A.inputBg,border:'none',borderRadius:A.rPill,padding:'7px 14px',fontSize:13,fontWeight:600,color:A.label2,cursor:'pointer'}}>← Lists</button>
           <h1 style={{fontSize:isMobile?28:34,fontWeight:800,letterSpacing:'-.04em',lineHeight:1.05,flex:1}}>{activeList.emoji} {activeList.name}</h1>
-          <button onClick={()=>delList(activeList.id)} style={{background:'none',border:'none',color:A.red,fontSize:13,cursor:'pointer',fontWeight:500}}>Delete list</button>
+          <button onClick={()=>{setEditListTarget(activeList);setEditListForm({name:activeList.name,emoji:activeList.emoji||'📋'});setEditListDrawer(true);}} style={{background:'none',border:'none',color:A.label3,fontSize:13,cursor:'pointer',fontWeight:500}}>Rename</button>
+          <button onClick={()=>delList(activeList.id)} style={{background:'none',border:'none',color:A.red,fontSize:13,cursor:'pointer',fontWeight:500}}>Delete</button>
         </div>
         {itemsLoading?(
           <Card style={{padding:'40px 24px',textAlign:'center'}}><div style={{fontSize:14,color:A.label4}}>Loading…</div></Card>
@@ -7832,11 +7984,14 @@ function ListsScreen({toastAdd}){
       ):(
         <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'repeat(auto-fill,minmax(220px,1fr))',gap:12}}>
           {lists.map(l=>(
-            <button key={l.id} onClick={()=>setActiveList(l)} style={{textAlign:'left',background:A.cardBg,border:`1px solid ${A.sep}`,borderRadius:A.r,padding:'18px 18px',cursor:'pointer',boxShadow:A.shadowSm,display:'flex',flexDirection:'column',gap:8}}>
-              <div style={{fontSize:32}}>{l.emoji}</div>
-              <div style={{fontSize:16,fontWeight:600,color:A.label1}}>{l.name}</div>
-              <div style={{fontSize:12,color:A.label4}}>{l.item_count||0} {l.item_count===1?'item':'items'} · {l.unchecked_count||0} remaining</div>
-            </button>
+            <div key={l.id} style={{position:'relative'}}>
+              <button onClick={()=>setActiveList(l)} style={{width:'100%',textAlign:'left',background:A.cardBg,border:`1px solid ${A.sep}`,borderRadius:A.r,padding:'18px 18px',cursor:'pointer',boxShadow:A.shadowSm,display:'flex',flexDirection:'column',gap:8}}>
+                <div style={{fontSize:32}}>{l.emoji}</div>
+                <div style={{fontSize:16,fontWeight:600,color:A.label1}}>{l.name}</div>
+                <div style={{fontSize:12,color:A.label4}}>{l.item_count||0} {l.item_count===1?'item':'items'} · {l.unchecked_count||0} remaining</div>
+              </button>
+              <button onClick={e=>{e.stopPropagation();setEditListTarget(l);setEditListForm({name:l.name,emoji:l.emoji||'📋'});setEditListDrawer(true);}} style={{position:'absolute',top:8,right:8,background:'none',border:'none',color:A.label4,fontSize:13,cursor:'pointer',padding:'4px 6px',lineHeight:1}}>···</button>
+            </div>
           ))}
         </div>
       )}
@@ -7852,6 +8007,22 @@ function ListsScreen({toastAdd}){
           </div>
         </FormGroup>
         <Btn onClick={saveList} full>Create List</Btn>
+      </Drawer>
+      <Drawer open={editListDrawer} onClose={()=>{setEditListDrawer(false);setEditListTarget(null);}} title="Edit List">
+        <FormGroup label="Name">
+          <div style={{padding:'12px 16px'}}><Inp value={editListForm.name} onChange={e=>setEditListForm(f=>({...f,name:e.target.value}))}/></div>
+        </FormGroup>
+        <FormGroup label="Emoji">
+          <div style={{padding:'12px 16px',display:'flex',flexWrap:'wrap',gap:8}}>
+            {EMOJIS.map(em=>(
+              <button key={em} onClick={()=>setEditListForm(f=>({...f,emoji:em}))} style={{width:44,height:44,borderRadius:A.rSm,border:`2px solid ${editListForm.emoji===em?A.blue:A.sep}`,background:editListForm.emoji===em?A.blueFill:A.inputBg,fontSize:22,cursor:'pointer'}}>{em}</button>
+            ))}
+          </div>
+        </FormGroup>
+        <div style={{display:'flex',gap:8}}>
+          <Btn onClick={saveListEdit} full>Save</Btn>
+          {editListTarget&&<Btn variant="ghost" onClick={()=>{delList(editListTarget.id);setEditListDrawer(false);}} full style={{color:A.red}}>Delete List</Btn>}
+        </div>
       </Drawer>
     </div>
   );
@@ -8039,6 +8210,8 @@ function PantryScreen({pantry,setPantry,grocery,setGrocery,toastAdd}){
   const [drawer,setDrawer]=useState(false);
   const [editItem,setEditItem]=useState(null);
   const [form,setForm]=useState(blank);
+  const [useTarget,setUseTarget]=useState(null);
+  const [useAmount,setUseAmount]=useState('1');
   const isLow=p=>p.low_stock_at>0&&Number(p.quantity)<=Number(p.low_stock_at);
   const expBadge=p=>{
     if(p.expiry_status==='expired') return{label:'Expired',color:A.red,bg:A.redFill};
@@ -8066,10 +8239,15 @@ function PantryScreen({pantry,setPantry,grocery,setGrocery,toastAdd}){
     try{await api.del(`/api/pantry/${id}`);setPantry(p=>p.filter(x=>x.id!==id));setDrawer(false);setEditItem(null);toastAdd('Removed','blue');}
     catch{toastAdd('Failed to remove','red');}
   };
-  const useItem=async p=>{
-    const r=await api.put(`/api/pantry/${p.id}/use`,{amount:1}).catch(()=>null);
+  const openUse=p=>{setUseTarget(p);setUseAmount('1');};
+  const confirmUse=async()=>{
+    if(!useTarget) return;
+    const amount=Math.max(1,Number(useAmount)||1);
+    const r=await api.put(`/api/pantry/${useTarget.id}/use`,{amount}).catch(()=>null);
     if(!r?.id){toastAdd('Failed','red');return;}
     setPantry(prev=>prev.map(x=>x.id===r.id?r:x));
+    setUseTarget(null);
+    toastAdd(`Used ${amount}`,'blue');
   };
   const needReplace=(pantry||[]).filter(p=>p.expiry_status==='expired'||isLow(p));
   const addBulkToGrocery=async()=>{
@@ -8119,7 +8297,7 @@ function PantryScreen({pantry,setPantry,grocery,setGrocery,toastAdd}){
                         </div>
                         <div style={{fontSize:12,color:A.label4,marginTop:2}}>{p.quantity}{p.unit?` ${p.unit}`:''}</div>
                       </div>
-                      <button onClick={()=>useItem(p)} style={{background:A.inputBg,border:`1.5px solid ${A.sep}`,borderRadius:20,padding:'5px 14px',fontSize:12,fontWeight:600,color:A.label3,cursor:'pointer',flexShrink:0}}>Use</button>
+                      <button onClick={()=>openUse(p)} style={{background:A.inputBg,border:`1.5px solid ${A.sep}`,borderRadius:20,padding:'5px 14px',fontSize:12,fontWeight:600,color:A.label3,cursor:'pointer',flexShrink:0}}>Use</button>
                       <button onClick={()=>openEdit(p)} style={{background:'none',border:'none',color:A.label4,cursor:'pointer',fontSize:13,padding:'0 4px',flexShrink:0}}>Edit</button>
                     </div>
                   );
@@ -8165,6 +8343,20 @@ function PantryScreen({pantry,setPantry,grocery,setGrocery,toastAdd}){
         </div>
         {!editItem&&<Btn variant="ghost" onClick={()=>setDrawer(false)} full style={{marginTop:8}}>Cancel</Btn>}
       </Drawer>
+      {useTarget&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:24}} onClick={()=>setUseTarget(null)}>
+          <div style={{background:A.cardBg,borderRadius:A.r,padding:24,width:'100%',maxWidth:320,boxShadow:A.shadowLg}} onClick={e=>e.stopPropagation()}>
+            <div style={{fontSize:17,fontWeight:700,color:A.label1,marginBottom:4}}>Use item</div>
+            <div style={{fontSize:14,color:A.label3,marginBottom:16}}>{useTarget.name} · {useTarget.quantity}{useTarget.unit?` ${useTarget.unit}`:''} remaining</div>
+            <div style={{fontSize:12,fontWeight:600,color:A.label4,marginBottom:6}}>Amount to use</div>
+            <Inp type="number" value={useAmount} onChange={e=>setUseAmount(e.target.value)} placeholder="1" style={{marginBottom:16}}/>
+            <div style={{display:'flex',gap:8}}>
+              <Btn onClick={confirmUse} full>Use</Btn>
+              <Btn variant="ghost" onClick={()=>setUseTarget(null)} full>Cancel</Btn>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -8189,6 +8381,7 @@ function SchoolScreen({members=[],toastAdd}){
   const openNewM=()=>{setEditM(null);setMForm(blankM);setMDrawer(true);};
   const openEditM=s=>{setEditM(s);setMForm({member_id:s.member_id?String(s.member_id):'',school_name:s.school_name||'',grade:s.grade||'',teacher_name:s.teacher_name||'',teacher_email:s.teacher_email||'',school_phone:s.school_phone||'',start_time:s.start_time||'',end_time:s.end_time||'',notes:s.notes||''});setMDrawer(true);};
   const saveM=async()=>{
+    if(!mForm.school_name.trim()){toastAdd('School name required','red');return;}
     const body={...mForm,member_id:mForm.member_id?Number(mForm.member_id):null};
     if(editM){
       const r=await api.put(`/api/school/${editM.id}`,body).catch(()=>null);
@@ -8396,12 +8589,15 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
     const q=globalSearch.trim().toLowerCase();
     if(q.length<2) return null;
     const match=(str)=>(str||'').toLowerCase().includes(q);
-    const noteMatches=(notes||[]).filter(n=>match(n.title)||match(n.content)).slice(0,4).map(n=>({type:'Notes',label:n.title,screen:'notes'}));
-    const contactMatches=(contacts||[]).filter(c=>match(c.name)||match(c.role)||match(c.phone)).slice(0,4).map(c=>({type:'Contacts',label:c.name,screen:'contacts'}));
-    const recipeMatches=(recipes||[]).filter(r=>match(r.name)).slice(0,4).map(r=>({type:'Recipes',label:r.name,screen:'recipes'}));
-    const choreMatches=(chores||[]).filter(c=>match(c.name)).slice(0,4).map(c=>({type:'Chores',label:c.name,screen:'chores'}));
-    return [...noteMatches,...contactMatches,...recipeMatches,...choreMatches];
-  },[globalSearch,notes,contacts,recipes,chores]);
+    const noteMatches=(notes||[]).filter(n=>match(n.title)||match(n.content)).slice(0,3).map(n=>({type:'Notes',label:n.title,screen:'notes'}));
+    const contactMatches=(contacts||[]).filter(c=>match(c.name)||match(c.role)||match(c.phone)).slice(0,3).map(c=>({type:'Contacts',label:c.name,screen:'contacts'}));
+    const recipeMatches=(recipes||[]).filter(r=>match(r.name)).slice(0,3).map(r=>({type:'Recipes',label:r.name,screen:'recipes'}));
+    const choreMatches=(chores||[]).filter(c=>match(c.name)).slice(0,3).map(c=>({type:'Chores',label:c.name,screen:'chores'}));
+    const subMatches=(subscriptions||[]).filter(s=>match(s.name)||match(s.notes)).slice(0,3).map(s=>({type:'Subscriptions',label:s.name,screen:'subscriptions'}));
+    const projMatches=(projects||[]).filter(p=>match(p.title)||match(p.description)).slice(0,3).map(p=>({type:'Projects',label:p.title,screen:'projects'}));
+    const pantryMatches=(pantry||[]).filter(p=>match(p.name)).slice(0,3).map(p=>({type:'Pantry',label:p.name,screen:'pantry'}));
+    return [...noteMatches,...contactMatches,...recipeMatches,...choreMatches,...subMatches,...projMatches,...pantryMatches];
+  },[globalSearch,notes,contacts,recipes,chores,subscriptions,projects,pantry]);
   useEffect(()=>{
     const ping=()=>api.get('/api/uptime').then(()=>setServerUp(true)).catch(()=>setServerUp(false));
     ping();
@@ -8440,7 +8636,7 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
   ];
 
   const screens={
-    dashboard:  <DashboardScreen events={events} setEvents={setEvents} chores={chores} grocery={grocery} meals={meals} countdowns={countdowns} weather={weather} clockFormat={clockFormat} quickActions={quickActions} bills={bills} payments={payments}/>,
+    dashboard:  <DashboardScreen events={events} setEvents={setEvents} chores={chores} grocery={grocery} meals={meals} countdowns={countdowns} weather={weather} clockFormat={clockFormat} quickActions={quickActions} bills={bills} payments={payments} projects={projects} subscriptions={subscriptions} pantry={pantry}/>,
     calendar:   <CalendarScreen events={events} setEvents={setEvents} icsSources={icsSources} toastAdd={toastAdd} members={members} clockFormat={clockFormat}/>,
     chores:     <ChoresScreen chores={chores} setChores={setChores} goals={goals} members={members} toastAdd={toastAdd}/>,
     grocery:    <GroceryScreen grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} recipes={recipes} toastAdd={toastAdd}/>,
@@ -9164,7 +9360,7 @@ function App(){
   const goDisplay=()=>{localStorage.setItem('kith_mode','display');setMode('display');};
   const goManage=()=>{localStorage.setItem('kith_mode','manage');setMode('manage');};
   return mode==='display'
-    ?<DisplayMode onManage={goManage} events={events} chores={chores} setChores={setChores} meals={meals} grocery={grocery} setGrocery={setGrocery} countdowns={countdowns} photos={photos} clockFormat={clockFormat} weather={weather} nightModeStart={nightModeStart} nightModeEnd={nightModeEnd} goals={goals} notes={notes} polls={polls} rotationMs={rotationMs} wifiQrData={wifiQrData} quickActions={quickActions} members={members} packages={packages} setPackages={setPackages} messages={messages} setMessages={setMessages} appliances={appliances} consumables={consumables} maintenanceItems={maintenanceItems} pets={pets}/>
+    ?<DisplayMode onManage={goManage} events={events} chores={chores} setChores={setChores} meals={meals} grocery={grocery} setGrocery={setGrocery} countdowns={countdowns} photos={photos} clockFormat={clockFormat} weather={weather} nightModeStart={nightModeStart} nightModeEnd={nightModeEnd} goals={goals} notes={notes} polls={polls} rotationMs={rotationMs} wifiQrData={wifiQrData} quickActions={quickActions} members={members} packages={packages} setPackages={setPackages} messages={messages} setMessages={setMessages} appliances={appliances} consumables={consumables} maintenanceItems={maintenanceItems} pets={pets} subscriptions={subscriptions} pantry={pantry} projects={projects}/>
     :<ManageMode onDisplay={goDisplay} onLogout={handleLogout} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources} inboxCount={inboxCount} setInboxCount={setInboxCount} countdowns={countdowns} setCountdowns={setCountdowns} members={members} setMembers={setMembers} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} weather={weather} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} goals={goals} setGoals={setGoals} notes={notes} setNotes={setNotes} polls={polls} setPolls={setPolls} bookmarks={bookmarks} setBookmarks={setBookmarks} quickActions={quickActions} setQuickActions={setQuickActions} setRotationMs={setRotationMs} setWifiQrData={setWifiQrData} darkMode={darkMode} onDarkMode={handleDarkMode} packages={packages} setPackages={setPackages} messages={messages} setMessages={setMessages} recipes={recipes} setRecipes={setRecipes} bills={bills} setBills={setBills} payments={payments} setPayments={setPayments} vehicles={vehicles} setVehicles={setVehicles} appliances={appliances} setAppliances={setAppliances} consumables={consumables} setConsumables={setConsumables} pets={pets} setPets={setPets} contacts={contacts} setContacts={setContacts} maintenanceItems={maintenanceItems} setMaintenanceItems={setMaintenanceItems} budget={budget} setBudget={setBudget} subscriptions={subscriptions} setSubscriptions={setSubscriptions} projects={projects} setProjects={setProjects} pantry={pantry} setPantry={setPantry} isAdmin={!!auth&&!currentMember&&!kiosk}/>;
 }
 

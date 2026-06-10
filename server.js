@@ -3942,6 +3942,18 @@ app.post('/api/lists', requireAuth, (req, res) => {
   const row = db.prepare('SELECT * FROM shared_lists WHERE id=?').get(r.lastInsertRowid);
   res.json({ ...row, item_count: 0, unchecked_count: 0 });
 });
+app.put('/api/lists/:id', requireAuth, (req, res) => {
+  const id = Number(req.params.id);
+  const l = db.prepare('SELECT * FROM shared_lists WHERE id=?').get(id);
+  if (!l) return res.status(404).json({ error: 'Not found' });
+  const { name, emoji } = req.body || {};
+  db.prepare('UPDATE shared_lists SET name=?,emoji=? WHERE id=?')
+    .run(name?.trim()||l.name, emoji||l.emoji, id);
+  const row = db.prepare('SELECT * FROM shared_lists WHERE id=?').get(id);
+  const item_count = db.prepare('SELECT COUNT(*) as c FROM shared_list_items WHERE list_id=?').get(id)?.c || 0;
+  const unchecked_count = db.prepare('SELECT COUNT(*) as c FROM shared_list_items WHERE list_id=? AND checked=0').get(id)?.c || 0;
+  res.json({ ...row, item_count, unchecked_count });
+});
 app.delete('/api/lists/:id', requireAuth, (req, res) => {
   const id = Number(req.params.id);
   db.prepare('DELETE FROM shared_list_items WHERE list_id=?').run(id);

@@ -3841,6 +3841,274 @@ cron.schedule('0 18 * * 0', async () => {
   }
 });
 
+// ── Routes: Emergency info ────────────────────────────────────────────────────
+app.get('/api/emergency', (req, res) => {
+  const rows = db.prepare('SELECT key,value FROM emergency_info').all();
+  const out = {};
+  for (const r of rows) out[r.key] = r.value || '';
+  res.json(out);
+});
+app.put('/api/emergency', requireAdmin, (req, res) => {
+  const body = req.body || {};
+  const ins = db.prepare('INSERT INTO emergency_info (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value');
+  for (const [k, v] of Object.entries(body)) ins.run(String(k), String(v ?? ''));
+  const rows = db.prepare('SELECT key,value FROM emergency_info').all();
+  const out = {};
+  for (const r of rows) out[r.key] = r.value || '';
+  res.json(out);
+});
+
+// ── Routes: Subscriptions ─────────────────────────────────────────────────────
+app.get('/api/subscriptions', requireAuth, (req, res) => {
+  res.json(db.prepare('SELECT * FROM subscriptions ORDER BY active DESC, name').all());
+});
+app.post('/api/subscriptions', requireAdmin, (req, res) => {
+  const { name, amount=0, billing_cycle='monthly', next_billing='', category='Other', color='#5856D6', active=1, trial_ends='', notes='' } = req.body || {};
+  if (!name?.trim()) return res.status(400).json({ error: 'name required' });
+  const r = db.prepare('INSERT INTO subscriptions (name,amount,billing_cycle,next_billing,category,color,active,trial_ends,notes) VALUES (?,?,?,?,?,?,?,?,?)')
+    .run(name.trim(), Number(amount)||0, billing_cycle, next_billing, category, color, active?1:0, trial_ends, notes);
+  res.json(db.prepare('SELECT * FROM subscriptions WHERE id=?').get(r.lastInsertRowid));
+});
+app.put('/api/subscriptions/:id', requireAdmin, (req, res) => {
+  const s = db.prepare('SELECT * FROM subscriptions WHERE id=?').get(Number(req.params.id));
+  if (!s) return res.status(404).json({ error: 'Not found' });
+  const { name, amount, billing_cycle, next_billing, category, color, active, trial_ends, notes } = req.body || {};
+  db.prepare('UPDATE subscriptions SET name=?,amount=?,billing_cycle=?,next_billing=?,category=?,color=?,active=?,trial_ends=?,notes=? WHERE id=?')
+    .run(name?.trim()||s.name, amount!=null?Number(amount):s.amount, billing_cycle??s.billing_cycle, next_billing??s.next_billing, category??s.category, color??s.color, active!=null?(active?1:0):s.active, trial_ends??s.trial_ends, notes??s.notes, s.id);
+  res.json(db.prepare('SELECT * FROM subscriptions WHERE id=?').get(s.id));
+});
+app.delete('/api/subscriptions/:id', requireAdmin, (req, res) => {
+  db.prepare('DELETE FROM subscriptions WHERE id=?').run(Number(req.params.id));
+  res.json({ ok: true });
+});
+
+// ── Routes: Home repairs ──────────────────────────────────────────────────────
+app.get('/api/home/repairs', requireAuth, (req, res) => {
+  res.json(db.prepare('SELECT * FROM home_repairs ORDER BY date DESC, id DESC').all());
+});
+app.post('/api/home/repairs', requireAdmin, (req, res) => {
+  const { title, description='', date='', cost=0, contractor='', category='Other', warranty_until='' } = req.body || {};
+  if (!title?.trim()) return res.status(400).json({ error: 'title required' });
+  const r = db.prepare('INSERT INTO home_repairs (title,description,date,cost,contractor,category,warranty_until) VALUES (?,?,?,?,?,?,?)')
+    .run(title.trim(), description, date, Number(cost)||0, contractor, category, warranty_until);
+  res.json(db.prepare('SELECT * FROM home_repairs WHERE id=?').get(r.lastInsertRowid));
+});
+app.put('/api/home/repairs/:id', requireAdmin, (req, res) => {
+  const x = db.prepare('SELECT * FROM home_repairs WHERE id=?').get(Number(req.params.id));
+  if (!x) return res.status(404).json({ error: 'Not found' });
+  const { title, description, date, cost, contractor, category, warranty_until } = req.body || {};
+  db.prepare('UPDATE home_repairs SET title=?,description=?,date=?,cost=?,contractor=?,category=?,warranty_until=? WHERE id=?')
+    .run(title?.trim()||x.title, description??x.description, date??x.date, cost!=null?Number(cost):x.cost, contractor??x.contractor, category??x.category, warranty_until??x.warranty_until, x.id);
+  res.json(db.prepare('SELECT * FROM home_repairs WHERE id=?').get(x.id));
+});
+app.delete('/api/home/repairs/:id', requireAdmin, (req, res) => {
+  db.prepare('DELETE FROM home_repairs WHERE id=?').run(Number(req.params.id));
+  res.json({ ok: true });
+});
+
+// ── Routes: Member health ─────────────────────────────────────────────────────
+app.get('/api/members/:id/health', requireAuth, (req, res) => {
+  const id = Number(req.params.id);
+  const row = db.prepare('SELECT * FROM member_health WHERE member_id=?').get(id);
+  res.json(row || {});
+});
+app.put('/api/members/:id/health', requireAdmin, (req, res) => {
+  const id = Number(req.params.id);
+  const { blood_type='', allergies='', medications='', conditions='', doctor_name='', doctor_phone='', insurance_provider='', insurance_id='', notes='' } = req.body || {};
+  const existing = db.prepare('SELECT * FROM member_health WHERE member_id=?').get(id);
+  if (existing) {
+    db.prepare("UPDATE member_health SET blood_type=?,allergies=?,medications=?,conditions=?,doctor_name=?,doctor_phone=?,insurance_provider=?,insurance_id=?,notes=?,updated_at=datetime('now') WHERE member_id=?")
+      .run(blood_type, allergies, medications, conditions, doctor_name, doctor_phone, insurance_provider, insurance_id, notes, id);
+  } else {
+    db.prepare('INSERT INTO member_health (member_id,blood_type,allergies,medications,conditions,doctor_name,doctor_phone,insurance_provider,insurance_id,notes) VALUES (?,?,?,?,?,?,?,?,?,?)')
+      .run(id, blood_type, allergies, medications, conditions, doctor_name, doctor_phone, insurance_provider, insurance_id, notes);
+  }
+  res.json(db.prepare('SELECT * FROM member_health WHERE member_id=?').get(id));
+});
+
+// ── Routes: Shared lists ──────────────────────────────────────────────────────
+app.get('/api/lists', requireAuth, (req, res) => {
+  const rows = db.prepare(`
+    SELECT l.*,
+      (SELECT COUNT(*) FROM shared_list_items WHERE list_id=l.id) AS item_count,
+      (SELECT COUNT(*) FROM shared_list_items WHERE list_id=l.id AND checked=0) AS unchecked_count
+    FROM shared_lists l ORDER BY l.created_at DESC`).all();
+  res.json(rows);
+});
+app.post('/api/lists', requireAuth, (req, res) => {
+  const { name, emoji='📋' } = req.body || {};
+  if (!name?.trim()) return res.status(400).json({ error: 'name required' });
+  const r = db.prepare('INSERT INTO shared_lists (name,emoji) VALUES (?,?)').run(name.trim(), emoji);
+  const row = db.prepare('SELECT * FROM shared_lists WHERE id=?').get(r.lastInsertRowid);
+  res.json({ ...row, item_count: 0, unchecked_count: 0 });
+});
+app.delete('/api/lists/:id', requireAuth, (req, res) => {
+  const id = Number(req.params.id);
+  db.prepare('DELETE FROM shared_list_items WHERE list_id=?').run(id);
+  db.prepare('DELETE FROM shared_lists WHERE id=?').run(id);
+  res.json({ ok: true });
+});
+app.get('/api/lists/:id/items', requireAuth, (req, res) => {
+  res.json(db.prepare('SELECT * FROM shared_list_items WHERE list_id=? ORDER BY checked, created_at').all(Number(req.params.id)));
+});
+app.post('/api/lists/:id/items', requireAuth, (req, res) => {
+  const listId = Number(req.params.id);
+  const { name } = req.body || {};
+  if (!name?.trim()) return res.status(400).json({ error: 'name required' });
+  const r = db.prepare('INSERT INTO shared_list_items (list_id,name) VALUES (?,?)').run(listId, name.trim());
+  res.json(db.prepare('SELECT * FROM shared_list_items WHERE id=?').get(r.lastInsertRowid));
+});
+app.delete('/api/lists/:id/items/checked', requireAuth, (req, res) => {
+  db.prepare('DELETE FROM shared_list_items WHERE list_id=? AND checked=1').run(Number(req.params.id));
+  res.json({ ok: true });
+});
+app.put('/api/lists/:id/items/:iid', requireAuth, (req, res) => {
+  const iid = Number(req.params.iid);
+  const { checked } = req.body || {};
+  db.prepare('UPDATE shared_list_items SET checked=? WHERE id=?').run(checked?1:0, iid);
+  res.json(db.prepare('SELECT * FROM shared_list_items WHERE id=?').get(iid));
+});
+app.delete('/api/lists/:id/items/:iid', requireAuth, (req, res) => {
+  db.prepare('DELETE FROM shared_list_items WHERE id=?').run(Number(req.params.iid));
+  res.json({ ok: true });
+});
+
+// ── Routes: Projects ──────────────────────────────────────────────────────────
+app.get('/api/projects', requireAuth, (req, res) => {
+  res.json(db.prepare('SELECT * FROM projects ORDER BY created_at DESC').all());
+});
+app.post('/api/projects', requireAdmin, (req, res) => {
+  const { title, description='', status='planned', priority='medium', cost_estimate=0, cost_actual=0, due_date='' } = req.body || {};
+  if (!title?.trim()) return res.status(400).json({ error: 'title required' });
+  const r = db.prepare('INSERT INTO projects (title,description,status,priority,cost_estimate,cost_actual,due_date) VALUES (?,?,?,?,?,?,?)')
+    .run(title.trim(), description, status, priority, Number(cost_estimate)||0, Number(cost_actual)||0, due_date);
+  res.json(db.prepare('SELECT * FROM projects WHERE id=?').get(r.lastInsertRowid));
+});
+app.put('/api/projects/:id', requireAdmin, (req, res) => {
+  const p = db.prepare('SELECT * FROM projects WHERE id=?').get(Number(req.params.id));
+  if (!p) return res.status(404).json({ error: 'Not found' });
+  const { title, description, status, priority, cost_estimate, cost_actual, due_date } = req.body || {};
+  db.prepare('UPDATE projects SET title=?,description=?,status=?,priority=?,cost_estimate=?,cost_actual=?,due_date=? WHERE id=?')
+    .run(title?.trim()||p.title, description??p.description, status??p.status, priority??p.priority, cost_estimate!=null?Number(cost_estimate):p.cost_estimate, cost_actual!=null?Number(cost_actual):p.cost_actual, due_date??p.due_date, p.id);
+  res.json(db.prepare('SELECT * FROM projects WHERE id=?').get(p.id));
+});
+app.delete('/api/projects/:id', requireAdmin, (req, res) => {
+  db.prepare('DELETE FROM projects WHERE id=?').run(Number(req.params.id));
+  res.json({ ok: true });
+});
+
+// ── Routes: Pantry ────────────────────────────────────────────────────────────
+function _pantryEnrich(row) {
+  if (!row) return row;
+  const out = { ...row };
+  if (row.expires_on) {
+    const today = new Date(); today.setHours(0,0,0,0);
+    const exp = new Date(row.expires_on + 'T00:00:00');
+    const days = Math.round((exp - today) / 86400000);
+    out.days_until_expiry = days;
+    out.expiry_status = days < 0 ? 'expired' : days <= 3 ? 'expiring_soon' : 'ok';
+  } else {
+    out.days_until_expiry = null;
+    out.expiry_status = 'ok';
+  }
+  return out;
+}
+app.get('/api/pantry', requireAuth, (req, res) => {
+  const rows = db.prepare('SELECT * FROM pantry_items ORDER BY location, name').all();
+  res.json(rows.map(_pantryEnrich));
+});
+app.post('/api/pantry', requireAuth, (req, res) => {
+  const { name, location='Pantry', quantity=1, unit='', expires_on='', low_stock_at=0, category='Other' } = req.body || {};
+  if (!name?.trim()) return res.status(400).json({ error: 'name required' });
+  const r = db.prepare('INSERT INTO pantry_items (name,location,quantity,unit,expires_on,low_stock_at,category) VALUES (?,?,?,?,?,?,?)')
+    .run(name.trim(), location, Number(quantity)||0, unit, expires_on, Number(low_stock_at)||0, category);
+  res.json(_pantryEnrich(db.prepare('SELECT * FROM pantry_items WHERE id=?').get(r.lastInsertRowid)));
+});
+app.put('/api/pantry/:id', requireAuth, (req, res) => {
+  const p = db.prepare('SELECT * FROM pantry_items WHERE id=?').get(Number(req.params.id));
+  if (!p) return res.status(404).json({ error: 'Not found' });
+  const { name, location, quantity, unit, expires_on, low_stock_at, category } = req.body || {};
+  db.prepare('UPDATE pantry_items SET name=?,location=?,quantity=?,unit=?,expires_on=?,low_stock_at=?,category=? WHERE id=?')
+    .run(name?.trim()||p.name, location??p.location, quantity!=null?Number(quantity):p.quantity, unit??p.unit, expires_on??p.expires_on, low_stock_at!=null?Number(low_stock_at):p.low_stock_at, category??p.category, p.id);
+  res.json(_pantryEnrich(db.prepare('SELECT * FROM pantry_items WHERE id=?').get(p.id)));
+});
+app.delete('/api/pantry/:id', requireAuth, (req, res) => {
+  db.prepare('DELETE FROM pantry_items WHERE id=?').run(Number(req.params.id));
+  res.json({ ok: true });
+});
+app.put('/api/pantry/:id/use', requireAuth, (req, res) => {
+  const p = db.prepare('SELECT * FROM pantry_items WHERE id=?').get(Number(req.params.id));
+  if (!p) return res.status(404).json({ error: 'Not found' });
+  const amount = Number(req.body?.amount ?? 1) || 1;
+  const nextQty = Math.max(0, (p.quantity || 0) - amount);
+  db.prepare('UPDATE pantry_items SET quantity=? WHERE id=?').run(nextQty, p.id);
+  res.json(_pantryEnrich(db.prepare('SELECT * FROM pantry_items WHERE id=?').get(p.id)));
+});
+app.post('/api/pantry/add-to-grocery', requireAuth, (req, res) => {
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(Number).filter(Boolean) : [];
+  if (!ids.length) return res.json({ added: 0 });
+  const items = db.prepare(`SELECT * FROM pantry_items WHERE id IN (${ids.map(()=>'?').join(',')})`).all(...ids);
+  const ins = db.prepare("INSERT INTO grocery (name,category,checked) VALUES (?,?,0)");
+  let added = 0;
+  for (const it of items) {
+    ins.run(it.name, it.category || 'Other');
+    added++;
+  }
+  res.json({ added });
+});
+
+// ── Routes: School ────────────────────────────────────────────────────────────
+app.get('/api/school', requireAuth, (req, res) => {
+  const members = db.prepare('SELECT * FROM school_members ORDER BY id').all();
+  const classes = db.prepare('SELECT * FROM school_classes ORDER BY school_member_id, period, subject').all();
+  res.json(members.map(m => ({ ...m, classes: classes.filter(c => c.school_member_id === m.id) })));
+});
+app.post('/api/school', requireAdmin, (req, res) => {
+  const { member_id=null, school_name='', grade='', teacher_name='', teacher_email='', school_phone='', start_time='', end_time='', notes='' } = req.body || {};
+  const r = db.prepare('INSERT INTO school_members (member_id,school_name,grade,teacher_name,teacher_email,school_phone,start_time,end_time,notes) VALUES (?,?,?,?,?,?,?,?,?)')
+    .run(member_id||null, school_name, grade, teacher_name, teacher_email, school_phone, start_time, end_time, notes);
+  const row = db.prepare('SELECT * FROM school_members WHERE id=?').get(r.lastInsertRowid);
+  res.json({ ...row, classes: [] });
+});
+app.put('/api/school/:id', requireAdmin, (req, res) => {
+  const id = Number(req.params.id);
+  const s = db.prepare('SELECT * FROM school_members WHERE id=?').get(id);
+  if (!s) return res.status(404).json({ error: 'Not found' });
+  const { member_id, school_name, grade, teacher_name, teacher_email, school_phone, start_time, end_time, notes } = req.body || {};
+  db.prepare('UPDATE school_members SET member_id=?,school_name=?,grade=?,teacher_name=?,teacher_email=?,school_phone=?,start_time=?,end_time=?,notes=? WHERE id=?')
+    .run(member_id!=null?(member_id||null):s.member_id, school_name??s.school_name, grade??s.grade, teacher_name??s.teacher_name, teacher_email??s.teacher_email, school_phone??s.school_phone, start_time??s.start_time, end_time??s.end_time, notes??s.notes, id);
+  const row = db.prepare('SELECT * FROM school_members WHERE id=?').get(id);
+  const classes = db.prepare('SELECT * FROM school_classes WHERE school_member_id=? ORDER BY period, subject').all(id);
+  res.json({ ...row, classes });
+});
+app.delete('/api/school/:id', requireAdmin, (req, res) => {
+  const id = Number(req.params.id);
+  db.prepare('DELETE FROM school_classes WHERE school_member_id=?').run(id);
+  db.prepare('DELETE FROM school_members WHERE id=?').run(id);
+  res.json({ ok: true });
+});
+app.post('/api/school/:id/classes', requireAdmin, (req, res) => {
+  const id = Number(req.params.id);
+  const { period='', subject, teacher='', room='', days='Mon,Tue,Wed,Thu,Fri' } = req.body || {};
+  if (!subject?.trim()) return res.status(400).json({ error: 'subject required' });
+  const r = db.prepare('INSERT INTO school_classes (school_member_id,period,subject,teacher,room,days) VALUES (?,?,?,?,?,?)')
+    .run(id, period, subject.trim(), teacher, room, days);
+  res.json(db.prepare('SELECT * FROM school_classes WHERE id=?').get(r.lastInsertRowid));
+});
+app.put('/api/school/:id/classes/:cid', requireAdmin, (req, res) => {
+  const cid = Number(req.params.cid);
+  const c = db.prepare('SELECT * FROM school_classes WHERE id=?').get(cid);
+  if (!c) return res.status(404).json({ error: 'Not found' });
+  const { period, subject, teacher, room, days } = req.body || {};
+  db.prepare('UPDATE school_classes SET period=?,subject=?,teacher=?,room=?,days=? WHERE id=?')
+    .run(period??c.period, subject?.trim()||c.subject, teacher??c.teacher, room??c.room, days??c.days, cid);
+  res.json(db.prepare('SELECT * FROM school_classes WHERE id=?').get(cid));
+});
+app.delete('/api/school/:id/classes/:cid', requireAdmin, (req, res) => {
+  db.prepare('DELETE FROM school_classes WHERE id=?').run(Number(req.params.cid));
+  res.json({ ok: true });
+});
+
 // ── SPA fallback ──────────────────────────────────────────────────────────────
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'dist', 'index.html')));
 

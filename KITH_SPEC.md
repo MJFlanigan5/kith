@@ -606,3 +606,331 @@ Sprint 2 = items 6–8 (new HomeScreen, two new tables, DisplayMode integration)
 Sprint 3 = items 9–12 (seasonal maintenance tab, pets screen, contacts screen, meal-grocery link)  
 
 **Sprint 3 suggested order:** 11 → 12 → 9 → 10 (contacts and meal link first — no new screens for 12, smallest scope; maintenance and pets are bigger standalone screens)
+
+---
+
+## SPRINT 7 — Complete home management
+
+### 23. Emergency info screen
+**Screen:** New EmergencyScreen, accessible from nav + DisplayMode without PIN  
+**What:** A single card with critical household info: utility shut-off locations, insurance details, emergency contacts, medical notes. Pin-free access from kiosk mode.
+
+**DB:**
+```sql
+CREATE TABLE IF NOT EXISTS emergency_info (
+  key TEXT PRIMARY KEY,
+  value TEXT DEFAULT ''
+);
+```
+
+**Predefined keys:** `gas_shutoff`, `water_shutoff`, `electric_shutoff`, `insurance_company`, `policy_number`, `insurance_phone`, `doctor_name`, `doctor_phone`, `medical_notes`, `extra_notes`
+
+**API routes:**
+- `GET /api/emergency` — returns all keys as `{ key: value }` object (auth required to write, read allowed in kiosk)
+- `PUT /api/emergency` — `{ gas_shutoff: '...', water_shutoff: '...', ... }` — upserts all provided keys
+
+**UI:**
+- EmergencyScreen: two-column form grouped by section (Utilities / Insurance / Medical / Notes)
+- Each field is a label + text input, editable inline with a single "Save" button
+- DisplayMode: "Emergency" panel (only show if at least one field filled)
+- Nav: add "Emergency" entry with a shield icon
+
+---
+
+### 24. Subscription tracker
+**Screen:** New SubscriptionsScreen in nav  
+**What:** Track recurring subscriptions (Netflix, Spotify, gym, software) separately from bills. Shows monthly total, annual cost, and flags trials expiring soon.
+
+**DB:**
+```sql
+CREATE TABLE IF NOT EXISTS subscriptions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  amount REAL DEFAULT 0,
+  billing_cycle TEXT DEFAULT 'monthly',
+  next_billing TEXT DEFAULT '',
+  category TEXT DEFAULT 'Other',
+  color TEXT DEFAULT '#5856D6',
+  active INTEGER DEFAULT 1,
+  trial_ends TEXT DEFAULT '',
+  notes TEXT DEFAULT '',
+  created_at TEXT DEFAULT (datetime('now'))
+);
+```
+
+**Billing cycles:** `monthly`, `annual`, `weekly`, `quarterly`
+
+**Computed:**
+- Monthly equivalent: amount / 12 for annual, amount * 52 / 12 for weekly, amount / 3 for quarterly
+- Total monthly spend (all active)
+- Annual total
+
+**API routes:**
+- `GET /api/subscriptions`
+- `POST /api/subscriptions`
+- `PUT /api/subscriptions/:id`
+- `DELETE /api/subscriptions/:id`
+
+**UI:**
+- List sorted by amount desc, grouped by category
+- Header: total monthly + annual cost
+- Each row: name + amount + cycle + next billing date
+- Trial expiring within 7 days → amber badge "Trial ends in Xd"
+- Inactive subscriptions in a collapsed "Paused" section
+- Add/edit drawer
+
+---
+
+### 25. Home repair log
+**Screen:** HomeScreen — new "Repairs" tab (tab 4, alongside Appliances / Consumables / Maintenance)  
+**What:** Log one-off repairs and improvements with cost and contractor info. Builds a searchable home history useful for resale documentation.
+
+**DB:**
+```sql
+CREATE TABLE IF NOT EXISTS home_repairs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  description TEXT DEFAULT '',
+  date TEXT DEFAULT '',
+  cost REAL DEFAULT 0,
+  contractor TEXT DEFAULT '',
+  category TEXT DEFAULT 'Other',
+  warranty_until TEXT DEFAULT '',
+  created_at TEXT DEFAULT (datetime('now'))
+);
+```
+
+**Categories:** Plumbing, Electrical, HVAC, Appliance, Structural, Exterior, Interior, Other
+
+**API routes:**
+- `GET /api/home/repairs`
+- `POST /api/home/repairs`
+- `PUT /api/home/repairs/:id`
+- `DELETE /api/home/repairs/:id`
+
+**UI:**
+- List sorted by date desc
+- Total spend summary at top (all time + this year)
+- Each row: title + category + date + cost
+- Expandable detail: description + contractor + warranty date
+- Add/edit drawer: title, category, date, cost, contractor, warranty date, notes
+
+---
+
+### 26. Home projects board
+**Screen:** New ProjectsScreen in nav  
+**What:** Track one-off home projects that are too big for chores and not calendar-based. "Repaint garage", "Replace deck boards", "Finish basement".
+
+**DB:**
+```sql
+CREATE TABLE IF NOT EXISTS projects (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  description TEXT DEFAULT '',
+  status TEXT DEFAULT 'planned',
+  priority TEXT DEFAULT 'medium',
+  cost_estimate REAL DEFAULT 0,
+  cost_actual REAL DEFAULT 0,
+  due_date TEXT DEFAULT '',
+  created_at TEXT DEFAULT (datetime('now'))
+);
+```
+
+**Status:** `planned`, `in_progress`, `done`  
+**Priority:** `low`, `medium`, `high`
+
+**API routes:**
+- `GET /api/projects`
+- `POST /api/projects`
+- `PUT /api/projects/:id`
+- `DELETE /api/projects/:id`
+
+**UI:**
+- Three columns (Planned / In Progress / Done) on desktop, tabs on mobile
+- Each card: title + priority badge + cost estimate + due date
+- Drag to change status (or tap status pill to cycle through)
+- Add/edit drawer
+- Done projects collapsible
+
+---
+
+### 27. Shared lists
+**Screen:** New ListsScreen in nav  
+**What:** Generic multi-purpose lists beyond grocery: hardware store run, pharmacy, things to return, packing list, etc.
+
+**DB:**
+```sql
+CREATE TABLE IF NOT EXISTS shared_lists (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  emoji TEXT DEFAULT '📋',
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS shared_list_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  list_id INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  checked INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+```
+
+**API routes:**
+- `GET /api/lists` — all lists with item counts
+- `POST /api/lists`
+- `DELETE /api/lists/:id`
+- `GET /api/lists/:id/items`
+- `POST /api/lists/:id/items`
+- `PUT /api/lists/:id/items/:iid` — toggle checked
+- `DELETE /api/lists/:id/items/:iid`
+- `DELETE /api/lists/:id/items/checked` — clear checked
+
+**UI:**
+- List of lists with item count + emoji
+- Tap list → opens item view (same pattern as grocery)
+- Per-list: add item input, check to cross off, clear checked button
+- New list: name + emoji picker
+
+---
+
+### 28. Pantry tracker
+**Screen:** New PantryScreen in nav  
+**What:** Track what's in stock (fridge, freezer, pantry) with expiration dates and low-stock alerts. "Add to grocery" for low/expired items closes the loop.
+
+**DB:**
+```sql
+CREATE TABLE IF NOT EXISTS pantry_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  location TEXT DEFAULT 'Pantry',
+  quantity REAL DEFAULT 1,
+  unit TEXT DEFAULT '',
+  expires_on TEXT DEFAULT '',
+  low_stock_at REAL DEFAULT 0,
+  category TEXT DEFAULT 'Other',
+  created_at TEXT DEFAULT (datetime('now'))
+);
+```
+
+**Locations:** Fridge, Freezer, Pantry, Cabinet  
+**Computed per item:**
+- `days_until_expiry` = expires_on - today
+- `expiry_status` = 'expired' (<0) | 'expiring_soon' (0-3) | 'ok'
+- `low_stock` = quantity <= low_stock_at (when low_stock_at > 0)
+
+**API routes:**
+- `GET /api/pantry` — items with computed fields, sorted by expiry asc then name
+- `POST /api/pantry`
+- `PUT /api/pantry/:id`
+- `DELETE /api/pantry/:id`
+- `POST /api/pantry/:id/use` — decrement quantity by 1 (or custom amount)
+- `POST /api/pantry/add-to-grocery` — `{ ids: [...] }` — adds named items to grocery list
+
+**UI:**
+- Grouped by location with section headers
+- Item row: name + qty + expiry badge (red/amber) + Use button
+- Low stock items get an amber "Low" badge
+- "Add expired/low to grocery" bulk action at top
+- Add/edit drawer: name, location, qty, unit, expiry date, low-stock threshold
+
+---
+
+### 29. Family health profiles
+**Screen:** FamilyScreen — new "Health" tab per member  
+**What:** Per-member health data: blood type, allergies, medications, conditions, primary doctor. Critical for emergencies and medical appointments.
+
+**DB:**
+```sql
+CREATE TABLE IF NOT EXISTS member_health (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  member_id INTEGER NOT NULL UNIQUE,
+  blood_type TEXT DEFAULT '',
+  allergies TEXT DEFAULT '',
+  medications TEXT DEFAULT '',
+  conditions TEXT DEFAULT '',
+  doctor_name TEXT DEFAULT '',
+  doctor_phone TEXT DEFAULT '',
+  insurance_provider TEXT DEFAULT '',
+  insurance_id TEXT DEFAULT '',
+  notes TEXT DEFAULT '',
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+```
+
+**API routes:**
+- `GET /api/members/:id/health`
+- `PUT /api/members/:id/health` — upserts full record
+
+**UI:**
+- In FamilyScreen, each member card gets a "Health" button/tab
+- Expanding health section: blood type (dropdown A/B/AB/O ±), allergies (textarea), medications (textarea), conditions (textarea), doctor info, insurance
+- Single "Save" button per member health record
+- Read-only display on member card: blood type pill + allergy count if set
+
+---
+
+### 30. School schedule
+**Screen:** New SchoolScreen in nav  
+**What:** Track school schedules, class periods, teacher contacts, and the school year calendar. Useful for families with kids in school.
+
+**DB:**
+```sql
+CREATE TABLE IF NOT EXISTS school_members (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  member_id INTEGER,
+  school_name TEXT DEFAULT '',
+  grade TEXT DEFAULT '',
+  teacher_name TEXT DEFAULT '',
+  teacher_email TEXT DEFAULT '',
+  school_phone TEXT DEFAULT '',
+  start_time TEXT DEFAULT '',
+  end_time TEXT DEFAULT '',
+  notes TEXT DEFAULT '',
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS school_classes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  school_member_id INTEGER NOT NULL,
+  period TEXT DEFAULT '',
+  subject TEXT NOT NULL,
+  teacher TEXT DEFAULT '',
+  room TEXT DEFAULT '',
+  days TEXT DEFAULT 'Mon,Tue,Wed,Thu,Fri',
+  created_at TEXT DEFAULT (datetime('now'))
+);
+```
+
+**API routes:**
+- `GET /api/school` — all school members with their classes
+- `POST /api/school`
+- `PUT /api/school/:id`
+- `DELETE /api/school/:id`
+- `POST /api/school/:id/classes`
+- `PUT /api/school/:id/classes/:cid`
+- `DELETE /api/school/:id/classes/:cid`
+
+**UI:**
+- One card per enrolled family member showing school name + grade + hours
+- Expandable class schedule (period grid or list)
+- Add/edit drawer for school info
+- Add/edit classes via nested drawer
+- Teacher contact info tap-to-call on mobile
+
+---
+
+## Build order — Sprint 7
+
+| # | Feature | Effort | Value |
+|---|---------|--------|-------|
+| 23 | Emergency info | XS | H |
+| 24 | Subscription tracker | S | H |
+| 25 | Home repair log | S | H |
+| 26 | Home projects board | S | H |
+| 27 | Shared lists | S | M |
+| 28 | Pantry tracker | M | H |
+| 29 | Family health profiles | S | H |
+| 30 | School schedule | S | M |
+
+Sprint 7 = items 23–30. Build order: 23 → 24 → 25 → 29 → 27 → 26 → 28 → 30

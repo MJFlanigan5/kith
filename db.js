@@ -363,6 +363,110 @@ db.exec(`CREATE TABLE IF NOT EXISTS budget_entries (
   date TEXT NOT NULL,
   created_at TEXT DEFAULT (datetime('now'))
 )`)
+db.exec(`CREATE TABLE IF NOT EXISTS emergency_info (
+  key TEXT PRIMARY KEY,
+  value TEXT DEFAULT ''
+)`)
+db.exec(`CREATE TABLE IF NOT EXISTS subscriptions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  amount REAL DEFAULT 0,
+  billing_cycle TEXT DEFAULT 'monthly',
+  next_billing TEXT DEFAULT '',
+  category TEXT DEFAULT 'Other',
+  color TEXT DEFAULT '#5856D6',
+  active INTEGER DEFAULT 1,
+  trial_ends TEXT DEFAULT '',
+  notes TEXT DEFAULT '',
+  created_at TEXT DEFAULT (datetime('now'))
+)`)
+db.exec(`CREATE TABLE IF NOT EXISTS home_repairs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  description TEXT DEFAULT '',
+  date TEXT DEFAULT '',
+  cost REAL DEFAULT 0,
+  contractor TEXT DEFAULT '',
+  category TEXT DEFAULT 'Other',
+  warranty_until TEXT DEFAULT '',
+  created_at TEXT DEFAULT (datetime('now'))
+)`)
+db.exec(`CREATE TABLE IF NOT EXISTS member_health (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  member_id INTEGER NOT NULL UNIQUE,
+  blood_type TEXT DEFAULT '',
+  allergies TEXT DEFAULT '',
+  medications TEXT DEFAULT '',
+  conditions TEXT DEFAULT '',
+  doctor_name TEXT DEFAULT '',
+  doctor_phone TEXT DEFAULT '',
+  insurance_provider TEXT DEFAULT '',
+  insurance_id TEXT DEFAULT '',
+  notes TEXT DEFAULT '',
+  updated_at TEXT DEFAULT (datetime('now'))
+)`)
+db.exec(`CREATE TABLE IF NOT EXISTS shared_lists (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  emoji TEXT DEFAULT '📋',
+  created_at TEXT DEFAULT (datetime('now'))
+)`)
+db.exec(`CREATE TABLE IF NOT EXISTS shared_list_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  list_id INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  checked INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now'))
+)`)
+db.exec(`CREATE TABLE IF NOT EXISTS projects (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  description TEXT DEFAULT '',
+  status TEXT DEFAULT 'planned',
+  priority TEXT DEFAULT 'medium',
+  cost_estimate REAL DEFAULT 0,
+  cost_actual REAL DEFAULT 0,
+  due_date TEXT DEFAULT '',
+  created_at TEXT DEFAULT (datetime('now'))
+)`)
+db.exec(`CREATE TABLE IF NOT EXISTS pantry_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  location TEXT DEFAULT 'Pantry',
+  quantity REAL DEFAULT 1,
+  unit TEXT DEFAULT '',
+  expires_on TEXT DEFAULT '',
+  low_stock_at REAL DEFAULT 0,
+  category TEXT DEFAULT 'Other',
+  created_at TEXT DEFAULT (datetime('now'))
+)`)
+db.exec(`CREATE TABLE IF NOT EXISTS school_members (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  member_id INTEGER,
+  school_name TEXT DEFAULT '',
+  grade TEXT DEFAULT '',
+  teacher_name TEXT DEFAULT '',
+  teacher_email TEXT DEFAULT '',
+  school_phone TEXT DEFAULT '',
+  start_time TEXT DEFAULT '',
+  end_time TEXT DEFAULT '',
+  notes TEXT DEFAULT '',
+  created_at TEXT DEFAULT (datetime('now'))
+)`)
+db.exec(`CREATE TABLE IF NOT EXISTS school_classes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  school_member_id INTEGER NOT NULL,
+  period TEXT DEFAULT '',
+  subject TEXT NOT NULL,
+  teacher TEXT DEFAULT '',
+  room TEXT DEFAULT '',
+  days TEXT DEFAULT 'Mon,Tue,Wed,Thu,Fri',
+  created_at TEXT DEFAULT (datetime('now'))
+)`)
+// Seed emergency_info default keys
+const _emKeys=['gas_shutoff','water_shutoff','electric_shutoff','insurance_company','policy_number','insurance_phone','doctor_name','doctor_phone','medical_notes','extra_notes'];
+const _insEm=db.prepare('INSERT OR IGNORE INTO emergency_info (key,value) VALUES (?,?)');
+for(const k of _emKeys) _insEm.run(k,'');
 db.prepare("UPDATE events SET calendar='kith' WHERE calendar IN ('personal','work','family','hearth')").run();
 db.prepare("UPDATE events SET time='All day' WHERE time IS NULL OR time=''").run();
 // Update old default forwarding address

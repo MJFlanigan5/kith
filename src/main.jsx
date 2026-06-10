@@ -377,6 +377,45 @@ function FamilyScreen({members,setMembers,toastAdd}){
   const [goalForm,setGoalForm]=useState({monthly_goal:'',reward:''});
   const [editId,setEditId]=useState(null);
   const [editForm,setEditForm]=useState({name:'',color:'#007AFF',birthday:''});
+  const [health,setHealth]=useState({});
+  const [healthEdit,setHealthEdit]=useState(null);
+  const blankHealth={blood_type:'',allergies:'',medications:'',conditions:'',doctor_name:'',doctor_phone:'',insurance_provider:'',insurance_id:'',notes:''};
+  const [healthForm,setHealthForm]=useState(blankHealth);
+  const [healthSaving,setHealthSaving]=useState(false);
+  const BLOOD_TYPES=['','A+','A-','B+','B-','AB+','AB-','O+','O-'];
+  const openHealth=async(m)=>{
+    let rec=health[m.id];
+    if(!rec){
+      rec=await api.get(`/api/members/${m.id}/health`).catch(()=>({}));
+      setHealth(h=>({...h,[m.id]:rec||{}}));
+    }
+    const r=rec||{};
+    setHealthForm({
+      blood_type:r.blood_type||'',allergies:r.allergies||'',medications:r.medications||'',conditions:r.conditions||'',
+      doctor_name:r.doctor_name||'',doctor_phone:r.doctor_phone||'',insurance_provider:r.insurance_provider||'',
+      insurance_id:r.insurance_id||'',notes:r.notes||''
+    });
+    setHealthEdit(m.id);
+  };
+  const saveHealth=async()=>{
+    if(!healthEdit) return;
+    setHealthSaving(true);
+    const r=await api.put(`/api/members/${healthEdit}/health`,healthForm).catch(()=>null);
+    setHealthSaving(false);
+    if(!r){toastAdd('Failed to save','red');return;}
+    setHealth(h=>({...h,[healthEdit]:r}));
+    setHealthEdit(null);
+    toastAdd('Health info saved');
+  };
+  useEffect(()=>{
+    if(!members?.length) return;
+    Promise.all(members.map(m=>api.get(`/api/members/${m.id}/health`).then(r=>[m.id,r||{}]).catch(()=>[m.id,{}])))
+      .then(pairs=>{
+        const map={};
+        for(const [id,rec] of pairs) if(rec&&rec.member_id) map[id]=rec;
+        setHealth(map);
+      });
+  },[members?.length]);
   const COLORS=['#007AFF','#34C759','#FF3B30','#FF9500','#5856D6','#32ADE6','#AF52DE','#FF2D55','#FF6B35','#30D158'];
   const save=async()=>{
     if(!form.name.trim()) return;
@@ -452,7 +491,11 @@ function FamilyScreen({members,setMembers,toastAdd}){
               <div style={{display:'flex',alignItems:'center',gap:14,padding:'14px 16px'}}>
                 <div style={{width:40,height:40,borderRadius:'50%',background:m.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,fontWeight:700,color:'#fff',flexShrink:0}}>{m.initials}</div>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:15,fontWeight:500,color:A.label1}}>{m.name}</div>
+                  <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
+                    <span style={{fontSize:15,fontWeight:500,color:A.label1}}>{m.name}</span>
+                    {health[m.id]?.blood_type&&<span style={{fontSize:11,fontWeight:700,color:A.red,background:A.redFill,padding:'1px 6px',borderRadius:A.rPill}}>{health[m.id].blood_type}</span>}
+                    {health[m.id]?.allergies&&<span style={{fontSize:11,fontWeight:700,color:A.amber,background:A.amberFill,padding:'1px 6px',borderRadius:A.rPill}}>⚠ Allergies</span>}
+                  </div>
                   {m.monthly_goal>0&&<div style={{fontSize:12,color:A.label4,marginTop:2}}>{m.monthly_goal} pt goal{m.reward?` · ${m.reward}`:''}</div>}
                   {m.birthday&&<div style={{fontSize:12,color:A.label5,marginTop:1}}>{new Date(m.birthday+'T12:00:00').toLocaleDateString(undefined,{month:'long',day:'numeric'})}</div>}
                 </div>
@@ -462,6 +505,7 @@ function FamilyScreen({members,setMembers,toastAdd}){
                 <button onClick={()=>{setGoalId(goalId===m.id?null:m.id);setGoalForm({monthly_goal:m.monthly_goal||'',reward:m.reward||''});}} style={{background:'none',border:'none',color:A.blue,fontSize:13,cursor:'pointer',fontWeight:500}}>
                   {goalId===m.id?'Cancel':'Set Goal'}
                 </button>
+                <button onClick={()=>openHealth(m)} style={{background:'none',border:'none',color:A.blue,fontSize:13,cursor:'pointer',fontWeight:500}}>Health</button>
                 <button onClick={()=>{setPinModal(m.id);setPinInput('');}} style={{background:'none',border:'none',color:A.blue,fontSize:13,cursor:'pointer',fontWeight:500}}>PIN</button>
                 <button onClick={()=>del(m.id)} style={{background:'none',border:'none',color:A.label4,fontSize:13,cursor:'pointer',fontWeight:500}}>Remove</button>
               </div>
@@ -500,6 +544,40 @@ function FamilyScreen({members,setMembers,toastAdd}){
           <Btn onClick={savePin} full>Save PIN</Btn>
         </div>
       </Modal>
+      <Drawer open={healthEdit!==null} onClose={()=>setHealthEdit(null)} title={`Health — ${members.find(m=>m.id===healthEdit)?.name||''}`}>
+        <FormGroup label="Blood type">
+          <div style={{padding:'12px 16px'}}>
+            <select value={healthForm.blood_type} onChange={e=>setHealthForm(f=>({...f,blood_type:e.target.value}))} style={{width:'100%',padding:'10px 12px',borderRadius:A.rXs,border:`1px solid ${A.sep}`,background:A.inputBg,fontSize:15,color:A.label1}}>
+              {BLOOD_TYPES.map(b=><option key={b||'none'} value={b}>{b||'—'}</option>)}
+            </select>
+          </div>
+        </FormGroup>
+        <FormGroup label="Allergies">
+          <div style={{padding:'12px 16px'}}><textarea value={healthForm.allergies} onChange={e=>setHealthForm(f=>({...f,allergies:e.target.value}))} placeholder="Penicillin, peanuts, etc." style={{width:'100%',minHeight:60,padding:'9px 12px',background:A.inputBg,border:`1.5px solid ${A.sep}`,borderRadius:A.rXs,fontSize:15,color:A.label1,fontFamily:'inherit',resize:'vertical',outline:'none'}}/></div>
+        </FormGroup>
+        <FormGroup label="Medications">
+          <div style={{padding:'12px 16px'}}><textarea value={healthForm.medications} onChange={e=>setHealthForm(f=>({...f,medications:e.target.value}))} placeholder="Daily medications and dosages" style={{width:'100%',minHeight:60,padding:'9px 12px',background:A.inputBg,border:`1.5px solid ${A.sep}`,borderRadius:A.rXs,fontSize:15,color:A.label1,fontFamily:'inherit',resize:'vertical',outline:'none'}}/></div>
+        </FormGroup>
+        <FormGroup label="Conditions">
+          <div style={{padding:'12px 16px'}}><textarea value={healthForm.conditions} onChange={e=>setHealthForm(f=>({...f,conditions:e.target.value}))} placeholder="Asthma, diabetes, etc." style={{width:'100%',minHeight:60,padding:'9px 12px',background:A.inputBg,border:`1.5px solid ${A.sep}`,borderRadius:A.rXs,fontSize:15,color:A.label1,fontFamily:'inherit',resize:'vertical',outline:'none'}}/></div>
+        </FormGroup>
+        <FormGroup label="Primary doctor">
+          <div style={{padding:'12px 16px'}}><Inp value={healthForm.doctor_name} onChange={e=>setHealthForm(f=>({...f,doctor_name:e.target.value}))} placeholder="Dr. Smith"/></div>
+        </FormGroup>
+        <FormGroup label="Doctor phone">
+          <div style={{padding:'12px 16px'}}><Inp type="tel" value={healthForm.doctor_phone} onChange={e=>setHealthForm(f=>({...f,doctor_phone:e.target.value}))} placeholder="(404) 555-0100"/></div>
+        </FormGroup>
+        <FormGroup label="Insurance provider">
+          <div style={{padding:'12px 16px'}}><Inp value={healthForm.insurance_provider} onChange={e=>setHealthForm(f=>({...f,insurance_provider:e.target.value}))} placeholder="Blue Cross"/></div>
+        </FormGroup>
+        <FormGroup label="Insurance ID / member #">
+          <div style={{padding:'12px 16px'}}><Inp value={healthForm.insurance_id} onChange={e=>setHealthForm(f=>({...f,insurance_id:e.target.value}))} placeholder="XJK123456789"/></div>
+        </FormGroup>
+        <FormGroup label="Notes">
+          <div style={{padding:'12px 16px'}}><textarea value={healthForm.notes} onChange={e=>setHealthForm(f=>({...f,notes:e.target.value}))} placeholder="Anything else worth knowing in an emergency" style={{width:'100%',minHeight:60,padding:'9px 12px',background:A.inputBg,border:`1.5px solid ${A.sep}`,borderRadius:A.rXs,fontSize:15,color:A.label1,fontFamily:'inherit',resize:'vertical',outline:'none'}}/></div>
+        </FormGroup>
+        <Btn onClick={saveHealth} full>{healthSaving?'Saving…':'Save'}</Btn>
+      </Drawer>
     </div>
   );
 }
@@ -542,6 +620,17 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
     const id=setInterval(load,5*60*1000);
     return()=>clearInterval(id);
   },[]);
+
+  const [dispEmergency,setDispEmergency]=useState({});
+  useEffect(()=>{
+    api.get('/api/emergency').then(d=>{if(d&&typeof d==='object'&&!d.error) setDispEmergency(d);}).catch(()=>{});
+  },[]);
+  const emergencyHasValue=useMemo(()=>Object.values(dispEmergency||{}).some(v=>v&&String(v).trim()!==''),[dispEmergency]);
+  const EMERGENCY_LABELS={
+    gas_shutoff:'Gas shut-off',water_shutoff:'Water shut-off',electric_shutoff:'Electric panel',
+    insurance_company:'Insurance',policy_number:'Policy #',insurance_phone:'Insurance phone',
+    doctor_name:'Doctor',doctor_phone:'Doctor phone',medical_notes:'Medical notes',extra_notes:'Notes'
+  };
 
   const [livePollVotes,setLivePollVotes]=useState({});
   useEffect(()=>{
@@ -799,6 +888,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
     ...(urgentConsumables.length>0?['w_home_consumables']:[]),
     ...(urgentMaintenance.length>0?['w_home_maintenance']:[]),
     ...(urgentPetRecords.length>0?['w_pets']:[]),
+    ...(emergencyHasValue?['w_emergency']:[]),
   ];
   const activePanelId=centerPanels[centerIdx%Math.max(1,centerPanels.length)];
   useEffect(()=>{
@@ -1876,6 +1966,22 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
                         </div>
                       </>
                     )}
+                    {visiblePanelId==='w_emergency'&&emergencyHasValue&&(()=>{
+                      const filled=Object.entries(dispEmergency).filter(([k,v])=>v&&String(v).trim()!==''&&EMERGENCY_LABELS[k]);
+                      return(
+                        <>
+                          <WLabel>Emergency info</WLabel>
+                          <div style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:8,marginTop:4}}>
+                            {filled.map(([k,v])=>(
+                              <div key={k} style={{padding:'10px 14px',background:'rgba(255,255,255,0.05)',borderRadius:10}}>
+                                <div style={{fontSize:11,fontWeight:700,color:D.t3,textTransform:'uppercase',letterSpacing:'.06em'}}>{EMERGENCY_LABELS[k]}</div>
+                                <div style={{fontSize:isTV?17:14,color:D.t1,marginTop:3,lineHeight:1.4,whiteSpace:'pre-wrap'}}>{v}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      );
+                    })()}
                     {visiblePanelId==='w_pets'&&urgentPetRecords.length>0&&(
                       <>
                         <WLabel>Pet care due</WLabel>
@@ -6856,10 +6962,53 @@ function HomeScreen({appliances,setAppliances,consumables,setConsumables,mainten
   const isMobile=useIsMobile();
   const [tab,setTab]=useState('appliances');
   const MONTH_NAMES=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const REPAIR_CATS=['Plumbing','Electrical','HVAC','Appliance','Structural','Exterior','Interior','Other'];
   const [maintDrawer,setMaintDrawer]=useState(false);
   const [maintEdit,setMaintEdit]=useState(null);
   const [maintForm,setMaintForm]=useState({name:'',month:'1',notes:''});
   const maintSort=(a,b)=>{const o={overdue:0,due_this_month:1,upcoming:2,done_this_year:3};return(o[a.status]??4)-(o[b.status]??4)||a.month-b.month;};
+
+  // ── Repairs ─────────────────────────────────────────────────────────────────
+  const [repairs,setRepairs]=useState([]);
+  const [repairsLoaded,setRepairsLoaded]=useState(false);
+  const [rDrawer,setRDrawer]=useState(false);
+  const [editRepair,setEditRepair]=useState(null);
+  const [expandedRepair,setExpandedRepair]=useState(null);
+  const blankR={title:'',category:'Other',date:'',cost:'',contractor:'',warranty_until:'',description:''};
+  const [rForm,setRForm]=useState(blankR);
+  useEffect(()=>{
+    if(tab!=='repairs'||repairsLoaded) return;
+    api.get('/api/home/repairs').then(d=>{if(Array.isArray(d)) setRepairs(d);setRepairsLoaded(true);}).catch(()=>setRepairsLoaded(true));
+  },[tab,repairsLoaded]);
+  const openNewRepair=()=>{setEditRepair(null);setRForm({...blankR,date:new Date().toISOString().slice(0,10)});setRDrawer(true);};
+  const openEditRepair=r=>{setEditRepair(r);setRForm({title:r.title,category:r.category||'Other',date:r.date||'',cost:r.cost?String(r.cost):'',contractor:r.contractor||'',warranty_until:r.warranty_until||'',description:r.description||''});setRDrawer(true);};
+  const saveRepair=async()=>{
+    if(!rForm.title.trim()){toastAdd('Title required','red');return;}
+    const body={title:rForm.title.trim(),category:rForm.category,date:rForm.date,cost:Number(rForm.cost)||0,contractor:rForm.contractor,warranty_until:rForm.warranty_until,description:rForm.description};
+    if(editRepair){
+      const r=await api.put(`/api/home/repairs/${editRepair.id}`,body).catch(()=>null);
+      if(!r?.id){toastAdd('Failed to save','red');return;}
+      setRepairs(p=>p.map(x=>x.id===r.id?r:x).sort((a,b)=>(b.date||'').localeCompare(a.date||'')));
+    }else{
+      const r=await api.post('/api/home/repairs',body).catch(()=>null);
+      if(!r?.id){toastAdd('Failed to save','red');return;}
+      setRepairs(p=>[r,...p].sort((a,b)=>(b.date||'').localeCompare(a.date||'')));
+    }
+    setRDrawer(false);setEditRepair(null);
+    toastAdd(editRepair?'Repair updated':'Repair added');
+  };
+  const delRepair=async id=>{
+    try{
+      await api.del(`/api/home/repairs/${id}`);
+      setRepairs(p=>p.filter(r=>r.id!==id));
+      setRDrawer(false);setEditRepair(null);
+      toastAdd('Removed','blue');
+    }catch{toastAdd('Failed to remove','red');}
+  };
+  const totalAll=repairs.reduce((s,r)=>s+(Number(r.cost)||0),0);
+  const yr=new Date().getFullYear();
+  const totalYear=repairs.filter(r=>(r.date||'').startsWith(String(yr))).reduce((s,r)=>s+(Number(r.cost)||0),0);
+  const fmtMoney=n=>`$${(Number(n)||0).toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:2})}`;
 
   // ── Appliances ──────────────────────────────────────────────────────────────
   const blankA={name:'',location:'',purchase_date:'',warranty_date:'',notes:''};
@@ -7020,7 +7169,7 @@ function HomeScreen({appliances,setAppliances,consumables,setConsumables,mainten
     <div>
       <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:24}}>
         <h1 style={{fontSize:isMobile?34:44,fontWeight:800,letterSpacing:'-.05em',lineHeight:1.05}}>Home</h1>
-        <SegCtrl value={tab} onChange={setTab} options={['appliances','consumables','maintenance']}/>
+        <SegCtrl value={tab} onChange={setTab} options={['appliances','consumables','maintenance','repairs']}/>
       </div>
 
       {tab==='appliances'&&(
@@ -7251,11 +7400,978 @@ function HomeScreen({appliances,setAppliances,consumables,setConsumables,mainten
           </Drawer>
         </>
       )}
+
+      {tab==='repairs'&&(
+        <>
+          <div style={{display:'flex',gap:12,marginBottom:16,flexWrap:'wrap'}}>
+            <Card style={{padding:'14px 18px',flex:1,minWidth:160}}>
+              <div style={{fontSize:11,fontWeight:700,color:A.label4,textTransform:'uppercase',letterSpacing:'.06em'}}>This year</div>
+              <div style={{fontSize:24,fontWeight:800,color:A.label1,marginTop:2,letterSpacing:'-.02em'}}>{fmtMoney(totalYear)}</div>
+            </Card>
+            <Card style={{padding:'14px 18px',flex:1,minWidth:160}}>
+              <div style={{fontSize:11,fontWeight:700,color:A.label4,textTransform:'uppercase',letterSpacing:'.06em'}}>All time</div>
+              <div style={{fontSize:24,fontWeight:800,color:A.label1,marginTop:2,letterSpacing:'-.02em'}}>{fmtMoney(totalAll)}</div>
+            </Card>
+          </div>
+          <div style={{display:'flex',justifyContent:'flex-end',marginBottom:16}}>
+            <Btn onClick={openNewRepair}>+ Log Repair</Btn>
+          </div>
+          {!repairsLoaded?(
+            <Card style={{padding:'40px 24px',textAlign:'center'}}>
+              <div style={{fontSize:14,color:A.label4}}>Loading…</div>
+            </Card>
+          ):repairs.length===0?(
+            <Card style={{padding:'52px 24px',textAlign:'center'}}>
+              <div style={{fontSize:13,fontWeight:700,color:A.label5,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:10}}>No repairs logged</div>
+              <div style={{fontSize:15,color:A.label3,fontWeight:500}}>Track repairs, costs, and contractors so you have a history for warranty claims and resale.</div>
+            </Card>
+          ):(
+            <Card style={{overflow:'hidden',padding:0}}>
+              {repairs.map((r,i)=>{
+                const expanded=expandedRepair===r.id;
+                return(
+                  <div key={r.id} style={{borderTop:i>0?`1px solid ${A.sep}`:'none'}}>
+                    <div style={{display:'flex',alignItems:'center',gap:12,padding:'14px 18px',cursor:'pointer'}} onClick={()=>setExpandedRepair(expanded?null:r.id)}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                          <span style={{fontSize:15,fontWeight:600,color:A.label1}}>{r.title}</span>
+                          <span style={{fontSize:11,fontWeight:700,color:A.label4,background:A.inputBg,padding:'2px 8px',borderRadius:A.rPill}}>{r.category||'Other'}</span>
+                        </div>
+                        <div style={{fontSize:12,color:A.label4,marginTop:3}}>{r.date||'No date'}</div>
+                      </div>
+                      <div style={{fontSize:15,fontWeight:600,color:A.label1,flexShrink:0}}>{r.cost>0?fmtMoney(r.cost):'—'}</div>
+                      <button onClick={(e)=>{e.stopPropagation();openEditRepair(r);}} style={{background:'none',border:'none',color:A.label4,cursor:'pointer',fontSize:13,padding:'0 4px',flexShrink:0}}>Edit</button>
+                    </div>
+                    {expanded&&(
+                      <div style={{padding:'0 18px 14px',display:'flex',flexDirection:'column',gap:4}}>
+                        {r.description&&<div style={{fontSize:13,color:A.label3,whiteSpace:'pre-wrap'}}>{r.description}</div>}
+                        {r.contractor&&<div style={{fontSize:12,color:A.label4}}>Contractor: {r.contractor}</div>}
+                        {r.warranty_until&&<div style={{fontSize:12,color:A.label4}}>Warranty until: {r.warranty_until}</div>}
+                        {!r.description&&!r.contractor&&!r.warranty_until&&<div style={{fontSize:12,color:A.label5,fontStyle:'italic'}}>No additional details</div>}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </Card>
+          )}
+          <Drawer open={rDrawer} onClose={()=>{setRDrawer(false);setEditRepair(null);}} title={editRepair?'Edit Repair':'Log Repair'}>
+            <FormGroup label="Title">
+              <div style={{padding:'12px 16px'}}><Inp value={rForm.title} onChange={e=>setRForm(f=>({...f,title:e.target.value}))} placeholder="Replaced water heater"/></div>
+            </FormGroup>
+            <FormGroup label="Category">
+              <div style={{padding:'12px 16px'}}>
+                <select value={rForm.category} onChange={e=>setRForm(f=>({...f,category:e.target.value}))} style={{width:'100%',padding:'10px 12px',borderRadius:A.rXs,border:`1px solid ${A.sep}`,background:A.inputBg,fontSize:15,color:A.label1}}>
+                  {REPAIR_CATS.map(c=><option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+            </FormGroup>
+            <FormGroup label="Date">
+              <div style={{padding:'12px 16px'}}><Inp type="date" value={rForm.date} onChange={e=>setRForm(f=>({...f,date:e.target.value}))}/></div>
+            </FormGroup>
+            <FormGroup label="Cost (USD)">
+              <div style={{padding:'12px 16px'}}><Inp type="number" value={rForm.cost} onChange={e=>setRForm(f=>({...f,cost:e.target.value}))} placeholder="0"/></div>
+            </FormGroup>
+            <FormGroup label="Contractor (optional)">
+              <div style={{padding:'12px 16px'}}><Inp value={rForm.contractor} onChange={e=>setRForm(f=>({...f,contractor:e.target.value}))} placeholder="Smith Plumbing"/></div>
+            </FormGroup>
+            <FormGroup label="Warranty until (optional)">
+              <div style={{padding:'12px 16px'}}><Inp type="date" value={rForm.warranty_until} onChange={e=>setRForm(f=>({...f,warranty_until:e.target.value}))}/></div>
+            </FormGroup>
+            <FormGroup label="Notes (optional)">
+              <div style={{padding:'12px 16px'}}><Inp value={rForm.description} onChange={e=>setRForm(f=>({...f,description:e.target.value}))} placeholder="Brand, model, scope of work…"/></div>
+            </FormGroup>
+            <div style={{display:'flex',gap:8,marginTop:4}}>
+              <Btn onClick={saveRepair} full>{editRepair?'Save Changes':'Log Repair'}</Btn>
+              {editRepair&&<Btn variant="ghost" onClick={()=>delRepair(editRepair.id)} full style={{color:A.red}}>Delete</Btn>}
+            </div>
+            {!editRepair&&<Btn variant="ghost" onClick={()=>setRDrawer(false)} full style={{marginTop:8}}>Cancel</Btn>}
+          </Drawer>
+        </>
+      )}
     </div>
   );
 }
 
-function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocery,setGrocery,meals,setMeals,icsSources,setIcsSources,inboxCount,setInboxCount,countdowns,setCountdowns,members,setMembers,photos,setPhotos,clockFormat,setClockFormat,weather,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd,setRefreshMs,parseRefreshMs,goals,setGoals,notes,setNotes,polls,setPolls,bookmarks,setBookmarks,quickActions,setQuickActions,setRotationMs,setWifiQrData,darkMode,onDarkMode,packages,setPackages,messages,setMessages,recipes,setRecipes,bills,setBills,payments,setPayments,vehicles,setVehicles,appliances,setAppliances,consumables,setConsumables,pets,setPets,contacts,setContacts,maintenanceItems,setMaintenanceItems,budget,setBudget,isAdmin=false}){
+function EmergencyScreen({toastAdd}){
+  const isMobile=useIsMobile();
+  const blank={gas_shutoff:'',water_shutoff:'',electric_shutoff:'',insurance_company:'',policy_number:'',insurance_phone:'',doctor_name:'',doctor_phone:'',medical_notes:'',extra_notes:''};
+  const [info,setInfo]=useState(blank);
+  const [form,setForm]=useState(blank);
+  const [saving,setSaving]=useState(false);
+  useEffect(()=>{
+    api.get('/api/emergency').then(d=>{const merged={...blank,...d};setInfo(merged);setForm(merged);}).catch(()=>{});
+  },[]);
+  const save=async()=>{
+    setSaving(true);
+    const r=await api.put('/api/emergency',form).catch(()=>null);
+    setSaving(false);
+    if(!r){toastAdd('Failed to save','red');return;}
+    setInfo(form);
+    toastAdd('Emergency info saved');
+  };
+  const textareaStyle={width:'100%',minHeight:80,padding:'9px 12px',background:A.inputBg,border:`1.5px solid ${A.sep}`,borderRadius:A.rXs,fontSize:15,color:A.label1,fontFamily:'inherit',resize:'vertical',outline:'none'};
+  return(
+    <div style={{maxWidth:780}}>
+      <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:24}}>
+        <h1 style={{fontSize:isMobile?34:44,fontWeight:800,letterSpacing:'-.05em',lineHeight:1.05}}>Emergency</h1>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:16,marginBottom:8}}>
+        <div>
+          <div style={{fontSize:12,fontWeight:700,color:A.label4,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:8}}>Utilities</div>
+          <FormGroup label="Gas shut-off location"><div style={{padding:'12px 16px'}}><Inp value={form.gas_shutoff} onChange={e=>setForm(f=>({...f,gas_shutoff:e.target.value}))} placeholder="Basement, behind furnace"/></div></FormGroup>
+          <FormGroup label="Water shut-off location"><div style={{padding:'12px 16px'}}><Inp value={form.water_shutoff} onChange={e=>setForm(f=>({...f,water_shutoff:e.target.value}))} placeholder="Garage, north wall"/></div></FormGroup>
+          <FormGroup label="Electric panel location"><div style={{padding:'12px 16px'}}><Inp value={form.electric_shutoff} onChange={e=>setForm(f=>({...f,electric_shutoff:e.target.value}))} placeholder="Mud room closet"/></div></FormGroup>
+        </div>
+        <div>
+          <div style={{fontSize:12,fontWeight:700,color:A.label4,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:8}}>Insurance</div>
+          <FormGroup label="Company"><div style={{padding:'12px 16px'}}><Inp value={form.insurance_company} onChange={e=>setForm(f=>({...f,insurance_company:e.target.value}))} placeholder="State Farm"/></div></FormGroup>
+          <FormGroup label="Policy #"><div style={{padding:'12px 16px'}}><Inp value={form.policy_number} onChange={e=>setForm(f=>({...f,policy_number:e.target.value}))}/></div></FormGroup>
+          <FormGroup label="Phone"><div style={{padding:'12px 16px'}}><Inp type="tel" value={form.insurance_phone} onChange={e=>setForm(f=>({...f,insurance_phone:e.target.value}))} placeholder="(800) 555-0100"/></div></FormGroup>
+        </div>
+        <div>
+          <div style={{fontSize:12,fontWeight:700,color:A.label4,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:8}}>Medical</div>
+          <FormGroup label="Primary doctor"><div style={{padding:'12px 16px'}}><Inp value={form.doctor_name} onChange={e=>setForm(f=>({...f,doctor_name:e.target.value}))}/></div></FormGroup>
+          <FormGroup label="Doctor phone"><div style={{padding:'12px 16px'}}><Inp type="tel" value={form.doctor_phone} onChange={e=>setForm(f=>({...f,doctor_phone:e.target.value}))}/></div></FormGroup>
+          <FormGroup label="Medical notes"><div style={{padding:'12px 16px'}}><textarea value={form.medical_notes} onChange={e=>setForm(f=>({...f,medical_notes:e.target.value}))} placeholder="Allergies, conditions, blood types" style={textareaStyle}/></div></FormGroup>
+        </div>
+        <div>
+          <div style={{fontSize:12,fontWeight:700,color:A.label4,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:8}}>Other</div>
+          <FormGroup label="Extra notes"><div style={{padding:'12px 16px'}}><textarea value={form.extra_notes} onChange={e=>setForm(f=>({...f,extra_notes:e.target.value}))} placeholder="Spare key location, security codes, etc." style={textareaStyle}/></div></FormGroup>
+        </div>
+      </div>
+      <div style={{marginTop:8}}>
+        <Btn onClick={save}>{saving?'Saving…':'Save'}</Btn>
+      </div>
+    </div>
+  );
+}
+
+function SubscriptionsScreen({subscriptions,setSubscriptions,toastAdd}){
+  const isMobile=useIsMobile();
+  const CATEGORIES=['Streaming','Software','Fitness','Food','Other'];
+  const CYCLES=[['monthly','Monthly'],['annual','Annual'],['weekly','Weekly'],['quarterly','Quarterly']];
+  const PALETTE=['#5856D6','#007AFF','#34C759','#FF9500','#FF3B30','#AF52DE','#32ADE6','#FF2D55'];
+  const blank={name:'',amount:'',billing_cycle:'monthly',next_billing:'',trial_ends:'',category:'Other',color:'#5856D6',notes:''};
+  const [drawer,setDrawer]=useState(false);
+  const [editSub,setEditSub]=useState(null);
+  const [form,setForm]=useState(blank);
+  const monthlyEquiv=s=>{
+    const a=Number(s.amount)||0;
+    if(s.billing_cycle==='annual') return a/12;
+    if(s.billing_cycle==='weekly') return a*52/12;
+    if(s.billing_cycle==='quarterly') return a/3;
+    return a;
+  };
+  const cycleLabel=c=>({monthly:'/mo',annual:'/yr',weekly:'/wk',quarterly:'/qtr'}[c]||'');
+  const fmtMoney=n=>`$${(Number(n)||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+  const active=(subscriptions||[]).filter(s=>s.active);
+  const inactive=(subscriptions||[]).filter(s=>!s.active);
+  const totalMonthly=active.reduce((s,x)=>s+monthlyEquiv(x),0);
+  const totalAnnual=totalMonthly*12;
+  const sorted=[...active].sort((a,b)=>monthlyEquiv(b)-monthlyEquiv(a));
+  const byCat=CATEGORIES.map(cat=>({cat,items:sorted.filter(s=>s.category===cat)})).filter(g=>g.items.length>0);
+  const trialBadge=s=>{
+    if(!s.trial_ends) return null;
+    const d=daysUntil(s.trial_ends);
+    if(d<0||d>7) return null;
+    return d===0?'Trial ends today':`Trial ${d}d left`;
+  };
+  const openNew=()=>{setEditSub(null);setForm(blank);setDrawer(true);};
+  const openEdit=s=>{setEditSub(s);setForm({name:s.name,amount:String(s.amount||''),billing_cycle:s.billing_cycle||'monthly',next_billing:s.next_billing||'',trial_ends:s.trial_ends||'',category:s.category||'Other',color:s.color||'#5856D6',notes:s.notes||''});setDrawer(true);};
+  const save=async()=>{
+    if(!form.name.trim()){toastAdd('Name required','red');return;}
+    const body={...form,amount:Number(form.amount)||0};
+    if(editSub){
+      const r=await api.put(`/api/subscriptions/${editSub.id}`,body).catch(()=>null);
+      if(!r?.id){toastAdd('Failed to save','red');return;}
+      setSubscriptions(p=>p.map(s=>s.id===r.id?r:s));
+    }else{
+      const r=await api.post('/api/subscriptions',body).catch(()=>null);
+      if(!r?.id){toastAdd('Failed to save','red');return;}
+      setSubscriptions(p=>[...p,r]);
+    }
+    setDrawer(false);setEditSub(null);
+    toastAdd(editSub?'Subscription updated':'Subscription added');
+  };
+  const del=async id=>{
+    try{await api.del(`/api/subscriptions/${id}`);setSubscriptions(p=>p.filter(s=>s.id!==id));setDrawer(false);setEditSub(null);toastAdd('Removed','blue');}
+    catch{toastAdd('Failed to remove','red');}
+  };
+  const toggleActive=async s=>{
+    const r=await api.put(`/api/subscriptions/${s.id}`,{active:s.active?0:1}).catch(()=>null);
+    if(!r?.id){toastAdd('Failed','red');return;}
+    setSubscriptions(p=>p.map(x=>x.id===r.id?r:x));
+  };
+  const Row=({s})=>{
+    const trial=trialBadge(s);
+    return(
+      <div style={{display:'flex',alignItems:'center',gap:12,padding:'14px 18px'}}>
+        <div style={{width:10,height:10,borderRadius:'50%',background:s.color||'#5856D6',flexShrink:0}}/>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+            <span style={{fontSize:15,fontWeight:600,color:A.label1}}>{s.name}</span>
+            {trial&&<span style={{fontSize:11,fontWeight:700,color:A.amber,background:A.amberFill,padding:'2px 8px',borderRadius:A.rPill}}>{trial}</span>}
+          </div>
+          <div style={{fontSize:12,color:A.label4,marginTop:2}}>
+            {fmtMoney(s.amount)}{cycleLabel(s.billing_cycle)}{s.next_billing&&` · next ${s.next_billing}`}
+          </div>
+        </div>
+        <button onClick={()=>toggleActive(s)} style={{background:s.active?A.greenFill:A.inputBg,color:s.active?A.green:A.label4,border:'none',borderRadius:A.rPill,padding:'5px 12px',fontSize:12,fontWeight:600,cursor:'pointer',flexShrink:0}}>{s.active?'Active':'Paused'}</button>
+        <button onClick={()=>openEdit(s)} style={{background:'none',border:'none',color:A.label4,cursor:'pointer',fontSize:13,padding:'0 4px',flexShrink:0}}>Edit</button>
+      </div>
+    );
+  };
+  return(
+    <div>
+      <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:24}}>
+        <h1 style={{fontSize:isMobile?34:44,fontWeight:800,letterSpacing:'-.05em',lineHeight:1.05}}>Subscriptions</h1>
+        <Btn onClick={openNew}>+ Add</Btn>
+      </div>
+      <div style={{display:'flex',gap:12,marginBottom:20,flexWrap:'wrap'}}>
+        <Card style={{padding:'14px 18px',flex:1,minWidth:160}}>
+          <div style={{fontSize:11,fontWeight:700,color:A.label4,textTransform:'uppercase',letterSpacing:'.06em'}}>Monthly</div>
+          <div style={{fontSize:24,fontWeight:800,color:A.label1,marginTop:2,letterSpacing:'-.02em'}}>{fmtMoney(totalMonthly)}</div>
+        </Card>
+        <Card style={{padding:'14px 18px',flex:1,minWidth:160}}>
+          <div style={{fontSize:11,fontWeight:700,color:A.label4,textTransform:'uppercase',letterSpacing:'.06em'}}>Annual</div>
+          <div style={{fontSize:24,fontWeight:800,color:A.label1,marginTop:2,letterSpacing:'-.02em'}}>{fmtMoney(totalAnnual)}</div>
+        </Card>
+      </div>
+      {(subscriptions||[]).length===0?(
+        <Card style={{padding:'52px 24px',textAlign:'center'}}>
+          <div style={{fontSize:13,fontWeight:700,color:A.label5,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:10}}>No subscriptions yet</div>
+          <div style={{fontSize:15,color:A.label3,fontWeight:500}}>Track every recurring charge so it's easy to spot what to cancel.</div>
+        </Card>
+      ):(
+        <div style={{display:'flex',flexDirection:'column',gap:20}}>
+          {byCat.map(({cat,items})=>(
+            <div key={cat}>
+              <div style={{fontSize:12,fontWeight:700,color:A.label4,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:8}}>{cat}</div>
+              <Card style={{overflow:'hidden',padding:0}}>
+                {items.map((s,i)=>(<div key={s.id} style={{borderTop:i>0?`1px solid ${A.sep}`:'none'}}><Row s={s}/></div>))}
+              </Card>
+            </div>
+          ))}
+          {inactive.length>0&&(
+            <details>
+              <summary style={{fontSize:12,fontWeight:700,color:A.label4,textTransform:'uppercase',letterSpacing:'.06em',cursor:'pointer',marginBottom:8,listStyle:'none'}}>Paused ({inactive.length})</summary>
+              <Card style={{overflow:'hidden',padding:0,opacity:.7}}>
+                {inactive.map((s,i)=>(<div key={s.id} style={{borderTop:i>0?`1px solid ${A.sep}`:'none'}}><Row s={s}/></div>))}
+              </Card>
+            </details>
+          )}
+        </div>
+      )}
+      <Drawer open={drawer} onClose={()=>{setDrawer(false);setEditSub(null);}} title={editSub?'Edit Subscription':'Add Subscription'}>
+        <FormGroup label="Name">
+          <div style={{padding:'12px 16px'}}><Inp value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} placeholder="Netflix"/></div>
+        </FormGroup>
+        <FormGroup label="Amount">
+          <div style={{padding:'12px 16px'}}><Inp type="number" value={form.amount} onChange={e=>setForm(f=>({...f,amount:e.target.value}))} placeholder="15.99"/></div>
+        </FormGroup>
+        <FormGroup label="Billing cycle">
+          <div style={{padding:'12px 16px'}}>
+            <select value={form.billing_cycle} onChange={e=>setForm(f=>({...f,billing_cycle:e.target.value}))} style={{width:'100%',padding:'10px 12px',borderRadius:A.rXs,border:`1px solid ${A.sep}`,background:A.inputBg,fontSize:15,color:A.label1}}>
+              {CYCLES.map(([v,l])=><option key={v} value={v}>{l}</option>)}
+            </select>
+          </div>
+        </FormGroup>
+        <FormGroup label="Next billing">
+          <div style={{padding:'12px 16px'}}><Inp type="date" value={form.next_billing} onChange={e=>setForm(f=>({...f,next_billing:e.target.value}))}/></div>
+        </FormGroup>
+        <FormGroup label="Trial ends (optional)">
+          <div style={{padding:'12px 16px'}}><Inp type="date" value={form.trial_ends} onChange={e=>setForm(f=>({...f,trial_ends:e.target.value}))}/></div>
+        </FormGroup>
+        <FormGroup label="Category">
+          <div style={{padding:'12px 16px'}}>
+            <select value={form.category} onChange={e=>setForm(f=>({...f,category:e.target.value}))} style={{width:'100%',padding:'10px 12px',borderRadius:A.rXs,border:`1px solid ${A.sep}`,background:A.inputBg,fontSize:15,color:A.label1}}>
+              {CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+        </FormGroup>
+        <FormGroup label="Color">
+          <div style={{padding:'12px 16px',display:'flex',flexWrap:'wrap',gap:8}}>
+            {PALETTE.map(c=>(
+              <button key={c} onClick={()=>setForm(f=>({...f,color:c}))} style={{width:30,height:30,borderRadius:'50%',border:`3px solid ${form.color===c?A.label1:'transparent'}`,background:c,cursor:'pointer'}}/>
+            ))}
+          </div>
+        </FormGroup>
+        <FormGroup label="Notes">
+          <div style={{padding:'12px 16px'}}><Inp value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))} placeholder="Account email, etc."/></div>
+        </FormGroup>
+        <div style={{display:'flex',gap:8,marginTop:4}}>
+          <Btn onClick={save} full>{editSub?'Save Changes':'Add Subscription'}</Btn>
+          {editSub&&<Btn variant="ghost" onClick={()=>del(editSub.id)} full style={{color:A.red}}>Delete</Btn>}
+        </div>
+        {!editSub&&<Btn variant="ghost" onClick={()=>setDrawer(false)} full style={{marginTop:8}}>Cancel</Btn>}
+      </Drawer>
+    </div>
+  );
+}
+
+function ListsScreen({toastAdd}){
+  const isMobile=useIsMobile();
+  const EMOJIS=['📋','🛒','🏥','🔧','🎁','✈️','🏠','💊'];
+  const [lists,setLists]=useState([]);
+  const [activeList,setActiveList]=useState(null);
+  const [items,setItems]=useState([]);
+  const [itemsLoading,setItemsLoading]=useState(false);
+  const [newListDrawer,setNewListDrawer]=useState(false);
+  const blank={name:'',emoji:'📋'};
+  const [form,setForm]=useState(blank);
+  const [newItem,setNewItem]=useState('');
+  useEffect(()=>{
+    api.get('/api/lists').then(d=>{if(Array.isArray(d)) setLists(d);}).catch(()=>{});
+  },[]);
+  useEffect(()=>{
+    if(!activeList){setItems([]);return;}
+    setItemsLoading(true);
+    api.get(`/api/lists/${activeList.id}/items`).then(d=>{if(Array.isArray(d)) setItems(d);}).catch(()=>{}).finally(()=>setItemsLoading(false));
+  },[activeList?.id]);
+  const saveList=async()=>{
+    if(!form.name.trim()){toastAdd('Name required','red');return;}
+    const r=await api.post('/api/lists',form).catch(()=>null);
+    if(!r?.id){toastAdd('Failed to save','red');return;}
+    setLists(p=>[r,...p]);
+    setNewListDrawer(false);setForm(blank);
+    toastAdd('List created');
+  };
+  const delList=async id=>{
+    try{await api.del(`/api/lists/${id}`);setLists(p=>p.filter(l=>l.id!==id));setActiveList(null);toastAdd('List removed','blue');}
+    catch{toastAdd('Failed to remove','red');}
+  };
+  const addItem=async()=>{
+    if(!newItem.trim()||!activeList) return;
+    const r=await api.post(`/api/lists/${activeList.id}/items`,{name:newItem.trim()}).catch(()=>null);
+    if(!r?.id){toastAdd('Failed','red');return;}
+    setItems(p=>[...p,r]);
+    setNewItem('');
+    setLists(p=>p.map(l=>l.id===activeList.id?{...l,item_count:(l.item_count||0)+1,unchecked_count:(l.unchecked_count||0)+1}:l));
+  };
+  const toggleItem=async it=>{
+    const next=it.checked?0:1;
+    setItems(p=>p.map(x=>x.id===it.id?{...x,checked:next}:x));
+    setLists(p=>p.map(l=>l.id===activeList.id?{...l,unchecked_count:Math.max(0,(l.unchecked_count||0)+(next?-1:1))}:l));
+    const r=await api.put(`/api/lists/${activeList.id}/items/${it.id}`,{checked:next}).catch(()=>null);
+    if(!r?.id){toastAdd('Failed','red');}
+  };
+  const delItem=async id=>{
+    try{
+      await api.del(`/api/lists/${activeList.id}/items/${id}`);
+      const removed=items.find(x=>x.id===id);
+      setItems(p=>p.filter(x=>x.id!==id));
+      setLists(p=>p.map(l=>l.id===activeList.id?{...l,item_count:Math.max(0,(l.item_count||0)-1),unchecked_count:Math.max(0,(l.unchecked_count||0)-(removed&&!removed.checked?1:0))}:l));
+    }catch{toastAdd('Failed to remove','red');}
+  };
+  const clearChecked=async()=>{
+    try{
+      await api.del(`/api/lists/${activeList.id}/items/checked`);
+      setItems(p=>p.filter(x=>!x.checked));
+      const remaining=items.filter(x=>!x.checked).length;
+      setLists(p=>p.map(l=>l.id===activeList.id?{...l,item_count:remaining,unchecked_count:remaining}:l));
+      toastAdd('Cleared','blue');
+    }catch{toastAdd('Failed','red');}
+  };
+  if(activeList){
+    const sorted=[...items].sort((a,b)=>(a.checked?1:0)-(b.checked?1:0));
+    const checkedCount=items.filter(x=>x.checked).length;
+    return(
+      <div>
+        <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:24}}>
+          <button onClick={()=>setActiveList(null)} style={{background:A.inputBg,border:'none',borderRadius:A.rPill,padding:'7px 14px',fontSize:13,fontWeight:600,color:A.label2,cursor:'pointer'}}>← Lists</button>
+          <h1 style={{fontSize:isMobile?28:34,fontWeight:800,letterSpacing:'-.04em',lineHeight:1.05,flex:1}}>{activeList.emoji} {activeList.name}</h1>
+          <button onClick={()=>delList(activeList.id)} style={{background:'none',border:'none',color:A.red,fontSize:13,cursor:'pointer',fontWeight:500}}>Delete list</button>
+        </div>
+        {itemsLoading?(
+          <Card style={{padding:'40px 24px',textAlign:'center'}}><div style={{fontSize:14,color:A.label4}}>Loading…</div></Card>
+        ):items.length===0?(
+          <Card style={{padding:'52px 24px',textAlign:'center',marginBottom:16}}>
+            <div style={{fontSize:15,color:A.label3}}>No items yet. Add one below.</div>
+          </Card>
+        ):(
+          <Card style={{overflow:'hidden',padding:0,marginBottom:16}}>
+            {sorted.map((it,i)=>(
+              <div key={it.id} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 16px',borderTop:i>0?`1px solid ${A.sep}`:'none'}}>
+                <button onClick={()=>toggleItem(it)} style={{width:22,height:22,borderRadius:'50%',border:`1.5px solid ${it.checked?A.green:A.sep}`,background:it.checked?A.green:'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                  {it.checked&&<svg width="12" height="12" viewBox="0 0 12 12"><path d="M3 6.5l2 2 4-4" stroke="#fff" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                </button>
+                <span style={{flex:1,fontSize:15,color:it.checked?A.label4:A.label1,textDecoration:it.checked?'line-through':'none'}}>{it.name}</span>
+                <button onClick={()=>delItem(it.id)} style={{background:'none',border:'none',color:A.label4,fontSize:13,cursor:'pointer',padding:'0 4px',flexShrink:0}}>×</button>
+              </div>
+            ))}
+          </Card>
+        )}
+        {checkedCount>0&&(
+          <div style={{marginBottom:16}}>
+            <Btn variant="ghost" onClick={clearChecked}>Clear {checkedCount} checked</Btn>
+          </div>
+        )}
+        <div style={{display:'flex',gap:8}}>
+          <Inp value={newItem} onChange={e=>setNewItem(e.target.value)} placeholder="Add item…" onKeyDown={e=>e.key==='Enter'&&addItem()}/>
+          <Btn onClick={addItem} style={{flexShrink:0}}>Add</Btn>
+        </div>
+      </div>
+    );
+  }
+  return(
+    <div>
+      <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:24}}>
+        <h1 style={{fontSize:isMobile?34:44,fontWeight:800,letterSpacing:'-.05em',lineHeight:1.05}}>Lists</h1>
+        <Btn onClick={()=>{setForm(blank);setNewListDrawer(true);}}>+ New List</Btn>
+      </div>
+      {lists.length===0?(
+        <Card style={{padding:'52px 24px',textAlign:'center'}}>
+          <div style={{fontSize:13,fontWeight:700,color:A.label5,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:10}}>No lists yet</div>
+          <div style={{fontSize:15,color:A.label3,fontWeight:500}}>Make a list for packing, party prep, or anything you want to share with the family.</div>
+        </Card>
+      ):(
+        <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'repeat(auto-fill,minmax(220px,1fr))',gap:12}}>
+          {lists.map(l=>(
+            <button key={l.id} onClick={()=>setActiveList(l)} style={{textAlign:'left',background:A.cardBg,border:`1px solid ${A.sep}`,borderRadius:A.r,padding:'18px 18px',cursor:'pointer',boxShadow:A.shadowSm,display:'flex',flexDirection:'column',gap:8}}>
+              <div style={{fontSize:32}}>{l.emoji}</div>
+              <div style={{fontSize:16,fontWeight:600,color:A.label1}}>{l.name}</div>
+              <div style={{fontSize:12,color:A.label4}}>{l.item_count||0} {l.item_count===1?'item':'items'} · {l.unchecked_count||0} remaining</div>
+            </button>
+          ))}
+        </div>
+      )}
+      <Drawer open={newListDrawer} onClose={()=>setNewListDrawer(false)} title="New List">
+        <FormGroup label="Name">
+          <div style={{padding:'12px 16px'}}><Inp value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} placeholder="Packing for Florida"/></div>
+        </FormGroup>
+        <FormGroup label="Emoji">
+          <div style={{padding:'12px 16px',display:'flex',flexWrap:'wrap',gap:8}}>
+            {EMOJIS.map(em=>(
+              <button key={em} onClick={()=>setForm(f=>({...f,emoji:em}))} style={{width:44,height:44,borderRadius:A.rSm,border:`2px solid ${form.emoji===em?A.blue:A.sep}`,background:form.emoji===em?A.blueFill:A.inputBg,fontSize:22,cursor:'pointer'}}>{em}</button>
+            ))}
+          </div>
+        </FormGroup>
+        <Btn onClick={saveList} full>Create List</Btn>
+      </Drawer>
+    </div>
+  );
+}
+
+function ProjectsScreen({projects,setProjects,toastAdd}){
+  const isMobile=useIsMobile();
+  const STATUSES=[['planned','Planned'],['in_progress','In Progress'],['done','Done']];
+  const PRIORITIES=[['high','High'],['medium','Medium'],['low','Low']];
+  const blank={title:'',description:'',status:'planned',priority:'medium',cost_estimate:'',cost_actual:'',due_date:''};
+  const [drawer,setDrawer]=useState(false);
+  const [editProj,setEditProj]=useState(null);
+  const [form,setForm]=useState(blank);
+  const [mobileTab,setMobileTab]=useState('planned');
+  const [doneTarget,setDoneTarget]=useState(null);
+  const [doneActual,setDoneActual]=useState('');
+  const priColor=p=>({high:A.red,medium:A.amber,low:A.green}[p]||A.label4);
+  const priFill=p=>({high:A.redFill,medium:A.amberFill,low:A.greenFill}[p]||A.inputBg);
+  const fmtMoney=n=>`$${(Number(n)||0).toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:2})}`;
+  const openNew=()=>{setEditProj(null);setForm(blank);setDrawer(true);};
+  const openEdit=p=>{setEditProj(p);setForm({title:p.title,description:p.description||'',status:p.status,priority:p.priority,cost_estimate:p.cost_estimate?String(p.cost_estimate):'',cost_actual:p.cost_actual?String(p.cost_actual):'',due_date:p.due_date||''});setDrawer(true);};
+  const save=async()=>{
+    if(!form.title.trim()){toastAdd('Title required','red');return;}
+    const body={...form,cost_estimate:Number(form.cost_estimate)||0,cost_actual:Number(form.cost_actual)||0};
+    if(editProj){
+      const r=await api.put(`/api/projects/${editProj.id}`,body).catch(()=>null);
+      if(!r?.id){toastAdd('Failed to save','red');return;}
+      setProjects(p=>p.map(x=>x.id===r.id?r:x));
+    }else{
+      const r=await api.post('/api/projects',body).catch(()=>null);
+      if(!r?.id){toastAdd('Failed to save','red');return;}
+      setProjects(p=>[r,...p]);
+    }
+    setDrawer(false);setEditProj(null);
+    toastAdd(editProj?'Project updated':'Project added');
+  };
+  const del=async id=>{
+    try{await api.del(`/api/projects/${id}`);setProjects(p=>p.filter(x=>x.id!==id));setDrawer(false);setEditProj(null);toastAdd('Removed','blue');}
+    catch{toastAdd('Failed to remove','red');}
+  };
+  const cycleStatus=async p=>{
+    const order=['planned','in_progress','done'];
+    const next=order[(order.indexOf(p.status)+1)%order.length];
+    if(next==='done'){
+      setDoneTarget(p);setDoneActual(p.cost_estimate?String(p.cost_estimate):'');
+    }else{
+      const r=await api.put(`/api/projects/${p.id}`,{status:next}).catch(()=>null);
+      if(!r?.id){toastAdd('Failed','red');return;}
+      setProjects(prev=>prev.map(x=>x.id===r.id?r:x));
+    }
+  };
+  const confirmDone=async()=>{
+    if(!doneTarget) return;
+    const body={status:'done'};
+    if(doneActual.trim()) body.cost_actual=Number(doneActual)||0;
+    const r=await api.put(`/api/projects/${doneTarget.id}`,body).catch(()=>null);
+    if(!r?.id){toastAdd('Failed','red');return;}
+    setProjects(prev=>prev.map(x=>x.id===r.id?r:x));
+    setDoneTarget(null);setDoneActual('');
+    toastAdd('Project marked done');
+  };
+  const Card2=({p})=>{
+    const displayCost=p.status==='done'?(p.cost_actual>0?p.cost_actual:p.cost_estimate):p.cost_estimate;
+    return(
+      <div style={{background:A.cardBg,border:`1px solid ${A.sep}`,borderRadius:A.rSm,padding:'14px 16px',boxShadow:A.shadowSm}}>
+        <div style={{display:'flex',alignItems:'flex-start',gap:8,marginBottom:6}}>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:15,fontWeight:600,color:A.label1,lineHeight:1.3}}>{p.title}</div>
+          </div>
+          <span style={{fontSize:10,fontWeight:700,color:priColor(p.priority),background:priFill(p.priority),padding:'2px 7px',borderRadius:A.rPill,textTransform:'uppercase',letterSpacing:'.04em',flexShrink:0}}>{p.priority}</span>
+        </div>
+        <div style={{fontSize:12,color:A.label4,display:'flex',gap:8,flexWrap:'wrap'}}>
+          {p.due_date&&<span>Due {p.due_date}</span>}
+          {displayCost>0&&<span>{fmtMoney(displayCost)}{p.status==='done'&&p.cost_actual>0?'':p.cost_estimate>0?' est.':''}</span>}
+        </div>
+        <div style={{display:'flex',gap:6,marginTop:10}}>
+          <button onClick={()=>cycleStatus(p)} style={{background:A.inputBg,border:'none',borderRadius:A.rPill,padding:'4px 12px',fontSize:12,fontWeight:600,color:A.label2,cursor:'pointer'}}>{p.status==='planned'?'Start':p.status==='in_progress'?'Mark done':'Reopen'}</button>
+          <button onClick={()=>openEdit(p)} style={{background:'none',border:'none',color:A.label4,fontSize:12,cursor:'pointer',padding:'4px 6px'}}>Edit</button>
+        </div>
+      </div>
+    );
+  };
+  const Column=({title,items})=>(
+    <div style={{flex:1,minWidth:0}}>
+      <div style={{fontSize:12,fontWeight:700,color:A.label4,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:10}}>{title} ({items.length})</div>
+      <div style={{display:'flex',flexDirection:'column',gap:8}}>
+        {items.length===0?(
+          <div style={{fontSize:13,color:A.label5,fontStyle:'italic',padding:'8px 4px'}}>None</div>
+        ):items.map(p=><Card2 key={p.id} p={p}/>)}
+      </div>
+    </div>
+  );
+  const byStatus={planned:[],in_progress:[],done:[]};
+  for(const p of (projects||[])) (byStatus[p.status]||byStatus.planned).push(p);
+  return(
+    <div>
+      <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:24}}>
+        <h1 style={{fontSize:isMobile?34:44,fontWeight:800,letterSpacing:'-.05em',lineHeight:1.05}}>Projects</h1>
+        <Btn onClick={openNew}>+ Add</Btn>
+      </div>
+      {(projects||[]).length===0?(
+        <Card style={{padding:'52px 24px',textAlign:'center'}}>
+          <div style={{fontSize:13,fontWeight:700,color:A.label5,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:10}}>No projects yet</div>
+          <div style={{fontSize:15,color:A.label3,fontWeight:500}}>Plan home improvements and other family projects. Track cost estimates vs actuals.</div>
+        </Card>
+      ):isMobile?(
+        <>
+          <div style={{display:'flex',gap:6,marginBottom:16}}>
+            {STATUSES.map(([v,l])=>(
+              <button key={v} onClick={()=>setMobileTab(v)} style={{flex:1,padding:'8px 4px',borderRadius:A.rXs,border:'none',background:mobileTab===v?A.label1:A.inputBg,color:mobileTab===v?A.cardBg:A.label3,fontSize:13,fontWeight:600,cursor:'pointer'}}>{l} ({byStatus[v].length})</button>
+            ))}
+          </div>
+          <div style={{display:'flex',flexDirection:'column',gap:8}}>
+            {byStatus[mobileTab].length===0?(
+              <div style={{fontSize:14,color:A.label4,textAlign:'center',padding:'24px 0'}}>None</div>
+            ):byStatus[mobileTab].map(p=><Card2 key={p.id} p={p}/>)}
+          </div>
+        </>
+      ):(
+        <div style={{display:'flex',gap:16,alignItems:'flex-start'}}>
+          <Column title="Planned" items={byStatus.planned}/>
+          <Column title="In Progress" items={byStatus.in_progress}/>
+          <Column title="Done" items={byStatus.done}/>
+        </div>
+      )}
+      <Drawer open={drawer} onClose={()=>{setDrawer(false);setEditProj(null);}} title={editProj?'Edit Project':'Add Project'}>
+        <FormGroup label="Title">
+          <div style={{padding:'12px 16px'}}><Inp value={form.title} onChange={e=>setForm(f=>({...f,title:e.target.value}))} placeholder="Renovate kitchen"/></div>
+        </FormGroup>
+        <FormGroup label="Description">
+          <div style={{padding:'12px 16px'}}><textarea value={form.description} onChange={e=>setForm(f=>({...f,description:e.target.value}))} placeholder="Scope, contractors, etc." style={{width:'100%',minHeight:80,padding:'9px 12px',background:A.inputBg,border:`1.5px solid ${A.sep}`,borderRadius:A.rXs,fontSize:15,color:A.label1,fontFamily:'inherit',resize:'vertical',outline:'none'}}/></div>
+        </FormGroup>
+        <FormGroup label="Status">
+          <div style={{padding:'12px 16px'}}>
+            <select value={form.status} onChange={e=>setForm(f=>({...f,status:e.target.value}))} style={{width:'100%',padding:'10px 12px',borderRadius:A.rXs,border:`1px solid ${A.sep}`,background:A.inputBg,fontSize:15,color:A.label1}}>
+              {STATUSES.map(([v,l])=><option key={v} value={v}>{l}</option>)}
+            </select>
+          </div>
+        </FormGroup>
+        <FormGroup label="Priority">
+          <div style={{padding:'12px 16px'}}>
+            <select value={form.priority} onChange={e=>setForm(f=>({...f,priority:e.target.value}))} style={{width:'100%',padding:'10px 12px',borderRadius:A.rXs,border:`1px solid ${A.sep}`,background:A.inputBg,fontSize:15,color:A.label1}}>
+              {PRIORITIES.map(([v,l])=><option key={v} value={v}>{l}</option>)}
+            </select>
+          </div>
+        </FormGroup>
+        <FormGroup label="Due date">
+          <div style={{padding:'12px 16px'}}><Inp type="date" value={form.due_date} onChange={e=>setForm(f=>({...f,due_date:e.target.value}))}/></div>
+        </FormGroup>
+        <FormGroup label="Cost estimate (USD)">
+          <div style={{padding:'12px 16px'}}><Inp type="number" value={form.cost_estimate} onChange={e=>setForm(f=>({...f,cost_estimate:e.target.value}))} placeholder="0"/></div>
+        </FormGroup>
+        <FormGroup label="Cost actual (USD)">
+          <div style={{padding:'12px 16px'}}><Inp type="number" value={form.cost_actual} onChange={e=>setForm(f=>({...f,cost_actual:e.target.value}))} placeholder="0"/></div>
+        </FormGroup>
+        <div style={{display:'flex',gap:8,marginTop:4}}>
+          <Btn onClick={save} full>{editProj?'Save Changes':'Add Project'}</Btn>
+          {editProj&&<Btn variant="ghost" onClick={()=>del(editProj.id)} full style={{color:A.red}}>Delete</Btn>}
+        </div>
+        {!editProj&&<Btn variant="ghost" onClick={()=>setDrawer(false)} full style={{marginTop:8}}>Cancel</Btn>}
+      </Drawer>
+      {doneTarget&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:24}} onClick={()=>setDoneTarget(null)}>
+          <div style={{background:A.cardBg,borderRadius:A.r,padding:24,width:'100%',maxWidth:320,boxShadow:A.shadowLg}} onClick={e=>e.stopPropagation()}>
+            <div style={{fontSize:17,fontWeight:700,color:A.label1,marginBottom:4}}>Mark as done</div>
+            <div style={{fontSize:14,color:A.label3,marginBottom:16}}>{doneTarget.title}</div>
+            <div style={{fontSize:12,fontWeight:600,color:A.label4,marginBottom:6}}>Actual cost (optional)</div>
+            <Inp type="number" value={doneActual} onChange={e=>setDoneActual(e.target.value)} placeholder="0" style={{marginBottom:16}}/>
+            <div style={{display:'flex',gap:8}}>
+              <Btn onClick={confirmDone} full>Confirm</Btn>
+              <Btn variant="ghost" onClick={()=>setDoneTarget(null)} full>Cancel</Btn>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PantryScreen({pantry,setPantry,grocery,setGrocery,toastAdd}){
+  const isMobile=useIsMobile();
+  const LOCATIONS=['Fridge','Freezer','Pantry','Cabinet','Other'];
+  const CATEGORIES=['Produce','Dairy','Meat','Grains','Snacks','Drinks','Spices','Frozen','Other'];
+  const blank={name:'',location:'Pantry',quantity:'1',unit:'',expires_on:'',low_stock_at:'0',category:'Other'};
+  const [drawer,setDrawer]=useState(false);
+  const [editItem,setEditItem]=useState(null);
+  const [form,setForm]=useState(blank);
+  const isLow=p=>p.low_stock_at>0&&Number(p.quantity)<=Number(p.low_stock_at);
+  const expBadge=p=>{
+    if(p.expiry_status==='expired') return{label:'Expired',color:A.red,bg:A.redFill};
+    if(p.expiry_status==='expiring_soon') return{label:p.days_until_expiry===0?'Today':`${p.days_until_expiry}d`,color:A.amber,bg:A.amberFill};
+    return null;
+  };
+  const openNew=()=>{setEditItem(null);setForm(blank);setDrawer(true);};
+  const openEdit=p=>{setEditItem(p);setForm({name:p.name,location:p.location||'Pantry',quantity:String(p.quantity??1),unit:p.unit||'',expires_on:p.expires_on||'',low_stock_at:String(p.low_stock_at||0),category:p.category||'Other'});setDrawer(true);};
+  const save=async()=>{
+    if(!form.name.trim()){toastAdd('Name required','red');return;}
+    const body={...form,quantity:Number(form.quantity)||0,low_stock_at:Number(form.low_stock_at)||0};
+    if(editItem){
+      const r=await api.put(`/api/pantry/${editItem.id}`,body).catch(()=>null);
+      if(!r?.id){toastAdd('Failed to save','red');return;}
+      setPantry(p=>p.map(x=>x.id===r.id?r:x));
+    }else{
+      const r=await api.post('/api/pantry',body).catch(()=>null);
+      if(!r?.id){toastAdd('Failed to save','red');return;}
+      setPantry(p=>[...p,r]);
+    }
+    setDrawer(false);setEditItem(null);
+    toastAdd(editItem?'Item updated':'Item added');
+  };
+  const del=async id=>{
+    try{await api.del(`/api/pantry/${id}`);setPantry(p=>p.filter(x=>x.id!==id));setDrawer(false);setEditItem(null);toastAdd('Removed','blue');}
+    catch{toastAdd('Failed to remove','red');}
+  };
+  const useItem=async p=>{
+    const r=await api.put(`/api/pantry/${p.id}/use`,{amount:1}).catch(()=>null);
+    if(!r?.id){toastAdd('Failed','red');return;}
+    setPantry(prev=>prev.map(x=>x.id===r.id?r:x));
+  };
+  const needReplace=(pantry||[]).filter(p=>p.expiry_status==='expired'||isLow(p));
+  const addBulkToGrocery=async()=>{
+    if(!needReplace.length) return;
+    const r=await api.post('/api/pantry/add-to-grocery',{ids:needReplace.map(x=>x.id)}).catch(()=>null);
+    if(!r){toastAdd('Failed','red');return;}
+    api.get('/api/grocery').then(d=>{if(Array.isArray(d)&&setGrocery) setGrocery(d);}).catch(()=>{});
+    toastAdd(`Added ${r.added} to grocery`);
+  };
+  const byLoc=LOCATIONS.map(loc=>({loc,items:(pantry||[]).filter(p=>(p.location||'Other')===loc)})).filter(g=>g.items.length>0);
+  return(
+    <div>
+      <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:24}}>
+        <h1 style={{fontSize:isMobile?34:44,fontWeight:800,letterSpacing:'-.05em',lineHeight:1.05}}>Pantry</h1>
+        <Btn onClick={openNew}>+ Add</Btn>
+      </div>
+      {needReplace.length>0&&(
+        <Card style={{padding:'14px 18px',marginBottom:16,display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+          <div style={{flex:1,minWidth:160}}>
+            <div style={{fontSize:13,fontWeight:600,color:A.label1}}>{needReplace.length} item{needReplace.length===1?'':'s'} expired or low</div>
+            <div style={{fontSize:12,color:A.label4,marginTop:2}}>Add them straight to grocery.</div>
+          </div>
+          <Btn onClick={addBulkToGrocery} sm>Add to grocery</Btn>
+        </Card>
+      )}
+      {(pantry||[]).length===0?(
+        <Card style={{padding:'52px 24px',textAlign:'center'}}>
+          <div style={{fontSize:13,fontWeight:700,color:A.label5,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:10}}>No items yet</div>
+          <div style={{fontSize:15,color:A.label3,fontWeight:500}}>Track what's in your fridge, freezer, and pantry. Catch expiring food before it's wasted.</div>
+        </Card>
+      ):(
+        <div style={{display:'flex',flexDirection:'column',gap:20}}>
+          {byLoc.map(({loc,items})=>(
+            <div key={loc}>
+              <div style={{fontSize:12,fontWeight:700,color:A.label4,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:8}}>{loc}</div>
+              <Card style={{overflow:'hidden',padding:0}}>
+                {items.map((p,i)=>{
+                  const eb=expBadge(p);
+                  const low=isLow(p);
+                  return(
+                    <div key={p.id} style={{display:'flex',alignItems:'center',gap:12,padding:'14px 18px',borderTop:i>0?`1px solid ${A.sep}`:'none'}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                          <span style={{fontSize:15,fontWeight:600,color:A.label1}}>{p.name}</span>
+                          {eb&&<span style={{fontSize:11,fontWeight:700,color:eb.color,background:eb.bg,padding:'2px 8px',borderRadius:A.rPill}}>{eb.label}</span>}
+                          {low&&<span style={{fontSize:11,fontWeight:700,color:A.amber,background:A.amberFill,padding:'2px 8px',borderRadius:A.rPill}}>Low</span>}
+                        </div>
+                        <div style={{fontSize:12,color:A.label4,marginTop:2}}>{p.quantity}{p.unit?` ${p.unit}`:''}</div>
+                      </div>
+                      <button onClick={()=>useItem(p)} style={{background:A.inputBg,border:`1.5px solid ${A.sep}`,borderRadius:20,padding:'5px 14px',fontSize:12,fontWeight:600,color:A.label3,cursor:'pointer',flexShrink:0}}>Use</button>
+                      <button onClick={()=>openEdit(p)} style={{background:'none',border:'none',color:A.label4,cursor:'pointer',fontSize:13,padding:'0 4px',flexShrink:0}}>Edit</button>
+                    </div>
+                  );
+                })}
+              </Card>
+            </div>
+          ))}
+        </div>
+      )}
+      <Drawer open={drawer} onClose={()=>{setDrawer(false);setEditItem(null);}} title={editItem?'Edit Item':'Add Item'}>
+        <FormGroup label="Name">
+          <div style={{padding:'12px 16px'}}><Inp value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} placeholder="Eggs"/></div>
+        </FormGroup>
+        <FormGroup label="Location">
+          <div style={{padding:'12px 16px'}}>
+            <select value={form.location} onChange={e=>setForm(f=>({...f,location:e.target.value}))} style={{width:'100%',padding:'10px 12px',borderRadius:A.rXs,border:`1px solid ${A.sep}`,background:A.inputBg,fontSize:15,color:A.label1}}>
+              {LOCATIONS.map(l=><option key={l} value={l}>{l}</option>)}
+            </select>
+          </div>
+        </FormGroup>
+        <FormGroup label="Quantity">
+          <div style={{padding:'12px 16px',display:'flex',gap:8}}>
+            <Inp type="number" value={form.quantity} onChange={e=>setForm(f=>({...f,quantity:e.target.value}))} style={{flex:1}}/>
+            <Inp value={form.unit} onChange={e=>setForm(f=>({...f,unit:e.target.value}))} placeholder="oz, lbs, etc." style={{flex:1}}/>
+          </div>
+        </FormGroup>
+        <FormGroup label="Expires on (optional)">
+          <div style={{padding:'12px 16px'}}><Inp type="date" value={form.expires_on} onChange={e=>setForm(f=>({...f,expires_on:e.target.value}))}/></div>
+        </FormGroup>
+        <FormGroup label="Low stock threshold (0 = disabled)" footer="Show 'Low' badge when quantity is at or below this number.">
+          <div style={{padding:'12px 16px'}}><Inp type="number" value={form.low_stock_at} onChange={e=>setForm(f=>({...f,low_stock_at:e.target.value}))}/></div>
+        </FormGroup>
+        <FormGroup label="Category">
+          <div style={{padding:'12px 16px'}}>
+            <select value={form.category} onChange={e=>setForm(f=>({...f,category:e.target.value}))} style={{width:'100%',padding:'10px 12px',borderRadius:A.rXs,border:`1px solid ${A.sep}`,background:A.inputBg,fontSize:15,color:A.label1}}>
+              {CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+        </FormGroup>
+        <div style={{display:'flex',gap:8,marginTop:4}}>
+          <Btn onClick={save} full>{editItem?'Save Changes':'Add Item'}</Btn>
+          {editItem&&<Btn variant="ghost" onClick={()=>del(editItem.id)} full style={{color:A.red}}>Delete</Btn>}
+        </div>
+        {!editItem&&<Btn variant="ghost" onClick={()=>setDrawer(false)} full style={{marginTop:8}}>Cancel</Btn>}
+      </Drawer>
+    </div>
+  );
+}
+
+function SchoolScreen({members=[],toastAdd}){
+  const isMobile=useIsMobile();
+  const DAYS_OPTS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const [schoolMembers,setSchoolMembers]=useState([]);
+  const [loaded,setLoaded]=useState(false);
+  const blankM={member_id:'',school_name:'',grade:'',teacher_name:'',teacher_email:'',school_phone:'',start_time:'',end_time:'',notes:''};
+  const blankC={period:'',subject:'',teacher:'',room:'',days:'Mon,Tue,Wed,Thu,Fri'};
+  const [mDrawer,setMDrawer]=useState(false);
+  const [editM,setEditM]=useState(null);
+  const [mForm,setMForm]=useState(blankM);
+  const [cDrawer,setCDrawer]=useState(false);
+  const [cContext,setCContext]=useState(null); // {schoolMemberId, edit?}
+  const [cForm,setCForm]=useState(blankC);
+  const [expanded,setExpanded]=useState(null);
+  useEffect(()=>{
+    api.get('/api/school').then(d=>{if(Array.isArray(d)) setSchoolMembers(d);setLoaded(true);}).catch(()=>setLoaded(true));
+  },[]);
+  const openNewM=()=>{setEditM(null);setMForm(blankM);setMDrawer(true);};
+  const openEditM=s=>{setEditM(s);setMForm({member_id:s.member_id?String(s.member_id):'',school_name:s.school_name||'',grade:s.grade||'',teacher_name:s.teacher_name||'',teacher_email:s.teacher_email||'',school_phone:s.school_phone||'',start_time:s.start_time||'',end_time:s.end_time||'',notes:s.notes||''});setMDrawer(true);};
+  const saveM=async()=>{
+    const body={...mForm,member_id:mForm.member_id?Number(mForm.member_id):null};
+    if(editM){
+      const r=await api.put(`/api/school/${editM.id}`,body).catch(()=>null);
+      if(!r?.id){toastAdd('Failed to save','red');return;}
+      setSchoolMembers(p=>p.map(x=>x.id===r.id?r:x));
+    }else{
+      const r=await api.post('/api/school',body).catch(()=>null);
+      if(!r?.id){toastAdd('Failed to save','red');return;}
+      setSchoolMembers(p=>[...p,r]);
+    }
+    setMDrawer(false);setEditM(null);
+    toastAdd(editM?'School updated':'School added');
+  };
+  const delM=async id=>{
+    try{await api.del(`/api/school/${id}`);setSchoolMembers(p=>p.filter(x=>x.id!==id));setMDrawer(false);setEditM(null);toastAdd('Removed','blue');}
+    catch{toastAdd('Failed to remove','red');}
+  };
+  const openNewC=schoolMemberId=>{setCContext({schoolMemberId,edit:null});setCForm(blankC);setCDrawer(true);};
+  const openEditC=(schoolMemberId,cls)=>{setCContext({schoolMemberId,edit:cls});setCForm({period:cls.period||'',subject:cls.subject,teacher:cls.teacher||'',room:cls.room||'',days:cls.days||'Mon,Tue,Wed,Thu,Fri'});setCDrawer(true);};
+  const saveC=async()=>{
+    if(!cForm.subject.trim()){toastAdd('Subject required','red');return;}
+    const sid=cContext.schoolMemberId;
+    if(cContext.edit){
+      const r=await api.put(`/api/school/${sid}/classes/${cContext.edit.id}`,cForm).catch(()=>null);
+      if(!r?.id){toastAdd('Failed','red');return;}
+      setSchoolMembers(p=>p.map(s=>s.id===sid?{...s,classes:s.classes.map(c=>c.id===r.id?r:c)}:s));
+    }else{
+      const r=await api.post(`/api/school/${sid}/classes`,cForm).catch(()=>null);
+      if(!r?.id){toastAdd('Failed','red');return;}
+      setSchoolMembers(p=>p.map(s=>s.id===sid?{...s,classes:[...(s.classes||[]),r]}:s));
+    }
+    setCDrawer(false);setCContext(null);
+    toastAdd('Saved');
+  };
+  const delC=async()=>{
+    if(!cContext?.edit) return;
+    const sid=cContext.schoolMemberId;
+    const cid=cContext.edit.id;
+    try{
+      await api.del(`/api/school/${sid}/classes/${cid}`);
+      setSchoolMembers(p=>p.map(s=>s.id===sid?{...s,classes:(s.classes||[]).filter(c=>c.id!==cid)}:s));
+      setCDrawer(false);setCContext(null);
+      toastAdd('Class removed','blue');
+    }catch{toastAdd('Failed','red');}
+  };
+  const toggleDay=d=>{
+    const arr=cForm.days?cForm.days.split(','):[];
+    const next=arr.includes(d)?arr.filter(x=>x!==d):[...arr,d];
+    const order=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+    next.sort((a,b)=>order.indexOf(a)-order.indexOf(b));
+    setCForm(f=>({...f,days:next.join(',')}));
+  };
+  return(
+    <div>
+      <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:24}}>
+        <h1 style={{fontSize:isMobile?34:44,fontWeight:800,letterSpacing:'-.05em',lineHeight:1.05}}>School</h1>
+        <Btn onClick={openNewM}>+ Add</Btn>
+      </div>
+      {!loaded?(
+        <Card style={{padding:'40px 24px',textAlign:'center'}}><div style={{fontSize:14,color:A.label4}}>Loading…</div></Card>
+      ):schoolMembers.length===0?(
+        <Card style={{padding:'52px 24px',textAlign:'center'}}>
+          <div style={{fontSize:13,fontWeight:700,color:A.label5,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:10}}>No school info yet</div>
+          <div style={{fontSize:15,color:A.label3,fontWeight:500}}>Track schools, grades, teachers, and class schedules for each kid.</div>
+        </Card>
+      ):(
+        <div style={{display:'flex',flexDirection:'column',gap:16}}>
+          {schoolMembers.map(s=>{
+            const linked=members.find(m=>m.id===s.member_id);
+            const ex=expanded===s.id;
+            return(
+              <Card key={s.id} style={{padding:0,overflow:'hidden'}}>
+                <div style={{padding:'16px 18px',display:'flex',alignItems:'flex-start',gap:12}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                      {linked&&<div style={{width:24,height:24,borderRadius:'50%',background:linked.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,color:'#fff'}}>{linked.initials}</div>}
+                      <span style={{fontSize:16,fontWeight:600,color:A.label1}}>{s.school_name||'Untitled school'}</span>
+                      {s.grade&&<span style={{fontSize:11,fontWeight:700,color:A.label4,background:A.inputBg,padding:'2px 8px',borderRadius:A.rPill}}>{s.grade}</span>}
+                    </div>
+                    <div style={{fontSize:12,color:A.label4,marginTop:4,display:'flex',gap:8,flexWrap:'wrap'}}>
+                      {s.start_time&&s.end_time&&<span>{s.start_time}–{s.end_time}</span>}
+                      {s.teacher_name&&<span>{s.teacher_name}</span>}
+                      {s.school_phone&&<a href={`tel:${s.school_phone}`} style={{color:A.blue,textDecoration:'none'}}>{s.school_phone}</a>}
+                    </div>
+                  </div>
+                  <button onClick={()=>setExpanded(ex?null:s.id)} style={{background:A.inputBg,border:'none',borderRadius:A.rPill,padding:'5px 12px',fontSize:12,fontWeight:600,color:A.label2,cursor:'pointer'}}>{ex?'Hide classes':`Classes (${(s.classes||[]).length})`}</button>
+                  <button onClick={()=>openEditM(s)} style={{background:'none',border:'none',color:A.label4,fontSize:13,cursor:'pointer',padding:'0 4px'}}>Edit</button>
+                </div>
+                {ex&&(
+                  <div style={{padding:'0 18px 16px',borderTop:`1px solid ${A.sep}`}}>
+                    {(s.classes||[]).length===0?(
+                      <div style={{fontSize:13,color:A.label4,padding:'14px 0',textAlign:'center',fontStyle:'italic'}}>No classes added</div>
+                    ):(s.classes||[]).map((c,i)=>(
+                      <div key={c.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 0',borderTop:i>0?`1px solid ${A.sep}`:'none'}}>
+                        {c.period&&<span style={{fontSize:11,fontWeight:700,color:A.label4,background:A.inputBg,padding:'2px 7px',borderRadius:A.rPill,flexShrink:0}}>{c.period}</span>}
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:14,fontWeight:600,color:A.label1}}>{c.subject}</div>
+                          <div style={{fontSize:11,color:A.label4,marginTop:1}}>
+                            {[c.teacher,c.room,c.days].filter(Boolean).join(' · ')}
+                          </div>
+                        </div>
+                        <button onClick={()=>openEditC(s.id,c)} style={{background:'none',border:'none',color:A.label4,fontSize:13,cursor:'pointer',padding:'0 4px'}}>Edit</button>
+                      </div>
+                    ))}
+                    <div style={{marginTop:12}}>
+                      <Btn variant="ghost" sm onClick={()=>openNewC(s.id)}>+ Add Class</Btn>
+                    </div>
+                  </div>
+                )}
+              </Card>
+            );
+          })}
+        </div>
+      )}
+      <Drawer open={mDrawer} onClose={()=>{setMDrawer(false);setEditM(null);}} title={editM?'Edit School Info':'Add School Info'}>
+        <FormGroup label="Family member (optional)">
+          <div style={{padding:'12px 16px'}}>
+            <select value={mForm.member_id} onChange={e=>setMForm(f=>({...f,member_id:e.target.value}))} style={{width:'100%',padding:'10px 12px',borderRadius:A.rXs,border:`1px solid ${A.sep}`,background:A.inputBg,fontSize:15,color:A.label1}}>
+              <option value="">— Not linked —</option>
+              {members.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
+          </div>
+        </FormGroup>
+        <FormGroup label="School name">
+          <div style={{padding:'12px 16px'}}><Inp value={mForm.school_name} onChange={e=>setMForm(f=>({...f,school_name:e.target.value}))} placeholder="Oakwood Elementary"/></div>
+        </FormGroup>
+        <FormGroup label="Grade">
+          <div style={{padding:'12px 16px'}}><Inp value={mForm.grade} onChange={e=>setMForm(f=>({...f,grade:e.target.value}))} placeholder="3rd grade"/></div>
+        </FormGroup>
+        <FormGroup label="Teacher name">
+          <div style={{padding:'12px 16px'}}><Inp value={mForm.teacher_name} onChange={e=>setMForm(f=>({...f,teacher_name:e.target.value}))} placeholder="Ms. Johnson"/></div>
+        </FormGroup>
+        <FormGroup label="Teacher email">
+          <div style={{padding:'12px 16px'}}><Inp type="email" value={mForm.teacher_email} onChange={e=>setMForm(f=>({...f,teacher_email:e.target.value}))} placeholder="johnson@school.org"/></div>
+        </FormGroup>
+        <FormGroup label="School phone">
+          <div style={{padding:'12px 16px'}}><Inp type="tel" value={mForm.school_phone} onChange={e=>setMForm(f=>({...f,school_phone:e.target.value}))} placeholder="(404) 555-0100"/></div>
+        </FormGroup>
+        <FormGroup label="Start time">
+          <div style={{padding:'12px 16px'}}><Inp type="time" value={mForm.start_time} onChange={e=>setMForm(f=>({...f,start_time:e.target.value}))}/></div>
+        </FormGroup>
+        <FormGroup label="End time">
+          <div style={{padding:'12px 16px'}}><Inp type="time" value={mForm.end_time} onChange={e=>setMForm(f=>({...f,end_time:e.target.value}))}/></div>
+        </FormGroup>
+        <FormGroup label="Notes">
+          <div style={{padding:'12px 16px'}}><textarea value={mForm.notes} onChange={e=>setMForm(f=>({...f,notes:e.target.value}))} placeholder="Pickup details, lunch account, etc." style={{width:'100%',minHeight:60,padding:'9px 12px',background:A.inputBg,border:`1.5px solid ${A.sep}`,borderRadius:A.rXs,fontSize:15,color:A.label1,fontFamily:'inherit',resize:'vertical',outline:'none'}}/></div>
+        </FormGroup>
+        <div style={{display:'flex',gap:8,marginTop:4}}>
+          <Btn onClick={saveM} full>{editM?'Save Changes':'Add School'}</Btn>
+          {editM&&<Btn variant="ghost" onClick={()=>delM(editM.id)} full style={{color:A.red}}>Delete</Btn>}
+        </div>
+        {!editM&&<Btn variant="ghost" onClick={()=>setMDrawer(false)} full style={{marginTop:8}}>Cancel</Btn>}
+      </Drawer>
+      <Drawer open={cDrawer} onClose={()=>{setCDrawer(false);setCContext(null);}} title={cContext?.edit?'Edit Class':'Add Class'}>
+        <FormGroup label="Period (optional)">
+          <div style={{padding:'12px 16px'}}><Inp value={cForm.period} onChange={e=>setCForm(f=>({...f,period:e.target.value}))} placeholder="1, 2nd, Block A…"/></div>
+        </FormGroup>
+        <FormGroup label="Subject">
+          <div style={{padding:'12px 16px'}}><Inp value={cForm.subject} onChange={e=>setCForm(f=>({...f,subject:e.target.value}))} placeholder="Algebra II"/></div>
+        </FormGroup>
+        <FormGroup label="Teacher">
+          <div style={{padding:'12px 16px'}}><Inp value={cForm.teacher} onChange={e=>setCForm(f=>({...f,teacher:e.target.value}))} placeholder="Mr. Davis"/></div>
+        </FormGroup>
+        <FormGroup label="Room">
+          <div style={{padding:'12px 16px'}}><Inp value={cForm.room} onChange={e=>setCForm(f=>({...f,room:e.target.value}))} placeholder="204"/></div>
+        </FormGroup>
+        <FormGroup label="Days">
+          <div style={{padding:'12px 16px',display:'flex',flexWrap:'wrap',gap:6}}>
+            {DAYS_OPTS.map(d=>{
+              const active=(cForm.days||'').split(',').includes(d);
+              return(
+                <button key={d} onClick={()=>toggleDay(d)} style={{padding:'6px 12px',borderRadius:A.rPill,border:`1.5px solid ${active?A.blue:A.sep}`,background:active?A.blueFill:A.inputBg,color:active?A.blue:A.label3,fontSize:12,fontWeight:600,cursor:'pointer'}}>{d}</button>
+              );
+            })}
+          </div>
+        </FormGroup>
+        <div style={{display:'flex',gap:8,marginTop:4}}>
+          <Btn onClick={saveC} full>{cContext?.edit?'Save Changes':'Add Class'}</Btn>
+          {cContext?.edit&&<Btn variant="ghost" onClick={delC} full style={{color:A.red}}>Delete</Btn>}
+        </div>
+        {!cContext?.edit&&<Btn variant="ghost" onClick={()=>setCDrawer(false)} full style={{marginTop:8}}>Cancel</Btn>}
+      </Drawer>
+    </div>
+  );
+}
+
+function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocery,setGrocery,meals,setMeals,icsSources,setIcsSources,inboxCount,setInboxCount,countdowns,setCountdowns,members,setMembers,photos,setPhotos,clockFormat,setClockFormat,weather,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd,setRefreshMs,parseRefreshMs,goals,setGoals,notes,setNotes,polls,setPolls,bookmarks,setBookmarks,quickActions,setQuickActions,setRotationMs,setWifiQrData,darkMode,onDarkMode,packages,setPackages,messages,setMessages,recipes,setRecipes,bills,setBills,payments,setPayments,vehicles,setVehicles,appliances,setAppliances,consumables,setConsumables,pets,setPets,contacts,setContacts,maintenanceItems,setMaintenanceItems,budget,setBudget,subscriptions,setSubscriptions,projects,setProjects,pantry,setPantry,isAdmin=false}){
   const isMobile=useIsMobile();
   const [screen,setScreen]=useState('dashboard');
   const {toasts,add:toastAdd}=useToast();
@@ -7294,20 +8410,26 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
     {id:'calendar',label:'Calendar',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="1.5" y="3.5" width="14" height="12" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M1.5 7h14" stroke="currentColor" strokeWidth="1.5"/><path d="M5.5 1.5v3M11.5 1.5v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
     {id:'chores',label:'Chores',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="2" y="1.5" width="13" height="14" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M5.5 7l2 2 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M5.5 11h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
     {id:'grocery',label:'Grocery',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><path d="M2 4h13l-1.5 8H3.5L2 4z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><path d="M6 4l.5-2.5h4L11 4" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>},
+    {id:'pantry',label:'Pantry',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="3" y="3" width="11" height="12" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M3 7h11" stroke="currentColor" strokeWidth="1.5"/><path d="M6 1.5v2M11 1.5v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
     {id:'countdowns',label:'Countdowns',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><circle cx="8.5" cy="9" r="6.5" stroke="currentColor" strokeWidth="1.5"/><path d="M8.5 5.5V9l2.5 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M6 1.5h5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
     {id:'family',label:'Family',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><circle cx="6" cy="5" r="2.5" stroke="currentColor" strokeWidth="1.5"/><circle cx="12" cy="5" r="2" stroke="currentColor" strokeWidth="1.5"/><path d="M1 14c0-2.76 2.24-5 5-5s5 2.24 5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M12 9c1.66 0 3 1.34 3 3v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
+    {id:'school',label:'School',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><path d="M1.5 6.5L8.5 3l7 3.5-7 3.5-7-3.5z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><path d="M4 8v4c0 1 2 2 4.5 2s4.5-1 4.5-2V8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
     {id:'goals',label:'Goals',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><circle cx="8.5" cy="8.5" r="6.5" stroke="currentColor" strokeWidth="1.5"/><circle cx="8.5" cy="8.5" r="3" stroke="currentColor" strokeWidth="1.5"/><circle cx="8.5" cy="8.5" r="1" fill="currentColor"/></svg>},
+    {id:'projects',label:'Projects',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><path d="M3 11l4-4 3 3 4-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M11 5h3v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M2 14h13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
     {id:'notes',label:'Notes',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="2" y="2" width="13" height="13" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M5 6h7M5 9h5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
     {id:'bookmarks',label:'Bookmarks',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><path d="M3.5 2h10a1 1 0 011 1v12l-5.5-3.5L3.5 15V3a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>},
     {id:'polls',label:'Polls',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="2" y="9" width="3" height="6" rx="1" fill="currentColor" opacity=".5"/><rect x="7" y="5" width="3" height="10" rx="1" fill="currentColor" opacity=".7"/><rect x="12" y="2" width="3" height="13" rx="1" fill="currentColor"/></svg>},
     {id:'bills',label:'Bills',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="1.5" y="3" width="14" height="11" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M5 8h4M5 11h2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M11.5 6.5v4M9.5 8.5h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
+    {id:'subscriptions',label:'Subscriptions',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="2" y="4" width="13" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.5"/><path d="M2 7h13" stroke="currentColor" strokeWidth="1.5"/><path d="M5 10h2M9 10h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
     {id:'budget',label:'Budget',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="2" y="9" width="3" height="6" rx="1" fill="currentColor" opacity=".5"/><rect x="7" y="5" width="3" height="10" rx="1" fill="currentColor" opacity=".7"/><rect x="12" y="2" width="3" height="13" rx="1" fill="currentColor"/></svg>},
     {id:'vehicles',label:'Vehicles',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><path d="M2 10l1.5-4.5A1 1 0 014.4 5h8.2a1 1 0 01.9.5L15 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><rect x="1" y="10" width="15" height="4" rx="1.5" stroke="currentColor" strokeWidth="1.5"/><circle cx="4.5" cy="14" r="1.5" fill="currentColor"/><circle cx="12.5" cy="14" r="1.5" fill="currentColor"/></svg>},
     {id:'home',label:'Home',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><path d="M2 7.5L8.5 2 15 7.5V15a1 1 0 01-1 1H3a1 1 0 01-1-1V7.5z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><path d="M6 16v-6h5v6" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>},
     {id:'pets',label:'Pets',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><circle cx="5" cy="4" r="1.5" fill="currentColor"/><circle cx="12" cy="4" r="1.5" fill="currentColor"/><circle cx="3" cy="8" r="1.5" fill="currentColor"/><circle cx="14" cy="8" r="1.5" fill="currentColor"/><ellipse cx="8.5" cy="12" rx="4" ry="3.5" stroke="currentColor" strokeWidth="1.5"/></svg>},
     {id:'contacts',label:'Contacts',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><circle cx="8.5" cy="6" r="3" stroke="currentColor" strokeWidth="1.5"/><path d="M2 15c0-3.31 2.91-6 6.5-6s6.5 2.69 6.5 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
+    {id:'emergency',label:'Emergency',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><path d="M8.5 1.5l6 2v5c0 3.5-2.5 6.5-6 7.5-3.5-1-6-4-6-7.5v-5l6-2z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><path d="M8.5 6v3M8.5 11v.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
     {id:'packages',label:'Packages',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="2" y="5" width="13" height="10" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M5.5 5V3.5a3 3 0 016 0V5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M2 8.5h13" stroke="currentColor" strokeWidth="1.5"/></svg>,badge:packages?.length||0},
     {id:'messages',label:'Messages',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><path d="M2 3h13a1 1 0 011 1v8a1 1 0 01-1 1H5l-4 3V4a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>,badge:messages?.length||0},
+    {id:'lists',label:'Lists',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><path d="M5 4h10M5 8.5h10M5 13h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="2.5" cy="4" r="1" fill="currentColor"/><circle cx="2.5" cy="8.5" r="1" fill="currentColor"/><circle cx="2.5" cy="13" r="1" fill="currentColor"/></svg>},
     {id:'recipes',label:'Recipes',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><path d="M3 2h11a1 1 0 011 1v11a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.5"/><path d="M5 6h7M5 9h5M5 12h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
     {id:'inbox',label:'Inbox',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="1.5" y="3.5" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M1.5 6.5l7 4 7-4" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>,badge:inboxCount},
     {id:'settings',label:'Settings',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><circle cx="8.5" cy="8.5" r="2.5" stroke="currentColor" strokeWidth="1.5"/><path d="M8.5 1v2M8.5 14v2M1 8.5h2M14 8.5h2M3.05 3.05l1.42 1.42M12.53 12.53l1.42 1.42M12.53 3.05l-1.42 1.42M4.47 12.53l-1.42 1.42" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
@@ -7318,20 +8440,26 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
     calendar:   <CalendarScreen events={events} setEvents={setEvents} icsSources={icsSources} toastAdd={toastAdd} members={members} clockFormat={clockFormat}/>,
     chores:     <ChoresScreen chores={chores} setChores={setChores} goals={goals} members={members} toastAdd={toastAdd}/>,
     grocery:    <GroceryScreen grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} recipes={recipes} toastAdd={toastAdd}/>,
+    pantry:     <PantryScreen pantry={pantry} setPantry={setPantry} grocery={grocery} setGrocery={setGrocery} toastAdd={toastAdd}/>,
     countdowns: <CountdownsScreen countdowns={countdowns} setCountdowns={setCountdowns} toastAdd={toastAdd}/>,
     family:     <FamilyScreen members={members} setMembers={setMembers} toastAdd={toastAdd}/>,
+    school:     <SchoolScreen members={members} toastAdd={toastAdd}/>,
     goals:      <GoalsScreen goals={goals} setGoals={setGoals} toastAdd={toastAdd}/>,
+    projects:   <ProjectsScreen projects={projects} setProjects={setProjects} toastAdd={toastAdd}/>,
     notes:      <NotesScreen notes={notes} setNotes={setNotes} toastAdd={toastAdd}/>,
     bookmarks:  <BookmarksScreen bookmarks={bookmarks} setBookmarks={setBookmarks} toastAdd={toastAdd}/>,
     polls:      <PollsScreen polls={polls} setPolls={setPolls} toastAdd={toastAdd}/>,
     bills:      <BillsScreen bills={bills} setBills={setBills} payments={payments} setPayments={setPayments} toastAdd={toastAdd}/>,
+    subscriptions: <SubscriptionsScreen subscriptions={subscriptions} setSubscriptions={setSubscriptions} toastAdd={toastAdd}/>,
     budget:     <BudgetScreen budget={budget} setBudget={setBudget} toastAdd={toastAdd}/>,
     vehicles:   <VehiclesScreen vehicles={vehicles} setVehicles={setVehicles} toastAdd={toastAdd}/>,
     home:       <HomeScreen appliances={appliances} setAppliances={setAppliances} consumables={consumables} setConsumables={setConsumables} maintenanceItems={maintenanceItems} setMaintenanceItems={setMaintenanceItems} toastAdd={toastAdd}/>,
     pets:       <PetsScreen pets={pets} setPets={setPets} toastAdd={toastAdd}/>,
     contacts:   <ContactsScreen contacts={contacts} setContacts={setContacts} toastAdd={toastAdd}/>,
+    emergency:  <EmergencyScreen toastAdd={toastAdd}/>,
     packages:   <PackagesScreen packages={packages} setPackages={setPackages} toastAdd={toastAdd}/>,
     messages:   <MessagesScreen messages={messages} setMessages={setMessages} members={members} toastAdd={toastAdd}/>,
+    lists:      <ListsScreen toastAdd={toastAdd}/>,
     recipes:    <RecipesScreen recipes={recipes} setRecipes={setRecipes} toastAdd={toastAdd}/>,
     inbox:      <InboxScreen toastAdd={toastAdd} events={events} setEvents={setEvents} setInboxCount={setInboxCount}/>,
     settings:   <SettingsScreen toastAdd={toastAdd} icsSources={icsSources} setIcsSources={setIcsSources} onDisplay={onDisplay} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} setQuickActions={setQuickActions} setRotationMs={setRotationMs} setWifiQrData={setWifiQrData} darkMode={darkMode} onDarkMode={onDarkMode}/>,
@@ -7846,6 +8974,9 @@ function App(){
   const [maintenanceItems,setMaintenanceItems]=useState([]);
   const [pets,setPets]=useState([]);
   const [contacts,setContacts]=useState([]);
+  const [subscriptions,setSubscriptions]=useState([]);
+  const [projects,setProjects]=useState([]);
+  const [pantry,setPantry]=useState([]);
   const [quickActions,setQuickActions]=useState([]);
   const [photos,setPhotos]=useState([]);
   const [clockFormat,setClockFormat]=useState('12h');
@@ -7928,7 +9059,10 @@ function App(){
       api.get('/api/pets'),
       api.get('/api/contacts'),
       api.get('/api/budget'),
-    ]).then(([ev,ch,gr,ml,ics,inb,cd,mb,ph,st,gl,nt,pl,qa,bm,pk,ms,rc,bl,veh,appl,cons,maint,petsData,contsData,bdg])=>{
+      api.get('/api/subscriptions'),
+      api.get('/api/projects'),
+      api.get('/api/pantry'),
+    ]).then(([ev,ch,gr,ml,ics,inb,cd,mb,ph,st,gl,nt,pl,qa,bm,pk,ms,rc,bl,veh,appl,cons,maint,petsData,contsData,bdg,subs,proj,pntr])=>{
       if(ev.status==='fulfilled'&&Array.isArray(ev.value)) setEvents(ev.value);
       if(ch.status==='fulfilled'&&Array.isArray(ch.value)) setChores(ch.value);
       if(gr.status==='fulfilled'&&Array.isArray(gr.value)) setGrocery(gr.value);
@@ -7954,6 +9088,9 @@ function App(){
       if(petsData.status==='fulfilled'&&Array.isArray(petsData.value)) setPets(petsData.value);
       if(contsData.status==='fulfilled'&&Array.isArray(contsData.value)) setContacts(contsData.value);
       if(bdg.status==='fulfilled'&&bdg.value?.categories) setBudget(bdg.value);
+      if(subs.status==='fulfilled'&&Array.isArray(subs.value)) setSubscriptions(subs.value);
+      if(proj.status==='fulfilled'&&Array.isArray(proj.value)) setProjects(proj.value);
+      if(pntr.status==='fulfilled'&&Array.isArray(pntr.value)) setPantry(pntr.value);
       if(st.status==='fulfilled'){
         const s=st.value;
         if(s.clock_format) setClockFormat(s.clock_format);
@@ -8024,7 +9161,7 @@ function App(){
   const goManage=()=>{localStorage.setItem('kith_mode','manage');setMode('manage');};
   return mode==='display'
     ?<DisplayMode onManage={goManage} events={events} chores={chores} setChores={setChores} meals={meals} grocery={grocery} setGrocery={setGrocery} countdowns={countdowns} photos={photos} clockFormat={clockFormat} weather={weather} nightModeStart={nightModeStart} nightModeEnd={nightModeEnd} goals={goals} notes={notes} polls={polls} rotationMs={rotationMs} wifiQrData={wifiQrData} quickActions={quickActions} members={members} packages={packages} setPackages={setPackages} messages={messages} setMessages={setMessages} appliances={appliances} consumables={consumables} maintenanceItems={maintenanceItems} pets={pets}/>
-    :<ManageMode onDisplay={goDisplay} onLogout={handleLogout} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources} inboxCount={inboxCount} setInboxCount={setInboxCount} countdowns={countdowns} setCountdowns={setCountdowns} members={members} setMembers={setMembers} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} weather={weather} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} goals={goals} setGoals={setGoals} notes={notes} setNotes={setNotes} polls={polls} setPolls={setPolls} bookmarks={bookmarks} setBookmarks={setBookmarks} quickActions={quickActions} setQuickActions={setQuickActions} setRotationMs={setRotationMs} setWifiQrData={setWifiQrData} darkMode={darkMode} onDarkMode={handleDarkMode} packages={packages} setPackages={setPackages} messages={messages} setMessages={setMessages} recipes={recipes} setRecipes={setRecipes} bills={bills} setBills={setBills} payments={payments} setPayments={setPayments} vehicles={vehicles} setVehicles={setVehicles} appliances={appliances} setAppliances={setAppliances} consumables={consumables} setConsumables={setConsumables} pets={pets} setPets={setPets} contacts={contacts} setContacts={setContacts} maintenanceItems={maintenanceItems} setMaintenanceItems={setMaintenanceItems} budget={budget} setBudget={setBudget} isAdmin={!!auth&&!currentMember&&!kiosk}/>;
+    :<ManageMode onDisplay={goDisplay} onLogout={handleLogout} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources} inboxCount={inboxCount} setInboxCount={setInboxCount} countdowns={countdowns} setCountdowns={setCountdowns} members={members} setMembers={setMembers} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} weather={weather} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} goals={goals} setGoals={setGoals} notes={notes} setNotes={setNotes} polls={polls} setPolls={setPolls} bookmarks={bookmarks} setBookmarks={setBookmarks} quickActions={quickActions} setQuickActions={setQuickActions} setRotationMs={setRotationMs} setWifiQrData={setWifiQrData} darkMode={darkMode} onDarkMode={handleDarkMode} packages={packages} setPackages={setPackages} messages={messages} setMessages={setMessages} recipes={recipes} setRecipes={setRecipes} bills={bills} setBills={setBills} payments={payments} setPayments={setPayments} vehicles={vehicles} setVehicles={setVehicles} appliances={appliances} setAppliances={setAppliances} consumables={consumables} setConsumables={setConsumables} pets={pets} setPets={setPets} contacts={contacts} setContacts={setContacts} maintenanceItems={maintenanceItems} setMaintenanceItems={setMaintenanceItems} budget={budget} setBudget={setBudget} subscriptions={subscriptions} setSubscriptions={setSubscriptions} projects={projects} setProjects={setProjects} pantry={pantry} setPantry={setPantry} isAdmin={!!auth&&!currentMember&&!kiosk}/>;
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);

@@ -184,16 +184,15 @@ function localDate(d = new Date()) {
 }
 
 // ── Chore status helper ───────────────────────────────────────────────────────
-function updateChoreStatuses() {
+const _updateChoreStatusesTx = db.transaction(() => {
   const today = localDate();
-  // Recurring chores must never stay done — reset any that slipped through
   db.prepare("UPDATE chores SET done=0 WHERE done=1 AND recurrence != 'One-time'").run();
-  // Reset streak for chores that went overdue without being completed
   db.prepare("UPDATE chores SET streak=0 WHERE next_due < ? AND done=0 AND streak > 0 AND recurrence != 'One-time'").run(today);
   db.prepare("UPDATE chores SET status='overdue'  WHERE next_due < ? AND done=0").run(today);
   db.prepare("UPDATE chores SET status='due'      WHERE next_due = ? AND done=0").run(today);
   db.prepare("UPDATE chores SET status='upcoming' WHERE next_due > ? AND done=0").run(today);
-}
+});
+function updateChoreStatuses() { _updateChoreStatusesTx(); }
 updateChoreStatuses();
 
 function addMonths(d) {

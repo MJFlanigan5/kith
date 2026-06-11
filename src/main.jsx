@@ -855,28 +855,32 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
     const label=offset===0?'Today':offset===1?'Tomorrow':DAYS[d.getDay()];
     return{label,date:localDate(d)};
   });
-  const displayEvents=(events||[]).filter(e=>e.source!=='bill'&&e.source!=='vehicle');
-  const hasUpcomingEvents=agendaDays.some(({date})=>displayEvents.some(e=>e.date===date));
-  const dueSoonVehicles=(events||[]).filter(e=>e.source==='vehicle'&&daysUntil(e.date)<=14).sort((a,b)=>a.date.localeCompare(b.date));
-  const dueC=chores.filter(c=>(c.status==='due'||c.status==='overdue')&&!c.done);
-  const upCD=(countdowns||[]).filter(c=>daysUntil(c.date)>=0);
-  const uncheckedGrocery=(grocery||[]).filter(i=>!i.checked);
-  const progressMembers=memberProgress.filter(m=>m.monthly_goal>0);
+  const displayEvents=useMemo(()=>(events||[]).filter(e=>e.source!=='bill'&&e.source!=='vehicle'),[events]);
+  const eventDateSet=useMemo(()=>new Set(displayEvents.map(e=>e.date)),[displayEvents]);
+  const hasUpcomingEvents=agendaDays.some(({date})=>eventDateSet.has(date));
+  const dueSoonVehicles=useMemo(()=>(events||[]).filter(e=>e.source==='vehicle'&&daysUntil(e.date)<=14).sort((a,b)=>a.date.localeCompare(b.date)),[events]);
+  const dueC=useMemo(()=>chores.filter(c=>(c.status==='due'||c.status==='overdue')&&!c.done),[chores]);
+  const upCD=useMemo(()=>(countdowns||[]).filter(c=>daysUntil(c.date)>=0),[countdowns]);
+  const uncheckedGrocery=useMemo(()=>(grocery||[]).filter(i=>!i.checked),[grocery]);
+  const progressMembers=useMemo(()=>memberProgress.filter(m=>m.monthly_goal>0),[memberProgress]);
   const pinnedNotes=useMemo(()=>(notes||[]).filter(n=>n.pinned),[notes]);
   const expiringAppliances=useMemo(()=>(appliances||[]).filter(a=>a.warranty_date&&daysUntil(a.warranty_date)<=30).sort((a,b)=>a.warranty_date.localeCompare(b.warranty_date)),[appliances]);
   const urgentConsumables=useMemo(()=>(consumables||[]).filter(c=>c.status==='overdue'||c.status==='due_soon').sort((a,b)=>(a.days_remaining??Infinity)-(b.days_remaining??Infinity)),[consumables]);
   const urgentMaintenance=useMemo(()=>(maintenanceItems||[]).filter(m=>m.status==='overdue'||m.status==='due_this_month'),[maintenanceItems]);
   const urgentPetRecords=useMemo(()=>(pets||[]).flatMap(p=>(p.records||[]).filter(r=>r.status==='overdue'||(r.status==='due_soon'&&r.days_remaining<=14)).map(r=>({...r,pet_name:p.name,pet_color:p.color||'#FF9500'}))).sort((a,b)=>(a.days_remaining??Infinity)-(b.days_remaining??Infinity)),[pets]);
-  const monthlySubTotal=(subscriptions||[]).filter(s=>s.active).reduce((sum,s)=>{
-    const a=Number(s.amount)||0;
-    if(s.billing_cycle==='annual') return sum+a/12;
-    if(s.billing_cycle==='weekly') return sum+a*52/12;
-    if(s.billing_cycle==='quarterly') return sum+a/3;
-    return sum+a;
-  },0);
-  const activeSubCount=(subscriptions||[]).filter(s=>s.active).length;
-  const lowPantryItems=(pantry||[]).filter(p=>p.expiry_status==='expired'||p.expiry_status==='expiring_soon'||(p.low_stock_at>0&&Number(p.quantity)<=Number(p.low_stock_at)));
-  const inProgressProjects=(projects||[]).filter(p=>p.status==='in_progress');
+  const [monthlySubTotal,activeSubCount]=useMemo(()=>{
+    const active=(subscriptions||[]).filter(s=>s.active);
+    const total=active.reduce((sum,s)=>{
+      const a=Number(s.amount)||0;
+      if(s.billing_cycle==='annual') return sum+a/12;
+      if(s.billing_cycle==='weekly') return sum+a*52/12;
+      if(s.billing_cycle==='quarterly') return sum+a/3;
+      return sum+a;
+    },0);
+    return[total,active.length];
+  },[subscriptions]);
+  const lowPantryItems=useMemo(()=>(pantry||[]).filter(p=>p.expiry_status==='expired'||p.expiry_status==='expiring_soon'||(p.low_stock_at>0&&Number(p.quantity)<=Number(p.low_stock_at))),[pantry]);
+  const inProgressProjects=useMemo(()=>(projects||[]).filter(p=>p.status==='in_progress'),[projects]);
   const centerPanels=[
     'dinner',
     ...(dueC.length>0?['chores']:[]),

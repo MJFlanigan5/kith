@@ -7441,30 +7441,21 @@ function HomeScreen({appliances,setAppliances,consumables,setConsumables,mainten
               })}
             </Card>
           )}
-          <Drawer open={aDrawer} onClose={()=>{setADrawer(false);setEditAppl(null);}} title={editAppl?'Edit Appliance':'Add Appliance'}>
-            <FormGroup label="Name">
-              <div style={{padding:'12px 16px'}}><Inp value={aForm.name} onChange={e=>setAForm(f=>({...f,name:e.target.value}))} placeholder="Refrigerator"/></div>
-            </FormGroup>
-            <FormGroup label="Room / Location">
-              <div style={{padding:'12px 16px'}}><Inp value={aForm.location} onChange={e=>setAForm(f=>({...f,location:e.target.value}))} placeholder="Kitchen"/></div>
-            </FormGroup>
-            <FormGroup label="Purchase date (optional)">
-              <div style={{padding:'12px 16px'}}><Inp type="date" value={aForm.purchase_date} onChange={e=>setAForm(f=>({...f,purchase_date:e.target.value}))}/></div>
-            </FormGroup>
-            <FormGroup label="Warranty expires (optional)">
-              <div style={{padding:'12px 16px'}}><Inp type="date" value={aForm.warranty_date} onChange={e=>setAForm(f=>({...f,warranty_date:e.target.value}))}/></div>
-            </FormGroup>
-            <FormGroup label="Notes (optional)">
-              <div style={{padding:'12px 16px'}}><Inp value={aForm.notes} onChange={e=>setAForm(f=>({...f,notes:e.target.value}))} placeholder="Model number, serial, etc."/></div>
-            </FormGroup>
-            <div style={{display:'flex',gap:8,marginTop:4}}>
-              <Btn onClick={saveAppl} full>{editAppl?'Save Changes':'Add Appliance'}</Btn>
-              {editAppl&&<Btn variant="ghost" onClick={()=>delAppl(editAppl.id)} full style={{color:A.red}}>Delete</Btn>}
-            </div>
-            {!editAppl&&<Btn variant="ghost" onClick={()=>setADrawer(false)} full style={{marginTop:8}}>Cancel</Btn>}
-          </Drawer>
         </>
       )}
+      {/* drawers are outside tab conditionals so switching tabs doesn't unmount open forms */}
+      <Drawer open={aDrawer} onClose={()=>{setADrawer(false);setEditAppl(null);}} title={editAppl?'Edit Appliance':'Add Appliance'}>
+        <FormGroup label="Name"><div style={{padding:'12px 16px'}}><Inp value={aForm.name} onChange={e=>setAForm(f=>({...f,name:e.target.value}))} placeholder="Refrigerator"/></div></FormGroup>
+        <FormGroup label="Room / Location"><div style={{padding:'12px 16px'}}><Inp value={aForm.location} onChange={e=>setAForm(f=>({...f,location:e.target.value}))} placeholder="Kitchen"/></div></FormGroup>
+        <FormGroup label="Purchase date (optional)"><div style={{padding:'12px 16px'}}><Inp type="date" value={aForm.purchase_date} onChange={e=>setAForm(f=>({...f,purchase_date:e.target.value}))}/></div></FormGroup>
+        <FormGroup label="Warranty expires (optional)"><div style={{padding:'12px 16px'}}><Inp type="date" value={aForm.warranty_date} onChange={e=>setAForm(f=>({...f,warranty_date:e.target.value}))}/></div></FormGroup>
+        <FormGroup label="Notes (optional)"><div style={{padding:'12px 16px'}}><Inp value={aForm.notes} onChange={e=>setAForm(f=>({...f,notes:e.target.value}))} placeholder="Model number, serial, etc."/></div></FormGroup>
+        <div style={{display:'flex',gap:8,marginTop:4}}>
+          <Btn onClick={saveAppl} full>{editAppl?'Save Changes':'Add Appliance'}</Btn>
+          {editAppl&&<Btn variant="ghost" onClick={()=>delAppl(editAppl.id)} full style={{color:A.red}}>Delete</Btn>}
+        </div>
+        {!editAppl&&<Btn variant="ghost" onClick={()=>setADrawer(false)} full style={{marginTop:8}}>Cancel</Btn>}
+      </Drawer>
 
       {tab==='consumables'&&(
         <>
@@ -7522,37 +7513,27 @@ function HomeScreen({appliances,setAppliances,consumables,setConsumables,mainten
               )}
             </>
           )}
-          <Drawer open={cDrawer} onClose={()=>{setCDrawer(false);setEditCons(null);}} title={editCons?'Edit Item':'Add Item'}>
-            <FormGroup label="Name">
-              <div style={{padding:'12px 16px'}}><Inp value={cForm.name} onChange={e=>setCForm(f=>({...f,name:e.target.value}))} placeholder="Furnace filter"/></div>
-            </FormGroup>
-            <FormGroup label="Room / Location (optional)">
-              <div style={{padding:'12px 16px'}}><Inp value={cForm.location} onChange={e=>setCForm(f=>({...f,location:e.target.value}))} placeholder="Basement"/></div>
-            </FormGroup>
-            <FormGroup label="Replace every">
-              <div style={{padding:'12px 16px',display:'flex',gap:8,alignItems:'center'}}>
-                <Inp type="number" min="1" value={cForm.intervalVal} onChange={e=>setCForm(f=>({...f,intervalVal:e.target.value}))} style={{width:80}}/>
-                <select value={cForm.intervalUnit} onChange={e=>setCForm(f=>({...f,intervalUnit:e.target.value}))} style={{flex:1,padding:'10px 12px',borderRadius:A.rXs,border:`1px solid ${A.sep}`,background:A.inputBg,fontSize:15,color:A.label1}}>
-                  <option value="days">days</option>
-                  <option value="weeks">weeks</option>
-                  <option value="months">months</option>
-                </select>
-              </div>
-            </FormGroup>
-            <FormGroup label="Last replaced (optional)">
-              <div style={{padding:'12px 16px'}}><Inp type="date" value={cForm.last_replaced} onChange={e=>setCForm(f=>({...f,last_replaced:e.target.value}))}/></div>
-            </FormGroup>
-            <FormGroup label="Notes (optional)">
-              <div style={{padding:'12px 16px'}}><Inp value={cForm.notes} onChange={e=>setCForm(f=>({...f,notes:e.target.value}))} placeholder="Brand, size, etc."/></div>
-            </FormGroup>
-            <div style={{display:'flex',gap:8,marginTop:4}}>
-              <Btn onClick={saveCons} full>{editCons?'Save Changes':'Add Item'}</Btn>
-              {editCons&&<Btn variant="ghost" onClick={()=>delCons(editCons.id)} full style={{color:A.red}}>Delete</Btn>}
-            </div>
-            {!editCons&&<Btn variant="ghost" onClick={()=>setCDrawer(false)} full style={{marginTop:8}}>Cancel</Btn>}
-          </Drawer>
         </>
       )}
+      <Drawer open={cDrawer} onClose={()=>{setCDrawer(false);setEditCons(null);}} title={editCons?'Edit Item':'Add Item'}>
+        <FormGroup label="Name"><div style={{padding:'12px 16px'}}><Inp value={cForm.name} onChange={e=>setCForm(f=>({...f,name:e.target.value}))} placeholder="Furnace filter"/></div></FormGroup>
+        <FormGroup label="Room / Location (optional)"><div style={{padding:'12px 16px'}}><Inp value={cForm.location} onChange={e=>setCForm(f=>({...f,location:e.target.value}))} placeholder="Basement"/></div></FormGroup>
+        <FormGroup label="Replace every">
+          <div style={{padding:'12px 16px',display:'flex',gap:8,alignItems:'center'}}>
+            <Inp type="number" min="1" value={cForm.intervalVal} onChange={e=>setCForm(f=>({...f,intervalVal:e.target.value}))} style={{width:80}}/>
+            <select value={cForm.intervalUnit} onChange={e=>setCForm(f=>({...f,intervalUnit:e.target.value}))} style={{flex:1,padding:'10px 12px',borderRadius:A.rXs,border:`1px solid ${A.sep}`,background:A.inputBg,fontSize:15,color:A.label1}}>
+              <option value="days">days</option><option value="weeks">weeks</option><option value="months">months</option>
+            </select>
+          </div>
+        </FormGroup>
+        <FormGroup label="Last replaced (optional)"><div style={{padding:'12px 16px'}}><Inp type="date" value={cForm.last_replaced} onChange={e=>setCForm(f=>({...f,last_replaced:e.target.value}))}/></div></FormGroup>
+        <FormGroup label="Notes (optional)"><div style={{padding:'12px 16px'}}><Inp value={cForm.notes} onChange={e=>setCForm(f=>({...f,notes:e.target.value}))} placeholder="Brand, size, etc."/></div></FormGroup>
+        <div style={{display:'flex',gap:8,marginTop:4}}>
+          <Btn onClick={saveCons} full>{editCons?'Save Changes':'Add Item'}</Btn>
+          {editCons&&<Btn variant="ghost" onClick={()=>delCons(editCons.id)} full style={{color:A.red}}>Delete</Btn>}
+        </div>
+        {!editCons&&<Btn variant="ghost" onClick={()=>setCDrawer(false)} full style={{marginTop:8}}>Cancel</Btn>}
+      </Drawer>
 
       {tab==='maintenance'&&(
         <>
@@ -7599,42 +7580,30 @@ function HomeScreen({appliances,setAppliances,consumables,setConsumables,mainten
               </div>
             </>
           )}
-          <Drawer open={maintDrawer} onClose={()=>{setMaintDrawer(false);setMaintEdit(null);}} title={maintEdit?'Edit Task':'Add Task'}>
-            <FormGroup label="Task name">
-              <div style={{padding:'12px 16px'}}><Inp value={maintForm.name} onChange={e=>setMaintForm(f=>({...f,name:e.target.value}))} placeholder="AC / furnace service"/></div>
-            </FormGroup>
-            <FormGroup label="Month">
-              <div style={{padding:'12px 16px'}}>
-                <select value={maintForm.month} onChange={e=>setMaintForm(f=>({...f,month:e.target.value}))} style={{width:'100%',padding:'10px 12px',borderRadius:A.rXs,border:`1px solid ${A.sep}`,background:A.inputBg,fontSize:15,color:A.label1}}>
-                  {MONTH_NAMES.map((m,i)=><option key={i+1} value={i+1}>{m}</option>)}
-                </select>
-              </div>
-            </FormGroup>
-            <FormGroup label="Notes (optional)">
-              <div style={{padding:'12px 16px'}}><Inp value={maintForm.notes} onChange={e=>setMaintForm(f=>({...f,notes:e.target.value}))} placeholder="Service company, parts needed, etc."/></div>
-            </FormGroup>
-            <div style={{display:'flex',gap:8,marginTop:4}}>
-              <Btn onClick={async()=>{
-                if(!maintForm.name.trim()){toastAdd('Name required','red');return;}
-                const body={name:maintForm.name.trim(),month:parseInt(maintForm.month),notes:maintForm.notes};
-                if(maintEdit){
-                  const r=await api.put(`/api/home/maintenance/${maintEdit.id}`,body).catch(()=>null);
-                  if(!r?.id){toastAdd('Failed to save','red');return;}
-                  setMaintenanceItems(p=>p.map(x=>x.id===r.id?r:x).sort(maintSort));
-                }else{
-                  const r=await api.post('/api/home/maintenance',body).catch(()=>null);
-                  if(!r?.id){toastAdd('Failed to save','red');return;}
-                  setMaintenanceItems(p=>[...p,r].sort(maintSort));
-                }
-                setMaintDrawer(false);setMaintEdit(null);
-                toastAdd(maintEdit?'Task updated':'Task added');
-              }} full>{maintEdit?'Save Changes':'Add Task'}</Btn>
-              {maintEdit&&<Btn variant="ghost" onClick={async()=>{try{await api.del(`/api/home/maintenance/${maintEdit.id}`);setMaintenanceItems(p=>p.filter(x=>x.id!==maintEdit.id));setMaintDrawer(false);setMaintEdit(null);toastAdd('Removed','blue');}catch{toastAdd('Failed to remove','red');}}} full style={{color:A.red}}>Delete</Btn>}
-            </div>
-            {!maintEdit&&<Btn variant="ghost" onClick={()=>setMaintDrawer(false)} full style={{marginTop:8}}>Cancel</Btn>}
-          </Drawer>
         </>
       )}
+      <Drawer open={maintDrawer} onClose={()=>{setMaintDrawer(false);setMaintEdit(null);}} title={maintEdit?'Edit Task':'Add Task'}>
+        <FormGroup label="Task name"><div style={{padding:'12px 16px'}}><Inp value={maintForm.name} onChange={e=>setMaintForm(f=>({...f,name:e.target.value}))} placeholder="AC / furnace service"/></div></FormGroup>
+        <FormGroup label="Month">
+          <div style={{padding:'12px 16px'}}>
+            <select value={maintForm.month} onChange={e=>setMaintForm(f=>({...f,month:e.target.value}))} style={{width:'100%',padding:'10px 12px',borderRadius:A.rXs,border:`1px solid ${A.sep}`,background:A.inputBg,fontSize:15,color:A.label1}}>
+              {MONTH_NAMES.map((m,i)=><option key={i+1} value={i+1}>{m}</option>)}
+            </select>
+          </div>
+        </FormGroup>
+        <FormGroup label="Notes (optional)"><div style={{padding:'12px 16px'}}><Inp value={maintForm.notes} onChange={e=>setMaintForm(f=>({...f,notes:e.target.value}))} placeholder="Service company, parts needed, etc."/></div></FormGroup>
+        <div style={{display:'flex',gap:8,marginTop:4}}>
+          <Btn onClick={async()=>{
+            if(!maintForm.name.trim()){toastAdd('Name required','red');return;}
+            const body={name:maintForm.name.trim(),month:parseInt(maintForm.month),notes:maintForm.notes};
+            if(maintEdit){const r=await api.put(`/api/home/maintenance/${maintEdit.id}`,body).catch(()=>null);if(!r?.id){toastAdd('Failed to save','red');return;}setMaintenanceItems(p=>p.map(x=>x.id===r.id?r:x).sort(maintSort));}
+            else{const r=await api.post('/api/home/maintenance',body).catch(()=>null);if(!r?.id){toastAdd('Failed to save','red');return;}setMaintenanceItems(p=>[...p,r].sort(maintSort));}
+            setMaintDrawer(false);setMaintEdit(null);toastAdd(maintEdit?'Task updated':'Task added');
+          }} full>{maintEdit?'Save Changes':'Add Task'}</Btn>
+          {maintEdit&&<Btn variant="ghost" onClick={async()=>{try{await api.del(`/api/home/maintenance/${maintEdit.id}`);setMaintenanceItems(p=>p.filter(x=>x.id!==maintEdit.id));setMaintDrawer(false);setMaintEdit(null);toastAdd('Removed','blue');}catch{toastAdd('Failed to remove','red');}}} full style={{color:A.red}}>Delete</Btn>}
+        </div>
+        {!maintEdit&&<Btn variant="ghost" onClick={()=>setMaintDrawer(false)} full style={{marginTop:8}}>Cancel</Btn>}
+      </Drawer>
 
       {tab==='repairs'&&(
         <>
@@ -7690,40 +7659,28 @@ function HomeScreen({appliances,setAppliances,consumables,setConsumables,mainten
               })}
             </Card>
           )}
-          <Drawer open={rDrawer} onClose={()=>{setRDrawer(false);setEditRepair(null);}} title={editRepair?'Edit Repair':'Log Repair'}>
-            <FormGroup label="Title">
-              <div style={{padding:'12px 16px'}}><Inp value={rForm.title} onChange={e=>setRForm(f=>({...f,title:e.target.value}))} placeholder="Replaced water heater"/></div>
-            </FormGroup>
-            <FormGroup label="Category">
-              <div style={{padding:'12px 16px'}}>
-                <select value={rForm.category} onChange={e=>setRForm(f=>({...f,category:e.target.value}))} style={{width:'100%',padding:'10px 12px',borderRadius:A.rXs,border:`1px solid ${A.sep}`,background:A.inputBg,fontSize:15,color:A.label1}}>
-                  {REPAIR_CATS.map(c=><option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-            </FormGroup>
-            <FormGroup label="Date">
-              <div style={{padding:'12px 16px'}}><Inp type="date" value={rForm.date} onChange={e=>setRForm(f=>({...f,date:e.target.value}))}/></div>
-            </FormGroup>
-            <FormGroup label="Cost (USD)">
-              <div style={{padding:'12px 16px'}}><Inp type="number" value={rForm.cost} onChange={e=>setRForm(f=>({...f,cost:e.target.value}))} placeholder="0"/></div>
-            </FormGroup>
-            <FormGroup label="Contractor (optional)">
-              <div style={{padding:'12px 16px'}}><Inp value={rForm.contractor} onChange={e=>setRForm(f=>({...f,contractor:e.target.value}))} placeholder="Smith Plumbing"/></div>
-            </FormGroup>
-            <FormGroup label="Warranty until (optional)">
-              <div style={{padding:'12px 16px'}}><Inp type="date" value={rForm.warranty_until} onChange={e=>setRForm(f=>({...f,warranty_until:e.target.value}))}/></div>
-            </FormGroup>
-            <FormGroup label="Notes (optional)">
-              <div style={{padding:'12px 16px'}}><Inp value={rForm.description} onChange={e=>setRForm(f=>({...f,description:e.target.value}))} placeholder="Brand, model, scope of work…"/></div>
-            </FormGroup>
-            <div style={{display:'flex',gap:8,marginTop:4}}>
-              <Btn onClick={saveRepair} full>{editRepair?'Save Changes':'Log Repair'}</Btn>
-              {editRepair&&<Btn variant="ghost" onClick={()=>delRepair(editRepair.id)} full style={{color:A.red}}>Delete</Btn>}
-            </div>
-            {!editRepair&&<Btn variant="ghost" onClick={()=>setRDrawer(false)} full style={{marginTop:8}}>Cancel</Btn>}
-          </Drawer>
         </>
       )}
+      <Drawer open={rDrawer} onClose={()=>{setRDrawer(false);setEditRepair(null);}} title={editRepair?'Edit Repair':'Log Repair'}>
+        <FormGroup label="Title"><div style={{padding:'12px 16px'}}><Inp value={rForm.title} onChange={e=>setRForm(f=>({...f,title:e.target.value}))} placeholder="Replaced water heater"/></div></FormGroup>
+        <FormGroup label="Category">
+          <div style={{padding:'12px 16px'}}>
+            <select value={rForm.category} onChange={e=>setRForm(f=>({...f,category:e.target.value}))} style={{width:'100%',padding:'10px 12px',borderRadius:A.rXs,border:`1px solid ${A.sep}`,background:A.inputBg,fontSize:15,color:A.label1}}>
+              {REPAIR_CATS.map(c=><option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+        </FormGroup>
+        <FormGroup label="Date"><div style={{padding:'12px 16px'}}><Inp type="date" value={rForm.date} onChange={e=>setRForm(f=>({...f,date:e.target.value}))}/></div></FormGroup>
+        <FormGroup label="Cost (USD)"><div style={{padding:'12px 16px'}}><Inp type="number" value={rForm.cost} onChange={e=>setRForm(f=>({...f,cost:e.target.value}))} placeholder="0"/></div></FormGroup>
+        <FormGroup label="Contractor (optional)"><div style={{padding:'12px 16px'}}><Inp value={rForm.contractor} onChange={e=>setRForm(f=>({...f,contractor:e.target.value}))} placeholder="Smith Plumbing"/></div></FormGroup>
+        <FormGroup label="Warranty until (optional)"><div style={{padding:'12px 16px'}}><Inp type="date" value={rForm.warranty_until} onChange={e=>setRForm(f=>({...f,warranty_until:e.target.value}))}/></div></FormGroup>
+        <FormGroup label="Notes (optional)"><div style={{padding:'12px 16px'}}><Inp value={rForm.description} onChange={e=>setRForm(f=>({...f,description:e.target.value}))} placeholder="Brand, model, scope of work…"/></div></FormGroup>
+        <div style={{display:'flex',gap:8,marginTop:4}}>
+          <Btn onClick={saveRepair} full>{editRepair?'Save Changes':'Log Repair'}</Btn>
+          {editRepair&&<Btn variant="ghost" onClick={()=>delRepair(editRepair.id)} full style={{color:A.red}}>Delete</Btn>}
+        </div>
+        {!editRepair&&<Btn variant="ghost" onClick={()=>setRDrawer(false)} full style={{marginTop:8}}>Cancel</Btn>}
+      </Drawer>
     </div>
   );
 }

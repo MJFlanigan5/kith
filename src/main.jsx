@@ -3271,7 +3271,8 @@ function InboxScreen({toastAdd,events,setEvents,setInboxCount}){
     }catch(e){toastAdd('Failed to add event','red');}
   };
   const discard=async id=>{
-    await api.del(`/api/inbox/${id}`);
+    const r=await api.del(`/api/inbox/${id}`).catch(()=>null);
+    if(r?.error){toastAdd('Failed to discard','red');return;}
     setPending(p=>{const next=p.filter(i=>i.id!==id);setInboxCount(next.length);return next;});
     toastAdd('Discarded','blue');
   };
@@ -4773,7 +4774,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
               {photos.map(p=>(
                 <div key={p.id} style={{position:'relative',width:72,height:72,borderRadius:A.rXs,overflow:'hidden',flexShrink:0}}>
                   <img src={`/photos/${p.filename}`} style={{width:'100%',height:'100%',objectFit:'cover'}} alt=""/>
-                  <button onClick={async()=>{await api.del(`/api/photos/${p.id}`);setPhotos(pr=>pr.filter(x=>x.id!==p.id));toastAdd('Removed','blue');}} style={{position:'absolute',top:2,right:2,width:20,height:20,borderRadius:'50%',background:'rgba(0,0,0,0.55)',border:'none',color:'#fff',fontSize:13,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1}}>×</button>
+                  <button onClick={async()=>{const r=await api.del(`/api/photos/${p.id}`).catch(()=>null);if(r?.error){toastAdd('Failed to remove','red');return;}setPhotos(pr=>pr.filter(x=>x.id!==p.id));toastAdd('Removed','blue');}} style={{position:'absolute',top:2,right:2,width:20,height:20,borderRadius:'50%',background:'rgba(0,0,0,0.55)',border:'none',color:'#fff',fontSize:13,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1}}>×</button>
                 </div>
               ))}
             </div>
@@ -5625,7 +5626,8 @@ function PollsScreen({polls,setPolls,toastAdd}){
   };
 
   const del=async id=>{
-    await api.del(`/api/polls/${id}`);
+    const r=await api.del(`/api/polls/${id}`).catch(()=>null);
+    if(r?.error){toastAdd('Failed to delete','red');return;}
     setPolls(p=>p.filter(x=>x.id!==id));
     toastAdd('Deleted','blue');
   };
@@ -5742,7 +5744,8 @@ function GoalsScreen({goals,setGoals,toastAdd}){
   };
 
   const del=async id=>{
-    await api.del(`/api/goals/${id}`);
+    const r=await api.del(`/api/goals/${id}`).catch(()=>null);
+    if(r?.error){toastAdd('Failed to delete','red');return;}
     setGoals(p=>p.filter(g=>g.id!==id));
     toastAdd('Deleted','blue');
   };
@@ -5884,7 +5887,8 @@ function PackagesScreen({packages,setPackages,toastAdd}){
   };
 
   const del=async id=>{
-    await api.del(`/api/packages/${id}`);
+    const r=await api.del(`/api/packages/${id}`).catch(()=>null);
+    if(r?.error){toastAdd('Failed to delete','red');return;}
     setPackages(p=>p.filter(x=>x.id!==id));
     toastAdd('Removed','blue');
   };
@@ -5971,7 +5975,8 @@ function MessagesScreen({messages,setMessages,members=[],toastAdd}){
   };
 
   const del=async id=>{
-    await api.del(`/api/messages/${id}`);
+    const r=await api.del(`/api/messages/${id}`).catch(()=>null);
+    if(r?.error){toastAdd('Failed to delete','red');return;}
     setMessages(p=>p.filter(m=>m.id!==id));
     toastAdd('Deleted','blue');
   };

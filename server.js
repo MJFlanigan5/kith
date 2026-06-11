@@ -3129,7 +3129,7 @@ app.get('/api/bills', requireAuth, (req, res) => {
   res.json({ bills, payments });
 });
 
-app.post('/api/bills', requireAuth, (req, res) => {
+app.post('/api/bills', requireAdmin, (req, res) => {
   const { name, amount=0, due_day=1, due_date='', recurrence='monthly', category='Other', color='#3B82F6', notes='' } = req.body || {};
   if (!name?.trim()) return res.status(400).json({ error: 'Name required' });
   const row = db.prepare('INSERT INTO bills (name,amount,due_day,due_date,recurrence,category,color,notes) VALUES (?,?,?,?,?,?,?,?) RETURNING *')
@@ -3137,7 +3137,7 @@ app.post('/api/bills', requireAuth, (req, res) => {
   res.json(row);
 });
 
-app.put('/api/bills/:id', requireAuth, (req, res) => {
+app.put('/api/bills/:id', requireAdmin, (req, res) => {
   const { name, amount=0, due_day=1, due_date='', recurrence='monthly', category='Other', color='#3B82F6', notes='' } = req.body || {};
   if (!name?.trim()) return res.status(400).json({ error: 'Name required' });
   const row = db.prepare('UPDATE bills SET name=?,amount=?,due_day=?,due_date=?,recurrence=?,category=?,color=?,notes=? WHERE id=? RETURNING *')
@@ -3146,19 +3146,19 @@ app.put('/api/bills/:id', requireAuth, (req, res) => {
   res.json(row);
 });
 
-app.delete('/api/bills/:id', requireAuth, (req, res) => {
+app.delete('/api/bills/:id', requireAdmin, (req, res) => {
   db.prepare('UPDATE bills SET active=0 WHERE id=?').run(Number(req.params.id));
   res.json({ ok: true });
 });
 
-app.post('/api/bills/:id/pay', requireAuth, (req, res) => {
+app.post('/api/bills/:id/pay', requireAdmin, (req, res) => {
   const { period } = req.body || {};
   if (!period) return res.status(400).json({ error: 'Period required' });
   db.prepare('INSERT OR IGNORE INTO bill_payments (bill_id, period) VALUES (?, ?)').run(Number(req.params.id), period);
   res.json({ ok: true });
 });
 
-app.delete('/api/bills/:id/pay/:period', requireAuth, (req, res) => {
+app.delete('/api/bills/:id/pay/:period', requireAdmin, (req, res) => {
   db.prepare('DELETE FROM bill_payments WHERE bill_id=? AND period=?').run(Number(req.params.id), req.params.period);
   res.json({ ok: true });
 });
@@ -4494,6 +4494,7 @@ function stripHtml(html) { return html.replace(/<script[^>]*>[\s\S]*?<\/script>/
 const SHIPPING_RE = /\b(ship(?:ped|ping|ment)?|track(?:ing)?|deliver(?:y|ed|ing)?|package|dispatch(?:ed)?|arrival|in transit|out for delivery)\b/i;
 const BILL_RE = /\b(bill|statement|invoice|payment due|amount due|minimum payment|your balance|autopay|auto-pay|past due|balance due)\b/i;
 const APPT_RE = /\b(appointment|reservation|itinerary|check.in|boarding pass|your flight|your hotel|your trip|your stay|rsvp|your reservation|your booking|your event)\b/i;
+let _scanInProgress = false;
 
 async function pollImap() {
   if (g('imap_enabled') !== '1') return;
@@ -4594,8 +4595,6 @@ cron.schedule('* * * * *', () => {
   _lastImapPoll = Date.now();
   pollImap().catch(() => { _lastImapPoll = 0; }); // reset on failure so next tick retries
 });
-
-let _scanInProgress = false;
 
 async function scanImap30Days() {
   if (_scanInProgress) return;

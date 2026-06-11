@@ -3745,7 +3745,7 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,recipes=[],toastAdd}){
       const newItem=await api.post('/api/grocery',body);
       if(newItem?.error){toastAdd(newItem.error||'Failed to add item','red');return;}
       setGrocery(p=>[...p,newItem]);
-      setInput('');setQtyInput('');
+      setInput('');setQtyInput('');setCatInput('');
       inputRef.current?.focus();
     }catch{toastAdd('Failed to add item','red');}
   };

@@ -1116,7 +1116,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
                     )}
                   </div>
                   <div ref={calScrollRef} style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:14,WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
-                    {agendaDays.filter(({date})=>displayEvents.some(e=>e.date===date)).map(({label,date})=>{
+                    {agendaDays.filter(({date})=>eventDateSet.has(date)).map(({label,date})=>{
                       const evs=displayEvents.filter(e=>e.date===date);
                       return(
                         <div key={date}>
@@ -2757,10 +2757,12 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
     try {
       if(editEvent){
         const updated=await api.put(`/api/events/${editEvent.id}`,payload);
+        if(updated?.error){toastAdd(updated.error||'Failed to save event','red');return;}
         setEvents(p=>p.map(e=>e.id===editEvent.id?updated:e));
         toastAdd('Event updated');
       } else {
-        await api.post('/api/events',payload);
+        const created=await api.post('/api/events',payload);
+        if(created?.error){toastAdd(created.error||'Failed to save event','red');return;}
         api.get('/api/events').then(d=>{if(Array.isArray(d))setEvents(d);});
         toastAdd('Event saved');
       }
@@ -3722,11 +3724,12 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,recipes=[],toastAdd}){
 
   useEffect(()=>()=>{Object.values(removeTimers.current).forEach(clearTimeout)},[]);
   useEffect(()=>{api.get('/api/grocery/history').then(r=>Array.isArray(r)&&setHistory(r)).catch(()=>{});},[]);
-  useEffect(()=>{api.get('/api/settings').then(s=>{setDietaryProfile({goal:s.dietary_goal||'',restrictions:s.dietary_restrictions||''}); }).catch(()=>{}); },[]);;
+  useEffect(()=>{api.get('/api/settings').then(s=>{setDietaryProfile({goal:s.dietary_goal||'',restrictions:s.dietary_restrictions||''});}).catch(()=>{});},[]);
 
   const addFromHistory=async name=>{
     try{
       const newItem=await api.post('/api/grocery',{name});
+      if(newItem?.error){toastAdd(newItem.error||'Failed to add','red');return;}
       setGrocery(p=>[...p,newItem]);
       toastAdd(`${name} added`);
     }catch{toastAdd('Failed to add','red');}
@@ -3739,6 +3742,7 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,recipes=[],toastAdd}){
     if(qtyInput.trim()) body.qty=qtyInput.trim();
     try{
       const newItem=await api.post('/api/grocery',body);
+      if(newItem?.error){toastAdd(newItem.error||'Failed to add item','red');return;}
       setGrocery(p=>[...p,newItem]);
       setInput('');setQtyInput('');
       inputRef.current?.focus();

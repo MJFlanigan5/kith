@@ -3437,8 +3437,8 @@ function ChoresScreen({chores,setChores,goals=[],members=[],toastAdd}){
     const reader=new FileReader();
     reader.onload=async(e)=>{
       try{
-        await api.post(`/api/chores/${photoChoreId}/photo`,{data:e.target.result,filename:photoFile.name});
-        toastAdd('Photo saved!','green');
+        const r=await api.post(`/api/chores/${photoChoreId}/photo`,{data:e.target.result,filename:photoFile.name});
+        if(r?.error){toastAdd(r.error||'Failed to save photo','red');}else{toastAdd('Photo saved!','green');}
       }catch{toastAdd('Failed to save photo','red');}
       setPhotoChoreId(null);setPhotoFile(null);
     };
@@ -4462,8 +4462,8 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
               <Btn sm variant="ghost" loading={imapTesting} onClick={async()=>{
                 setImapTesting(true);
                 try{
-                  await api.post('/api/imap/test',{host:imapHost,port:imapPort,user:imapUser,pass:imapPass});
-                  toastAdd('Connection successful','green');
+                  const r=await api.post('/api/imap/test',{host:imapHost,port:imapPort,user:imapUser,pass:imapPass});
+                  if(r?.error){toastAdd(r.error||'Connection failed','red');}else{toastAdd('Connection successful','green');}
                 }catch(e){toastAdd(e?.message||'Connection failed','red');}
                 finally{setImapTesting(false);}
               }}>Test</Btn>

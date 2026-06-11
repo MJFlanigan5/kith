@@ -554,6 +554,8 @@ const defaults = {
   homey_person_devices: '',
   homey_climate_device: '',
   ics_export_token: require('crypto').randomBytes(16).toString('hex'),
+  dietary_goal: '',
+  dietary_restrictions: '',
 };
 const insSetting = db.prepare('INSERT OR IGNORE INTO settings (key,value) VALUES (?,?)');
 for (const [k, v] of Object.entries(defaults)) insSetting.run(k, v);

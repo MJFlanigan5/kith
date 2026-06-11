@@ -739,8 +739,13 @@ app.post('/api/meals/suggest', requireAuth, async (req, res) => {
   try {
     const pantry = db.prepare('SELECT name, quantity, unit FROM pantry_items WHERE quantity > 0').all();
     const recent_meals = db.prepare("SELECT DISTINCT meal FROM meals WHERE meal != '' AND meal IS NOT NULL").all();
+    const dietaryGoal = g('dietary_goal') || '';
+    const dietaryRestrictions = g('dietary_restrictions') || '';
+    let dietaryClause = '';
+    if (dietaryGoal) dietaryClause += ` Goal: ${dietaryGoal}.`;
+    if (dietaryRestrictions) dietaryClause += ` Dietary restrictions: ${dietaryRestrictions}. Strictly honor these — never suggest meals that violate them.`;
     const result = await callAi(
-      'You are a meal planning assistant. Given pantry items and recent meals, suggest 7 dinners. Return a JSON array with exactly 7 items: [{day:"Monday",meal:"...",reason:"..."}]. Use the days Monday through Sunday. Avoid recent meals. Use pantry items where possible.',
+      `You are a meal planning assistant. Given pantry items and recent meals, suggest 7 dinners.${dietaryClause} Return a JSON array with exactly 7 items: [{day:"Monday",meal:"...",reason:"..."}]. Use the days Monday through Sunday. Avoid recent meals. Use pantry items where possible.`,
       JSON.stringify({ pantry, recent_meals })
     );
     if (!result || !Array.isArray(result)) {

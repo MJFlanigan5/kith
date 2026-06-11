@@ -3714,9 +3714,11 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,recipes=[],toastAdd}){
   const [recipeSearch,setRecipeSearch]=useState('');
   const [fromMealsLoading,setFromMealsLoading]=useState(false);
   const [aiMealLoading,setAiMealLoading]=useState(false);
+  const [dietaryProfile,setDietaryProfile]=useState({goal:'',restrictions:''});
 
   useEffect(()=>()=>{Object.values(removeTimers.current).forEach(clearTimeout)},[]);
-  useEffect(()=>{api.get('/api/grocery/history').then(r=>Array.isArray(r)&&setHistory(r)).catch(()=>{})},[]);
+  useEffect(()=>{api.get('/api/grocery/history').then(r=>Array.isArray(r)&&setHistory(r)).catch(()=>{});},[]);
+  useEffect(()=>{api.get('/api/settings').then(s=>{setDietaryProfile({goal:s.dietary_goal||'',restrictions:s.dietary_restrictions||''}); }).catch(()=>{}); },[]);;
 
   const addFromHistory=async name=>{
     try{
@@ -3909,6 +3911,15 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,recipes=[],toastAdd}){
             setFromMealsLoading(false);
           }} style={{fontSize:12,color:A.blue,background:'none',border:'none',cursor:'pointer',fontWeight:500,flexShrink:0}}>{fromMealsLoading?'Adding…':'Add to grocery'}</button>
           </div>
+          {(dietaryProfile.goal||dietaryProfile.restrictions)&&(
+            <div style={{fontSize:11,color:A.label4,marginTop:6,display:'flex',alignItems:'center',gap:4}}>
+              <span>AI using:</span>
+              {dietaryProfile.goal&&<span style={{background:A.blueFill,color:A.blue,padding:'1px 7px',borderRadius:A.rPill,fontWeight:500}}>{dietaryProfile.goal}</span>}
+              {dietaryProfile.restrictions&&dietaryProfile.restrictions.split(',').filter(Boolean).map(r=>(
+                <span key={r} style={{background:A.greenFill,color:A.green,padding:'1px 7px',borderRadius:A.rPill,fontWeight:500}}>{r}</span>
+              ))}
+            </div>
+          )}
         </div>
         <p style={{color:A.label4,fontSize:14,marginBottom:14}}>This week</p>
         <Card>
@@ -4184,6 +4195,10 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [qaEdit,setQaEdit]=useState(null);
   const qaBlank={label:'',icon:'⚡',url:'',method:'POST',headers:'',body:''};
   const [qaForm,setQaForm]=useState(qaBlank);
+  const [dietaryGoal,setDietaryGoal]=useState('');
+  const [dietaryRestrictions,setDietaryRestrictions]=useState(new Set());
+  const DIETARY_GOALS=['Lose weight','Maintain weight','Build muscle','Eat healthier'];
+  const DIETARY_OPTIONS=['Vegetarian','Vegan','Gluten-free','Dairy-free','Nut-free','Low-carb','Keto','Paleo','Halal','Kosher'];
   useEffect(()=>{
     api.get('/api/settings').then(st=>{
       if(st.weather_lat) setWeatherLat(st.weather_lat);
@@ -4226,6 +4241,8 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
       if(st.imap_user) setImapUser(st.imap_user);
       setImapEnabled(st.imap_enabled==='1');
       if(st.imap_poll_interval) setImapInterval(st.imap_poll_interval);
+      if(st.dietary_goal) setDietaryGoal(st.dietary_goal);
+      if(st.dietary_restrictions) setDietaryRestrictions(new Set(st.dietary_restrictions.split(',').filter(Boolean)));
       if(st.sports_leagues){
         const active=st.sports_leagues.split(',').map(s=>s.trim().toLowerCase());
         setSportsLeagues({nfl:active.includes('nfl'),nba:active.includes('nba'),mlb:active.includes('mlb'),nhl:active.includes('nhl'),wnba:active.includes('wnba'),mls:active.includes('mls'),epl:active.includes('epl'),ucl:active.includes('ucl'),wc:active.includes('wc'),wwc:active.includes('wwc'),ncaaf:active.includes('ncaaf'),ncaab:active.includes('ncaab'),pga:active.includes('pga'),atp:active.includes('atp'),nascar:active.includes('nascar'),f1:active.includes('f1')});
@@ -4327,6 +4344,46 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   return(
     <div style={{maxWidth:620}}>
       <h1 style={{fontSize:28,fontWeight:800,letterSpacing:'-.03em',marginBottom:24}}>Settings</h1>
+
+      <FormGroup label="Meal Planning">
+        <div style={{padding:'14px 16px'}}>
+          <div style={{fontSize:13,fontWeight:600,color:A.label3,marginBottom:10}}>Goal (optional)</div>
+          <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:16}}>
+            {DIETARY_GOALS.map(g=>{
+              const active=dietaryGoal===g;
+              return(
+                <button key={g} onClick={()=>{const next=active?'':g;setDietaryGoal(next);saveSetting('dietary_goal',next);}}
+                  style={{padding:'6px 14px',borderRadius:A.rPill,border:`1.5px solid ${active?A.blue:A.sep}`,background:active?A.blueFill:'transparent',color:active?A.blue:A.label2,fontSize:13,fontWeight:active?600:400,cursor:'pointer',transition:'all .15s'}}>
+                  {g}
+                </button>
+              );
+            })}
+          </div>
+          <div style={{fontSize:13,fontWeight:600,color:A.label3,marginBottom:10}}>Dietary restrictions</div>
+          <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+            {DIETARY_OPTIONS.map(o=>{
+              const active=dietaryRestrictions.has(o);
+              return(
+                <button key={o} onClick={()=>{
+                  const next=new Set(dietaryRestrictions);
+                  active?next.delete(o):next.add(o);
+                  setDietaryRestrictions(next);
+                  saveSetting('dietary_restrictions',[...next].join(','));
+                }}
+                  style={{padding:'6px 14px',borderRadius:A.rPill,border:`1.5px solid ${active?A.green:A.sep}`,background:active?A.greenFill:'transparent',color:active?A.green:A.label2,fontSize:13,fontWeight:active?600:400,cursor:'pointer',transition:'all .15s'}}>
+                  {o}
+                </button>
+              );
+            })}
+          </div>
+          {(dietaryGoal||dietaryRestrictions.size>0)&&(
+            <div style={{marginTop:14,fontSize:12,color:A.label4}}>
+              AI meal suggestions will honor these preferences.{' '}
+              <button onClick={()=>{setDietaryGoal('');setDietaryRestrictions(new Set());saveSetting('dietary_goal','');saveSetting('dietary_restrictions','');}} style={{background:'none',border:'none',color:A.blue,cursor:'pointer',fontSize:12,padding:0}}>Clear all</button>
+            </div>
+          )}
+        </div>
+      </FormGroup>
 
       <FormGroup label="Appearance">
         <div style={{padding:'14px 16px',display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>

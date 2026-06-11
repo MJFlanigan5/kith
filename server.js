@@ -4480,7 +4480,12 @@ cron.schedule('0 * * * *', () => {
 
 // ── IMAP email polling ────────────────────────────────────────────────────────
 const g = k => db.prepare('SELECT value FROM settings WHERE key=?').get(k)?.value || '';
-const _seenUids = new Set(); // tracks UIDs processed this session so we don't reprocess read emails
+// UID tracking — persisted in DB so server restarts don't reprocess emails
+const _uidSeen = (uid, mailbox = 'INBOX') =>
+  !!db.prepare('SELECT 1 FROM imap_processed_uids WHERE uid=? AND mailbox=?').get(uid, mailbox);
+const _uidMark = (uid, mailbox = 'INBOX') => {
+  try { db.prepare('INSERT OR IGNORE INTO imap_processed_uids (uid,mailbox) VALUES (?,?)').run(uid, mailbox); } catch {}
+};
 function stripHtml(html) { return html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi,'').replace(/<style[^>]*>[\s\S]*?<\/style>/gi,'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim(); }
 const SHIPPING_RE = /\b(ship(?:ped|ping|ment)?|track(?:ing)?|deliver(?:y|ed|ing)?|package|dispatch(?:ed)?|arrival|in transit|out for delivery)\b/i;
 const BILL_RE = /\b(bill|statement|invoice|payment due|amount due|minimum payment|your balance|autopay|auto-pay|past due|balance due)\b/i;
@@ -4503,18 +4508,18 @@ async function pollImap() {
     const since = new Date(Date.now() - 48 * 60 * 60 * 1000);
     try {
       for await (const msg of client.fetch({ since }, { uid: true, source: true, envelope: true })) {
-        if (_seenUids.has(msg.uid)) continue; // already processed this session
+        if (_uidSeen(msg.uid)) continue;
         const subject = msg.envelope?.subject || '';
         const isShipping = SHIPPING_RE.test(subject);
         const isBill = !isShipping && BILL_RE.test(subject);
         const isAppt = !isShipping && !isBill && APPT_RE.test(subject);
-        if (!isShipping && !isBill && !isAppt) { _seenUids.add(msg.uid); continue; }
+        if (!isShipping && !isBill && !isAppt) { _uidMark(msg.uid); continue; }
         let body = '';
         try {
           const parsed = await simpleParser(msg.source);
           body = parsed.text || (parsed.html ? stripHtml(parsed.html) : '');
         } catch {}
-        _seenUids.add(msg.uid); // mark before AI calls so a crash doesn't cause infinite reprocessing
+        _uidMark(msg.uid); // mark before AI calls so a crash doesn't cause infinite reprocessing
 
         if (isShipping) {
           const [pkg, result] = await Promise.all([
@@ -4618,14 +4623,15 @@ async function scanImap30Days() {
 
     try {
       for await (const msg of client.fetch({ since }, { uid: true, source: true, envelope: true })) {
+        if (_uidSeen(msg.uid)) continue;
         const subject = msg.envelope?.subject || '';
         const isShipping = SHIPPING_RE.test(subject);
         const isBill = !isShipping && BILL_RE.test(subject);
         const isAppt = !isShipping && !isBill && APPT_RE.test(subject);
-        if (!isShipping && !isBill && !isAppt) continue;
+        if (!isShipping && !isBill && !isAppt) { _uidMark(msg.uid); continue; }
         let body = '';
         try { const p = await simpleParser(msg.source); body = p.text || (p.html ? stripHtml(p.html) : ''); } catch {}
-        _seenUids.add(msg.uid);
+        _uidMark(msg.uid);
         batch.push({ subject, isShipping, isBill, isAppt, body });
         if (batch.length >= 50) break;
       }

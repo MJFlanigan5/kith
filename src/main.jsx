@@ -196,6 +196,16 @@ function Sel({value,onChange,children}){
   );
 }
 
+function SegControl({value,onChange,options}){
+  return(
+    <div style={{display:'flex',background:A.inputBg,borderRadius:A.rXs,padding:2,gap:1}}>
+      {options.map(o=>(
+        <button key={o} onClick={()=>onChange(o)} style={{padding:'6px 14px',border:'none',borderRadius:7,background:value===o?A.cardBg:'transparent',color:value===o?A.label1:A.label3,fontSize:13,fontWeight:value===o?600:400,cursor:'pointer',boxShadow:value===o?A.shadowSm:'none',transition:'all .15s'}}>{o}</button>
+      ))}
+    </div>
+  );
+}
+
 function Btn({children,onClick,variant='blue',sm,full,style:s={}}){
   const v={
     blue:{background:A.blue,color:'#fff',border:'none'},
@@ -4313,14 +4323,6 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
     await api.post('/api/push/test');
     toastAdd('Test notification sent');
   };
-
-  const SegControl=({value,onChange,options})=>(
-    <div style={{display:'flex',background:A.inputBg,borderRadius:A.rXs,padding:2,gap:1}}>
-      {options.map(o=>(
-        <button key={o} onClick={()=>onChange(o)} style={{padding:'6px 14px',border:'none',borderRadius:7,background:value===o?A.cardBg:'transparent',color:value===o?A.label1:A.label3,fontSize:13,fontWeight:value===o?600:400,cursor:'pointer',boxShadow:value===o?A.shadowSm:'none',transition:'all .15s'}}>{o}</button>
-      ))}
-    </div>
-  );
 
   return(
     <div style={{maxWidth:620}}>

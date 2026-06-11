@@ -5305,7 +5305,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
             try{
               const blob=await fetch('/api/export',{headers:{Authorization:`Bearer ${localStorage.getItem('kith_token')||''}`}}).then(r=>r.blob());
               const url=URL.createObjectURL(blob);
-              const a=document.createElement('a');a.href=url;a.download='hearth-export.json';a.click();URL.revokeObjectURL(url);
+              const a=document.createElement('a');a.href=url;a.download='kith-export.json';a.click();URL.revokeObjectURL(url);
               toastAdd('Export downloaded');
             }catch{toastAdd('Export failed','red');}
           }}>Export Data</Btn>

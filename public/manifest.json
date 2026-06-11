@@ -1,6 +1,6 @@
 {
-  "name": "Hearth",
-  "short_name": "Hearth",
+  "name": "Kith",
+  "short_name": "Kith",
   "description": "Family dashboard — chores, grocery, calendar, and more",
   "start_url": "/",
   "display": "standalone",

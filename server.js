@@ -4761,7 +4761,7 @@ app.get('/api/export', requireAuth, (req, res) => {
       recently_added:      db.prepare('SELECT * FROM recently_added').all(),
       ha_events:           db.prepare('SELECT * FROM ha_events').all(),
     };
-    res.setHeader('Content-Disposition', 'attachment; filename="hearth-export.json"');
+    res.setHeader('Content-Disposition', 'attachment; filename="kith-export.json"');
     res.json(data);
   } catch (e) {
     res.status(500).json({ error: e.message });

@@ -494,14 +494,13 @@ try { db.prepare("ALTER TABLE chore_completions ADD COLUMN photo_filename TEXT")
 try { db.prepare("ALTER TABLE family_members ADD COLUMN family_role TEXT DEFAULT 'adult'").run(); } catch(e) {}
 
 // Indexes for common query patterns
-db.exec(`
+try { db.exec(`
   CREATE INDEX IF NOT EXISTS idx_chores_status_done ON chores(status, done);
   CREATE INDEX IF NOT EXISTS idx_events_date_source ON events(date, source);
   CREATE INDEX IF NOT EXISTS idx_packages_delivered ON packages(delivered);
   CREATE INDEX IF NOT EXISTS idx_bills_active ON bills(active);
   CREATE INDEX IF NOT EXISTS idx_grocery_checked ON grocery(checked);
-  CREATE INDEX IF NOT EXISTS idx_pantry_expiry ON pantry_items(expiry_status);
-`);
+`); } catch(e) {}
 
 // Persistent IMAP UID tracking — prevents re-processing emails after server restart
 db.exec(`CREATE TABLE IF NOT EXISTS imap_processed_uids (

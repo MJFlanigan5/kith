@@ -4189,10 +4189,15 @@ function noteDeparture(entity_id) {
 function fireArrival(name, entity_id, source) {
   const now = Date.now();
   const departedAt = _lastDepartureAt[entity_id] || 0;
-  // Was "away" for less than the glitch threshold — treat as sensor noise, skip
-  if (departedAt && now - departedAt < MIN_AWAY_MS) return;
-  // Already fired for this person recently (reconnection replay guard)
-  if (_lastArrivalAt[entity_id] && now - _lastArrivalAt[entity_id] < ARRIVAL_DEDUP_MS) return;
+  if (departedAt && now - departedAt < MIN_AWAY_MS) {
+    console.log(`[arrival] BLOCKED glitch-guard: ${entity_id} departed only ${Math.round((now-departedAt)/1000)}s ago (need ${MIN_AWAY_MS/1000}s)`);
+    return;
+  }
+  if (_lastArrivalAt[entity_id] && now - _lastArrivalAt[entity_id] < ARRIVAL_DEDUP_MS) {
+    console.log(`[arrival] BLOCKED dedup: ${entity_id} last fired ${Math.round((now-_lastArrivalAt[entity_id])/60000)}min ago (need ${ARRIVAL_DEDUP_MS/60000}min)`);
+    return;
+  }
+  console.log(`[arrival] FIRING: name=${name} entity=${entity_id} source=${source}`);
   _lastArrivalAt[entity_id] = now;
   sendPushToAll({ title: `${name} is home`, body: 'Welcome home!', tag: `arrival-${source}-${entity_id}` });
   broadcastSSE('arrival', { name, entity_id, source, ts: now });
@@ -4398,25 +4403,37 @@ function homeySocketConnect() {
   _homeySocket.on('disconnect', reason => console.log('[homey-socket] disconnected:', reason));
   _homeySocket.on('connect_error', err => console.warn('[homey-socket] connect error:', err.message));
 
-  let _realtimeLogCount = 0;
   _homeySocket.on('realtime', (type, id, data) => {
-    if (_realtimeLogCount < 10) { _realtimeLogCount++; console.log('[homey-socket] realtime:', type, id, JSON.stringify(data)?.slice(0, 120)); }
-
     const t = String(type || '').toLowerCase();
+    const isUserEvent = t.includes('user') || t === 'presence';
+    const isPresentEvent = t.includes('present') || id === 'present' || typeof data === 'boolean' || data?.present !== undefined;
+    if (isUserEvent) {
+      console.log('[homey-socket] realtime (user):', type, id, JSON.stringify(data)?.slice(0, 120));
+    }
 
     // Presence: user present state changed
-    if (t.includes('user') && (t.includes('present') || id === 'present')) {
-      // Homey sends either (type='user.UID.present', id='present') or (type='user', id=UID)
-      // Extract the user UID regardless of format
-      let userId = id;
+    // Homey may send: (type='user.UID.present', id='present'), (type='user', id='present', data={value:bool}),
+    // (type='user.UID', id='present'), or even (type='presence', id=UID).
+    if (isUserEvent && isPresentEvent) {
+      const parts = t.split('.');
+      let userId = null;
       if (id === 'present') {
-        const parts = t.split('.');
+        // UID is embedded in the type string
         const uIdx = parts.findIndex(p => p === 'user');
-        userId = (uIdx >= 0 && parts[uIdx + 1] && parts[uIdx + 1] !== 'present') ? parts[uIdx + 1] : null;
+        const candidate = uIdx >= 0 ? parts[uIdx + 1] : null;
+        userId = (candidate && candidate !== 'present') ? candidate : null;
+        // Fallback: if type is just 'user', no UID in type — try data.id or data.userId
+        if (!userId) userId = data?.id || data?.userId || null;
+      } else {
+        // id is the UID (or a fallback structure)
+        userId = id && id !== 'present' ? id : null;
       }
-      // Only process UIDs that are explicitly configured
       const _configuredUids = g('homey_person_devices').split(',').map(s => s.trim()).filter(Boolean);
-      if (!userId || !_configuredUids.includes(userId)) return;
+      console.log(`[homey-socket] presence — extracted userId=${userId} configuredUids=${JSON.stringify(_configuredUids)}`);
+      if (!userId || !_configuredUids.includes(userId)) {
+        console.log(`[homey-socket] presence — SKIPPED (userId not in configured list)`);
+        return;
+      }
       console.log('[homey-socket] presence event — refreshing who_home', userId, data);
       const nowPresent = data === true || data?.value === true || data?.present === true;
       const wasPresent = _homeyPresence[userId];
@@ -4445,11 +4462,14 @@ function homeySocketConnect() {
     }
   });
 
-  // Catch-all: log first 10 unknown events to discover Homey's format if realtime doesn't fire
-  let _anyLogCount = 0;
+  // Catch-all: log unknown events (throttled per-event-name to avoid spam)
+  const _anyLogSeen = {};
   _homeySocket.onAny((event, ...args) => {
     if (event === 'realtime' || event === 'connect' || event === 'disconnect') return;
-    if (_anyLogCount < 10) { _anyLogCount++; console.log('[homey-socket] event:', event, JSON.stringify(args)?.slice(0, 200)); }
+    const key = String(event).slice(0, 40);
+    const cnt = (_anyLogSeen[key] || 0) + 1;
+    _anyLogSeen[key] = cnt;
+    if (cnt <= 3) console.log('[homey-socket] unknown event:', event, JSON.stringify(args)?.slice(0, 200));
   });
 }
 
@@ -4776,6 +4796,33 @@ app.get('/api/export', requireAuth, (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// ── Debug endpoints (admin-only) ──────────────────────────────────────────────
+app.post('/api/debug/test-arrival', requireAdmin, (req, res) => {
+  const name = req.body?.name || 'Test Person';
+  const entityId = req.body?.entity_id || 'debug-test';
+  // Clear dedup so the test always fires
+  delete _lastArrivalAt[entityId];
+  delete _lastDepartureAt[entityId];
+  fireArrival(name, entityId, 'debug');
+  res.json({ ok: true, name, entity_id: entityId });
+});
+
+app.get('/api/debug/homey-status', requireAdmin, (req, res) => {
+  const configuredUids = g('homey_person_devices').split(',').map(s => s.trim()).filter(Boolean);
+  res.json({
+    socket_connected: _homeySocket?.connected ?? false,
+    socket_id: _homeySocket?.id ?? null,
+    homey_url: g('homey_url') ? '[set]' : '[not set]',
+    configured_uids: configuredUids,
+    presence_map: _homeyPresence,
+    names_map: _homeyNames,
+    last_arrival_at: Object.fromEntries(Object.entries(_lastArrivalAt).map(([k,v])=>[k, new Date(v).toISOString()])),
+    last_departure_at: Object.fromEntries(Object.entries(_lastDepartureAt).map(([k,v])=>[k, new Date(v).toISOString()])),
+    dedup_ms: ARRIVAL_DEDUP_MS,
+    min_away_ms: MIN_AWAY_MS,
+  });
 });
 
 app.listen(PORT, () => console.log(`Kith running → http://localhost:${PORT}`));

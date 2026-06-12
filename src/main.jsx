@@ -4273,8 +4273,9 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   };
 
   const syncICS=async()=>{
-    const r=await api.post('/api/ics/sync');
-    toastAdd(`Synced ${r.total_events} events`);
+    const r=await api.post('/api/ics/sync').catch(()=>null);
+    if(r?.error){toastAdd(r.error,'red');return;}
+    toastAdd(`Synced ${r?.total_events??0} events`);
   };
 
   const enablePush=async()=>{
@@ -4566,10 +4567,9 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
             <Btn sm loading={aiKeySaving} onClick={async()=>{
               setAiKeySaving(true);
               try{
-                await api.put('/api/settings/ai-key',{provider:aiProvider,...(aiKey?{key:aiKey}:{})});
-                setHasAiKey(true);
-                setAiKey('');
-                toastAdd('AI parsing settings saved');
+                const r=await api.put('/api/settings/ai-key',{provider:aiProvider,...(aiKey?{key:aiKey}:{})});
+                if(r?.error){toastAdd(r.error||'Save failed','red');}
+                else{setHasAiKey(true);setAiKey('');toastAdd('AI parsing settings saved');}
               }catch(e){toastAdd('Save failed','red');}
               finally{setAiKeySaving(false);}
             }}>Save</Btn>
@@ -4777,7 +4777,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
                     <div style={{fontSize:11,color:A.label5,fontFamily:'JetBrains Mono,monospace',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{action.method} {action.url}</div>
                   </div>
                   <button onClick={()=>{setQaEdit(action);setQaForm({label:action.label,icon:action.icon||'⚡',url:action.url,method:action.method||'POST',headers:action.headers||'',body:action.body||''});setQaDrawer(true);}} style={{background:'none',border:'none',color:A.blue,fontSize:13,cursor:'pointer',fontWeight:500}}>Edit</button>
-                  <button onClick={async()=>{const next=qaList.filter(a=>a.id!==action.id);await api.put('/api/quick-actions',{actions:next});setQaList(next);if(setQuickActions)setQuickActions(next);toastAdd('Removed','blue');}} style={{background:'none',border:'none',color:A.red,fontSize:13,cursor:'pointer',fontWeight:500}}>Remove</button>
+                  <button onClick={async()=>{const next=qaList.filter(a=>a.id!==action.id);const r=await api.put('/api/quick-actions',{actions:next}).catch(()=>null);if(r?.error){toastAdd('Failed to remove','red');return;}setQaList(next);if(setQuickActions)setQuickActions(next);toastAdd('Removed','blue');}} style={{background:'none',border:'none',color:A.red,fontSize:13,cursor:'pointer',fontWeight:500}}>Remove</button>
                 </div>
               ))}
             </div>
@@ -4822,7 +4822,8 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
               } else {
                 next=[...qaList,{id:Date.now().toString(36),...qaForm}];
               }
-              await api.put('/api/quick-actions',{actions:next});
+              const r=await api.put('/api/quick-actions',{actions:next}).catch(()=>null);
+              if(r?.error){toastAdd(r.error||'Failed to save','red');return;}
               setQaList(next);
               if(setQuickActions) setQuickActions(next);
               setQaDrawer(false);setQaEdit(null);
@@ -9196,8 +9197,9 @@ function QuickAddFAB({screen,setGrocery,setChores,toastAdd,isAdmin}){
         setGrocery(p=>[...p,item]);
         toastAdd(`${input.trim()} added`);
       } else {
-        const item=await api.post('/api/chores',{name:input.trim(),recurrence:'Weekly',start:localDate(),points:1});
-        if(item.id) setChores(p=>[...p,item]);
+        const item=await api.post('/api/chores',{name:input.trim(),recurrence:'Weekly',start:localDate(),points:1}).catch(()=>null);
+        if(!item?.id){toastAdd('Failed to add','red');return;}
+        setChores(p=>[...p,item]);
         toastAdd(`${input.trim()} added`);
       }
       close();

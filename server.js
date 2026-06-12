@@ -823,13 +823,14 @@ app.post('/api/inbox/upload', requireAuth, async (req, res) => {
 });
 
 // ── Routes: ICS ───────────────────────────────────────────────────────────────
-app.get('/api/ics/sources', (req, res) => {
+app.get('/api/ics/sources', requireAuth, (req, res) => {
   res.json(db.prepare('SELECT * FROM ics_sources ORDER BY created_at').all());
 });
 
 app.post('/api/ics/sources', requireAdmin, async (req, res) => {
   const { name, color } = req.body;
   const url = (req.body.url || '').replace(/^webcal:\/\//i, 'https://');
+  if (!name?.trim() || !url.trim()) return res.status(400).json({ error: 'name and url required' });
   try {
     const r = db.prepare('INSERT INTO ics_sources (name,url,color) VALUES (?,?,?)').run(name, url, color||'#3B82F6');
     const source = db.prepare('SELECT * FROM ics_sources WHERE id=?').get(r.lastInsertRowid);
@@ -2982,8 +2983,8 @@ async function callAiForBill(subject, body) {
 
 app.post('/api/email/inbound', async (req, res) => {
   const secret = db.prepare('SELECT value FROM settings WHERE key=?').get('email_webhook_secret')?.value;
-  if (secret && req.headers['x-kith-secret'] !== secret) {
-    return res.status(401).json({ error: 'Invalid secret' });
+  if (!secret || req.headers['x-kith-secret'] !== secret) {
+    return res.status(401).json({ error: secret ? 'Invalid secret' : 'Webhook secret not configured — set it in Settings → Notifications' });
   }
 
   const { subject, from, body, ics } = req.body || {};

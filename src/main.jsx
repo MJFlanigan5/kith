@@ -9476,6 +9476,23 @@ function App(){
   },[loading,auth,kiosk]);
   useEffect(()=>()=>{if(presenceTimerRef.current)clearTimeout(presenceTimerRef.current);},[]);
 
+  // PWA install prompt
+  const [installPrompt,setInstallPrompt]=useState(null);
+  const [installDismissed,setInstallDismissed]=useState(()=>localStorage.getItem('kith_pwa_dismissed')==='1');
+  useEffect(()=>{
+    const handler=e=>{e.preventDefault();setInstallPrompt(e);};
+    window.addEventListener('beforeinstallprompt',handler);
+    return()=>window.removeEventListener('beforeinstallprompt',handler);
+  },[]);
+  const handleInstall=async()=>{
+    if(!installPrompt) return;
+    installPrompt.prompt();
+    const{outcome}=await installPrompt.userChoice;
+    setInstallPrompt(null);
+    if(outcome==='accepted') localStorage.setItem('kith_pwa_dismissed','1');
+  };
+  const dismissInstall=()=>{setInstallDismissed(true);localStorage.setItem('kith_pwa_dismissed','1');};
+
   if(!authChecked) return(
     <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',background:A.systemBg}}>
       <div style={{width:36,height:36,border:`3px solid ${A.sep}`,borderTop:`3px solid ${A.blue}`,borderRadius:'50%',animation:'spin 0.8s linear infinite'}}/>
@@ -9511,6 +9528,17 @@ function App(){
           <div style={{fontSize:12,color:presenceOverlay.color,fontWeight:600,marginTop:3}}>Welcome home!</div>
           <PresenceBar key={presenceOverlay.ts} duration={120000} color={presenceOverlay.color}/>
         </div>
+      </div>
+    )}
+    {installPrompt&&!installDismissed&&mode!=='display'&&(
+      <div style={{position:'fixed',bottom:0,left:0,right:0,zIndex:9998,background:isDarkNow?'#1c1c1e':'#ffffff',borderTop:`1px solid ${isDarkNow?'rgba(255,255,255,0.1)':'rgba(0,0,0,0.08)'}`,padding:'14px 20px',display:'flex',alignItems:'center',gap:14,boxShadow:'0 -4px 24px rgba(0,0,0,0.12)'}}>
+        <div style={{fontSize:22,flexShrink:0}}>📲</div>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:14,fontWeight:700,color:isDarkNow?'#f2f2f7':'#000000',lineHeight:1.2}}>Add Kith to your home screen</div>
+          <div style={{fontSize:12,color:isDarkNow?'rgba(255,255,255,0.5)':'rgba(0,0,0,0.45)',marginTop:2}}>Install for quick access — works offline too</div>
+        </div>
+        <button onClick={handleInstall} style={{flexShrink:0,padding:'9px 18px',borderRadius:10,background:A.blue,color:'#fff',border:'none',fontSize:14,fontWeight:700,cursor:'pointer'}}>Install</button>
+        <button onClick={dismissInstall} style={{flexShrink:0,background:'none',border:'none',color:isDarkNow?'rgba(255,255,255,0.4)':'rgba(0,0,0,0.3)',fontSize:20,cursor:'pointer',lineHeight:1,padding:'4px'}}>×</button>
       </div>
     )}
   </>;

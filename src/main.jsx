@@ -2297,7 +2297,8 @@ function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weath
     if(!qaForm.title.trim()||qaLoading) return;
     setQaLoading(true);
     try {
-      await api.post('/api/events',{title:qaForm.title,date:qaForm.date,time:qaForm.time||'All day',calendar:qaForm.cal,color:A.green,duration:'1h',notes:'',source:'manual'});
+      const created=await api.post('/api/events',{title:qaForm.title,date:qaForm.date,time:qaForm.time||'All day',calendar:qaForm.cal,color:A.green,duration:'1h',notes:'',source:'manual'});
+      if(created?.error){toastAdd(created.error||'Failed to add event','red');return;}
       const updated=await api.get('/api/events');
       if(Array.isArray(updated)) setEvents(updated);
       setQaOpen(false);
@@ -4323,7 +4324,8 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   };
 
   const removeIcsSource=async id=>{
-    await api.del(`/api/ics/sources/${id}`);
+    const r=await api.del(`/api/ics/sources/${id}`).catch(()=>null);
+    if(r?.error){toastAdd('Failed to remove','red');return;}
     setIcsSources(p=>p.filter(s=>s.id!==id));
     toastAdd('Calendar removed','blue');
   };
@@ -5403,7 +5405,8 @@ function BookmarksScreen({bookmarks,setBookmarks,toastAdd}){
     setDrawerOpen(false);setForm(blank);
   };
   const del=async id=>{
-    await api.del(`/api/bookmarks/${id}`);
+    const r=await api.del(`/api/bookmarks/${id}`).catch(()=>null);
+    if(r?.error){toastAdd('Failed to delete','red');return;}
     setBookmarks(p=>p.filter(b=>b.id!==id));
     toastAdd('Deleted','blue');
   };
@@ -5515,7 +5518,8 @@ function NotesScreen({notes,setNotes,toastAdd}){
   };
 
   const del=async id=>{
-    try{await api.del(`/api/notes/${id}`);}catch{toastAdd('Failed to delete','red');return;}
+    const r=await api.del(`/api/notes/${id}`).catch(()=>null);
+    if(r?.error){toastAdd('Failed to delete','red');return;}
     setNotes(p=>p.filter(n=>n.id!==id));
     toastAdd('Deleted','blue');
   };
@@ -6100,7 +6104,8 @@ function VehiclesScreen({vehicles,setVehicles,toastAdd}){
   };
 
   const delMileage=async(vid,mid)=>{
-    try{await api.del(`/api/vehicles/${vid}/mileage/${mid}`);}catch{toastAdd('Failed to delete','red');return;}
+    const r=await api.del(`/api/vehicles/${vid}/mileage/${mid}`).catch(()=>null);
+    if(r?.error){toastAdd('Failed to delete','red');return;}
     setMileageLogs(p=>({...p,[vid]:(p[vid]||[]).filter(x=>x.id!==mid)}));
   };
 
@@ -6573,7 +6578,8 @@ function BudgetScreen({budget,setBudget,toastAdd}){
   };
 
   const delEntry=async id=>{
-    try{await api.del(`/api/budget/entries/${id}`);}catch{toastAdd('Failed','red');return;}
+    const r=await api.del(`/api/budget/entries/${id}`).catch(()=>null);
+    if(r?.error){toastAdd('Failed','red');return;}
     setBudget(b=>({...b,entries:(b.entries||[]).filter(e=>e.id!==id)}));
   };
 
@@ -6593,7 +6599,8 @@ function BudgetScreen({budget,setBudget,toastAdd}){
   };
 
   const delCat=async id=>{
-    try{await api.del(`/api/budget/categories/${id}`);}catch{toastAdd('Failed','red');return;}
+    const r=await api.del(`/api/budget/categories/${id}`).catch(()=>null);
+    if(r?.error){toastAdd('Failed','red');return;}
     setBudget(b=>({...b,categories:(b.categories||[]).filter(c=>c.id!==id),entries:(b.entries||[]).filter(e=>e.category_id!==id)}));
     setCatDrawer(false);setEditCat(null);
     toastAdd('Deleted','blue');
@@ -6837,7 +6844,8 @@ function RecipesScreen({recipes,setRecipes,toastAdd}){
   };
 
   const del=async id=>{
-    try{await api.del(`/api/recipes/${id}`);}catch{toastAdd('Delete failed','red');return;}
+    const r=await api.del(`/api/recipes/${id}`).catch(()=>null);
+    if(r?.error){toastAdd('Delete failed','red');return;}
     setRecipes(p=>p.filter(x=>x.id!==id));
     setViewRecipe(null);
     toastAdd('Recipe deleted','blue');
@@ -6991,8 +6999,9 @@ function ContactsScreen({contacts,setContacts,toastAdd}){
   };
 
   const del=async id=>{
-    try{await api.del(`/api/contacts/${id}`);setContacts(p=>p.filter(c=>c.id!==id));setDrawer(false);setEditContact(null);toastAdd('Removed','blue');}
-    catch{toastAdd('Failed to remove','red');}
+    const r=await api.del(`/api/contacts/${id}`).catch(()=>null);
+    if(r?.error){toastAdd('Failed to remove','red');return;}
+    setContacts(p=>p.filter(c=>c.id!==id));setDrawer(false);setEditContact(null);toastAdd('Removed','blue');
   };
 
   const filtered=search.trim()?(contacts||[]).filter(c=>c.name.toLowerCase().includes(search.toLowerCase())||c.role.toLowerCase().includes(search.toLowerCase())||c.phone.includes(search)):(contacts||[]);
@@ -7116,7 +7125,8 @@ function PetsScreen({pets,setPets,toastAdd}){
   };
 
   const delPet=async id=>{
-    try{await api.del(`/api/pets/${id}`);}catch{toastAdd('Failed to remove','red');return;}
+    const r=await api.del(`/api/pets/${id}`).catch(()=>null);
+    if(r?.error){toastAdd('Failed to remove','red');return;}
     setPets(p=>p.filter(v=>v.id!==id));
     setPDrawer(false);setEditPet(null);
     toastAdd('Pet removed','blue');
@@ -7142,7 +7152,8 @@ function PetsScreen({pets,setPets,toastAdd}){
   };
 
   const delRec=async(pid,rid)=>{
-    try{await api.del(`/api/pets/${pid}/records/${rid}`);}catch{toastAdd('Failed to remove','red');return;}
+    const r=await api.del(`/api/pets/${pid}/records/${rid}`).catch(()=>null);
+    if(r?.error){toastAdd('Failed to remove','red');return;}
     setPets(p=>p.map(v=>v.id===pid?{...v,records:(v.records||[]).filter(x=>x.id!==rid)}:v));
     setRDrawer(false);setEditRec(null);
     toastAdd('Record removed','blue');
@@ -7304,12 +7315,11 @@ function HomeScreen({appliances,setAppliances,consumables,setConsumables,mainten
     toastAdd(editRepair?'Repair updated':'Repair added');
   };
   const delRepair=async id=>{
-    try{
-      await api.del(`/api/home/repairs/${id}`);
-      setRepairs(p=>p.filter(r=>r.id!==id));
-      setRDrawer(false);setEditRepair(null);
-      toastAdd('Removed','blue');
-    }catch{toastAdd('Failed to remove','red');}
+    const r=await api.del(`/api/home/repairs/${id}`).catch(()=>null);
+    if(r?.error){toastAdd('Failed to remove','red');return;}
+    setRepairs(p=>p.filter(x=>x.id!==id));
+    setRDrawer(false);setEditRepair(null);
+    toastAdd('Removed','blue');
   };
   const totalAll=repairs.reduce((s,r)=>s+(Number(r.cost)||0),0);
   const yr=new Date().getFullYear();
@@ -7341,12 +7351,11 @@ function HomeScreen({appliances,setAppliances,consumables,setConsumables,mainten
   };
 
   const delAppl=async id=>{
-    try{
-      await api.del(`/api/home/appliances/${id}`);
-      setAppliances(p=>p.filter(a=>a.id!==id));
-      setADrawer(false);setEditAppl(null);
-      toastAdd('Removed','blue');
-    }catch{toastAdd('Failed to remove','red');}
+    const r=await api.del(`/api/home/appliances/${id}`).catch(()=>null);
+    if(r?.error){toastAdd('Failed to remove','red');return;}
+    setAppliances(p=>p.filter(a=>a.id!==id));
+    setADrawer(false);setEditAppl(null);
+    toastAdd('Removed','blue');
   };
 
   const applSort=(a,b)=>{
@@ -7672,7 +7681,7 @@ function HomeScreen({appliances,setAppliances,consumables,setConsumables,mainten
             else{const r=await api.post('/api/home/maintenance',body).catch(()=>null);if(!r?.id){toastAdd('Failed to save','red');return;}setMaintenanceItems(p=>[...p,r].sort(maintSort));}
             setMaintDrawer(false);setMaintEdit(null);toastAdd(maintEdit?'Task updated':'Task added');
           }} full>{maintEdit?'Save Changes':'Add Task'}</Btn>
-          {maintEdit&&<Btn variant="ghost" onClick={async()=>{try{await api.del(`/api/home/maintenance/${maintEdit.id}`);setMaintenanceItems(p=>p.filter(x=>x.id!==maintEdit.id));setMaintDrawer(false);setMaintEdit(null);toastAdd('Removed','blue');}catch{toastAdd('Failed to remove','red');}}} full style={{color:A.red}}>Delete</Btn>}
+          {maintEdit&&<Btn variant="ghost" onClick={async()=>{const r=await api.del(`/api/home/maintenance/${maintEdit.id}`).catch(()=>null);if(r?.error){toastAdd('Failed to remove','red');return;}setMaintenanceItems(p=>p.filter(x=>x.id!==maintEdit.id));setMaintDrawer(false);setMaintEdit(null);toastAdd('Removed','blue');}} full style={{color:A.red}}>Delete</Btn>}
         </div>
         {!maintEdit&&<Btn variant="ghost" onClick={()=>setMaintDrawer(false)} full style={{marginTop:8}}>Cancel</Btn>}
       </Drawer>
@@ -7860,8 +7869,9 @@ function SubscriptionsScreen({subscriptions,setSubscriptions,toastAdd}){
     toastAdd(editSub?'Subscription updated':'Subscription added');
   };
   const del=async id=>{
-    try{await api.del(`/api/subscriptions/${id}`);setSubscriptions(p=>p.filter(s=>s.id!==id));setDrawer(false);setEditSub(null);toastAdd('Removed','blue');}
-    catch{toastAdd('Failed to remove','red');}
+    const r=await api.del(`/api/subscriptions/${id}`).catch(()=>null);
+    if(r?.error){toastAdd('Failed to remove','red');return;}
+    setSubscriptions(p=>p.filter(s=>s.id!==id));setDrawer(false);setEditSub(null);toastAdd('Removed','blue');
   };
   const toggleActive=async s=>{
     const r=await api.put(`/api/subscriptions/${s.id}`,{active:s.active?0:1}).catch(()=>null);
@@ -8013,8 +8023,9 @@ function ListsScreen({toastAdd}){
     toastAdd('List created');
   };
   const delList=async id=>{
-    try{await api.del(`/api/lists/${id}`);setLists(p=>p.filter(l=>l.id!==id));setActiveList(null);toastAdd('List removed','blue');}
-    catch{toastAdd('Failed to remove','red');}
+    const r=await api.del(`/api/lists/${id}`).catch(()=>null);
+    if(r?.error){toastAdd('Failed to remove','red');return;}
+    setLists(p=>p.filter(l=>l.id!==id));setActiveList(null);toastAdd('List removed','blue');
   };
   const saveListEdit=async()=>{
     if(!editListForm.name.trim()){toastAdd('Name required','red');return;}
@@ -8045,21 +8056,19 @@ function ListsScreen({toastAdd}){
     }
   };
   const delItem=async id=>{
-    try{
-      await api.del(`/api/lists/${activeList.id}/items/${id}`);
-      const removed=items.find(x=>x.id===id);
-      setItems(p=>p.filter(x=>x.id!==id));
-      setLists(p=>p.map(l=>l.id===activeList.id?{...l,item_count:Math.max(0,(l.item_count||0)-1),unchecked_count:Math.max(0,(l.unchecked_count||0)-(removed&&!removed.checked?1:0))}:l));
-    }catch{toastAdd('Failed to remove','red');}
+    const r=await api.del(`/api/lists/${activeList.id}/items/${id}`).catch(()=>null);
+    if(r?.error){toastAdd('Failed to remove','red');return;}
+    const removed=items.find(x=>x.id===id);
+    setItems(p=>p.filter(x=>x.id!==id));
+    setLists(p=>p.map(l=>l.id===activeList.id?{...l,item_count:Math.max(0,(l.item_count||0)-1),unchecked_count:Math.max(0,(l.unchecked_count||0)-(removed&&!removed.checked?1:0))}:l));
   };
   const clearChecked=async()=>{
-    try{
-      await api.del(`/api/lists/${activeList.id}/items/checked`);
-      setItems(p=>p.filter(x=>!x.checked));
-      const remaining=items.filter(x=>!x.checked).length;
-      setLists(p=>p.map(l=>l.id===activeList.id?{...l,item_count:remaining,unchecked_count:remaining}:l));
-      toastAdd('Cleared','blue');
-    }catch{toastAdd('Failed','red');}
+    const r=await api.del(`/api/lists/${activeList.id}/items/checked`).catch(()=>null);
+    if(r?.error){toastAdd('Failed','red');return;}
+    setItems(p=>p.filter(x=>!x.checked));
+    const remaining=items.filter(x=>!x.checked).length;
+    setLists(p=>p.map(l=>l.id===activeList.id?{...l,item_count:remaining,unchecked_count:remaining}:l));
+    toastAdd('Cleared','blue');
   };
   if(activeList){
     const sorted=[...items].sort((a,b)=>(a.checked?1:0)-(b.checked?1:0));
@@ -8209,8 +8218,9 @@ function ProjectsScreen({projects,setProjects,toastAdd}){
     toastAdd(editProj?'Project updated':'Project added');
   };
   const del=async id=>{
-    try{await api.del(`/api/projects/${id}`);setProjects(p=>p.filter(x=>x.id!==id));setDrawer(false);setEditProj(null);toastAdd('Removed','blue');}
-    catch{toastAdd('Failed to remove','red');}
+    const r=await api.del(`/api/projects/${id}`).catch(()=>null);
+    if(r?.error){toastAdd('Failed to remove','red');return;}
+    setProjects(p=>p.filter(x=>x.id!==id));setDrawer(false);setEditProj(null);toastAdd('Removed','blue');
   };
   const cycleStatus=async p=>{
     const order=['planned','in_progress','done'];
@@ -8385,8 +8395,9 @@ function PantryScreen({pantry,setPantry,grocery,setGrocery,toastAdd}){
     toastAdd(editItem?'Item updated':'Item added');
   };
   const del=async id=>{
-    try{await api.del(`/api/pantry/${id}`);setPantry(p=>p.filter(x=>x.id!==id));setDrawer(false);setEditItem(null);toastAdd('Removed','blue');}
-    catch{toastAdd('Failed to remove','red');}
+    const r=await api.del(`/api/pantry/${id}`).catch(()=>null);
+    if(r?.error){toastAdd('Failed to remove','red');return;}
+    setPantry(p=>p.filter(x=>x.id!==id));setDrawer(false);setEditItem(null);toastAdd('Removed','blue');
   };
   const openUse=p=>{setUseTarget(p);setUseAmount('1');};
   const confirmUse=async()=>{
@@ -8546,8 +8557,9 @@ function SchoolScreen({members=[],toastAdd}){
     toastAdd(editM?'School updated':'School added');
   };
   const delM=async id=>{
-    try{await api.del(`/api/school/${id}`);setSchoolMembers(p=>p.filter(x=>x.id!==id));setMDrawer(false);setEditM(null);toastAdd('Removed','blue');}
-    catch{toastAdd('Failed to remove','red');}
+    const r=await api.del(`/api/school/${id}`).catch(()=>null);
+    if(r?.error){toastAdd('Failed to remove','red');return;}
+    setSchoolMembers(p=>p.filter(x=>x.id!==id));setMDrawer(false);setEditM(null);toastAdd('Removed','blue');
   };
   const openNewC=schoolMemberId=>{setCContext({schoolMemberId,edit:null});setCForm(blankC);setCDrawer(true);};
   const openEditC=(schoolMemberId,cls)=>{setCContext({schoolMemberId,edit:cls});setCForm({period:cls.period||'',subject:cls.subject,teacher:cls.teacher||'',room:cls.room||'',days:cls.days||'Mon,Tue,Wed,Thu,Fri'});setCDrawer(true);};
@@ -8570,12 +8582,11 @@ function SchoolScreen({members=[],toastAdd}){
     if(!cContext?.edit) return;
     const sid=cContext.schoolMemberId;
     const cid=cContext.edit.id;
-    try{
-      await api.del(`/api/school/${sid}/classes/${cid}`);
-      setSchoolMembers(p=>p.map(s=>s.id===sid?{...s,classes:(s.classes||[]).filter(c=>c.id!==cid)}:s));
-      setCDrawer(false);setCContext(null);
-      toastAdd('Class removed','blue');
-    }catch{toastAdd('Failed','red');}
+    const r=await api.del(`/api/school/${sid}/classes/${cid}`).catch(()=>null);
+    if(r?.error){toastAdd('Failed','red');return;}
+    setSchoolMembers(p=>p.map(s=>s.id===sid?{...s,classes:(s.classes||[]).filter(c=>c.id!==cid)}:s));
+    setCDrawer(false);setCContext(null);
+    toastAdd('Class removed','blue');
   };
   const toggleDay=d=>{
     const arr=cForm.days?cForm.days.split(','):[];
@@ -9238,7 +9249,8 @@ function QuickAddFAB({screen,setGrocery,setChores,toastAdd,isAdmin}){
     if(!input.trim()||!activeType) return;
     try{
       if(activeType==='grocery'){
-        const item=await api.post('/api/grocery',{name:input.trim()});
+        const item=await api.post('/api/grocery',{name:input.trim()}).catch(()=>null);
+        if(!item?.id){toastAdd('Failed to add','red');return;}
         setGrocery(p=>[...p,item]);
         toastAdd(`${input.trim()} added`);
       } else {

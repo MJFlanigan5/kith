@@ -691,7 +691,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
         const color=m?.color||'#34C759';
         setPresenceOverlay({type:'arrival',name:d.name,entity_id:d.entity_id,color,ts:Date.now()});
         if(presenceTimerRef.current)clearTimeout(presenceTimerRef.current);
-        presenceTimerRef.current=setTimeout(()=>setPresenceOverlay(null),60000);
+        presenceTimerRef.current=setTimeout(()=>setPresenceOverlay(null),120000);
       }catch{}
     });
     es.addEventListener('grocery',e=>{try{const d=JSON.parse(e.data);if(setGrocery){if(d.action==='add')setGrocery(p=>[...p,d.item]);else if(d.action==='remove')setGrocery(p=>p.filter(i=>i.id!==d.id));else if(d.action==='toggle')setGrocery(p=>p.map(i=>i.id===d.id?{...i,checked:d.checked}:i));else if(d.action==='clear_checked')setGrocery(p=>p.filter(i=>!i.checked));}}catch{}});
@@ -736,7 +736,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
     const color=m?.color||(ev.type==='arrival'?'#34C759':'#8E8E93');
     if(presenceTimerRef.current)clearTimeout(presenceTimerRef.current);
     setPresenceOverlay({...ev,color,ts:Date.now()});
-    presenceTimerRef.current=setTimeout(()=>setPresenceOverlay(null),60000);
+    presenceTimerRef.current=setTimeout(()=>setPresenceOverlay(null),120000);
   },[widgetData.who_home]);
   useEffect(()=>()=>{if(presenceTimerRef.current)clearTimeout(presenceTimerRef.current);},[]);
 
@@ -1004,7 +1004,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
             <div style={{fontSize:isTV?15:12,color:presenceOverlay.color,fontWeight:600,marginTop:3}}>
               {presenceOverlay.type==='arrival'?'Welcome home!':'has left'}
             </div>
-            <PresenceBar key={presenceOverlay.ts} duration={60000} color={presenceOverlay.color}/>
+            <PresenceBar key={presenceOverlay.ts} duration={120000} color={presenceOverlay.color}/>
           </div>
         </div>
       )}

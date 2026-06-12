@@ -280,7 +280,7 @@ function CountdownsScreen({countdowns,setCountdowns,toastAdd}){
   const saveEdit=async()=>{
     if(!editForm.label.trim()){toastAdd('Label required','red');return;}
     if(!editForm.date){toastAdd('Date required','red');return;}
-    const r=await api.put(`/api/countdowns/${editId}`,editForm);
+    const r=await api.put(`/api/countdowns/${editId}`,editForm).catch(()=>null);
     if(!r?.id){toastAdd('Failed to update','red');return;}
     setCountdowns(p=>p.map(c=>c.id===editId?r:c).sort((a,b)=>a.date.localeCompare(b.date)));
     setEditId(null);
@@ -439,7 +439,7 @@ function FamilyScreen({members,setMembers,toastAdd}){
   };
   const saveEdit=async()=>{
     if(!editForm.name.trim()){toastAdd('Name required','red');return;}
-    const r=await api.put(`/api/members/${editId}`,{name:editForm.name,color:editForm.color,birthday:editForm.birthday||'',family_role:editForm.family_role||'adult'});
+    const r=await api.put(`/api/members/${editId}`,{name:editForm.name,color:editForm.color,birthday:editForm.birthday||'',family_role:editForm.family_role||'adult'}).catch(()=>null);
     if(!r?.id){toastAdd('Failed to update','red');return;}
     setMembers(p=>p.map(m=>m.id===editId?r:m));
     setEditId(null);
@@ -5677,12 +5677,12 @@ function GoalsScreen({goals,setGoals,toastAdd}){
     if(!form.name.trim()){toastAdd('Name required','red');return;}
     const body={name:form.name.trim(),description:form.description.trim(),progress_type:form.progress_type,progress_current:Number(form.progress_current)||0,progress_target:Number(form.progress_target)||100,unit:form.unit.trim(),deadline:form.deadline};
     if(editId){
-      const r=await api.put(`/api/goals/${editId}`,body);
+      const r=await api.put(`/api/goals/${editId}`,body).catch(()=>null);
       if(!r?.id){toastAdd(r?.error||'Save failed','red');return;}
       setGoals(p=>p.map(g=>g.id===editId?r:g));
       toastAdd('Saved');
     }else{
-      const r=await api.post('/api/goals',body);
+      const r=await api.post('/api/goals',body).catch(()=>null);
       if(!r?.id){toastAdd(r?.error||'Save failed','red');return;}
       setGoals(p=>[...p,r]);
       toastAdd('Goal added');
@@ -5701,19 +5701,17 @@ function GoalsScreen({goals,setGoals,toastAdd}){
     if(saving[g.id]) return;
     setSaving(s=>({...s,[g.id]:true}));
     const newVal=Math.round((pct/100)*(g.progress_target||100));
-    const r=await api.put(`/api/goals/${g.id}`,{progress_current:newVal});
+    const r=await api.put(`/api/goals/${g.id}`,{progress_current:newVal}).catch(()=>null);
     setSaving(s=>{const n={...s};delete n[g.id];return n;});
     setDragging(d=>{const n={...d};delete n[g.id];return n;});
-    if(r?.id){
-      const wasComplete=g.progress_current>=g.progress_target;
-      setGoals(p=>p.map(x=>x.id===g.id?r:x));
-      if(!wasComplete&&newVal>=g.progress_target){
-        toastAdd('Goal reached!','green');
-        setGoalConfetti(true);
-        setTimeout(()=>setGoalConfetti(false),3500);
-      }
+    if(!r?.id){toastAdd('Failed to save progress','red');return;}
+    const wasComplete=g.progress_current>=g.progress_target;
+    setGoals(p=>p.map(x=>x.id===g.id?r:x));
+    if(!wasComplete&&newVal>=g.progress_target){
+      toastAdd('Goal reached!','green');
+      setGoalConfetti(true);
+      setTimeout(()=>setGoalConfetti(false),3500);
     }
-    else toastAdd(r?.error||'Save failed','red');
   };
 
   return(
@@ -9486,10 +9484,12 @@ function App(){
   },[]);
   const handleInstall=async()=>{
     if(!installPrompt) return;
-    installPrompt.prompt();
-    const{outcome}=await installPrompt.userChoice;
-    setInstallPrompt(null);
-    if(outcome==='accepted') localStorage.setItem('kith_pwa_dismissed','1');
+    try{
+      installPrompt.prompt();
+      const{outcome}=await installPrompt.userChoice;
+      setInstallPrompt(null);
+      if(outcome==='accepted') localStorage.setItem('kith_pwa_dismissed','1');
+    }catch{setInstallPrompt(null);}
   };
   const dismissInstall=()=>{setInstallDismissed(true);localStorage.setItem('kith_pwa_dismissed','1');};
 

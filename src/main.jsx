@@ -661,9 +661,6 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
     return()=>clearInterval(id);
   },[]);
 
-  // Keep a ref to members so the SSE arrival closure always sees current data
-  const membersRef=useRef(members);
-  useEffect(()=>{membersRef.current=members;},[members]);
   const [haEvents,setHaEvents]=useState([]);
   const [smEvents,setSmEvents]=useState([]);
   const [widgetData,setWidgetData]=useState({});
@@ -681,19 +678,6 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
     const es=new EventSource('/api/events/stream');
     es.addEventListener('activity',e=>{try{const ev=JSON.parse(e.data);setSmEvents(p=>[ev,...p].slice(0,10));}catch{}});
     es.addEventListener('refresh',()=>{loadHA();loadSm();loadWidgets();});
-    es.addEventListener('arrival',e=>{
-      try{
-        const d=JSON.parse(e.data);
-        // Discard if the event is more than 10 minutes old — SSE was down when arrival happened
-        if(d.ts&&Date.now()-d.ts>10*60*1000) return;
-        const first=(d.name||'').toLowerCase();
-        const m=membersRef.current.find(x=>x.name.toLowerCase()===first||x.name.toLowerCase().startsWith(first+' '));
-        const color=m?.color||'#34C759';
-        setPresenceOverlay({type:'arrival',name:d.name,entity_id:d.entity_id,color,ts:Date.now()});
-        if(presenceTimerRef.current)clearTimeout(presenceTimerRef.current);
-        presenceTimerRef.current=setTimeout(()=>setPresenceOverlay(null),120000);
-      }catch{}
-    });
     es.addEventListener('grocery',e=>{try{const d=JSON.parse(e.data);if(setGrocery){if(d.action==='add')setGrocery(p=>[...p,d.item]);else if(d.action==='remove')setGrocery(p=>p.filter(i=>i.id!==d.id));else if(d.action==='toggle')setGrocery(p=>p.map(i=>i.id===d.id?{...i,checked:d.checked}:i));else if(d.action==='clear_checked')setGrocery(p=>p.filter(i=>!i.checked));}}catch{}});
     es.addEventListener('packages',()=>{
       api.get('/api/packages').then(d=>{if(Array.isArray(d)&&setPackages)setPackages(d);}).catch(()=>{});
@@ -713,32 +697,6 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
     const id=setInterval(load,8000);
     return()=>clearInterval(id);
   },[]);
-
-  // Presence overlay — fires when who_home state changes
-  const [presenceOverlay,setPresenceOverlay]=useState(null);
-  const presenceTimerRef=useRef(null);
-  const prevPersonsRef=useRef(null);
-  useEffect(()=>{
-    const persons=widgetData.who_home?.persons;
-    if(!persons)return;
-    if(prevPersonsRef.current===null){prevPersonsRef.current=persons;return;}
-    const prevMap=Object.fromEntries(prevPersonsRef.current.map(p=>[p.entity_id,p.state]));
-    let ev=null;
-    for(const p of persons){
-      const prev=prevMap[p.entity_id]||'unknown';
-      if(prev!=='home'&&p.state==='home'){ev={type:'arrival',name:p.name.split(' ')[0],entity_id:p.entity_id};break;}
-      if(prev==='home'&&p.state!=='home'){ev={type:'departure',name:p.name.split(' ')[0],entity_id:p.entity_id};break;}
-    }
-    prevPersonsRef.current=persons;
-    if(!ev)return;
-    const first=ev.name.toLowerCase();
-    const m=membersRef.current.find(x=>x.name.toLowerCase()===first||x.name.toLowerCase().startsWith(first+' '));
-    const color=m?.color||(ev.type==='arrival'?'#34C759':'#8E8E93');
-    if(presenceTimerRef.current)clearTimeout(presenceTimerRef.current);
-    setPresenceOverlay({...ev,color,ts:Date.now()});
-    presenceTimerRef.current=setTimeout(()=>setPresenceOverlay(null),120000);
-  },[widgetData.who_home]);
-  useEffect(()=>()=>{if(presenceTimerRef.current)clearTimeout(presenceTimerRef.current);},[]);
 
   const [newsIdx,setNewsIdx]=useState(0);
   const [newsVisible,setNewsVisible]=useState(true);
@@ -993,22 +951,6 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
           </div>
         </div>
       )}
-      {presenceOverlay&&(
-        <div style={{position:'fixed',bottom:isTV?36:24,right:isTV?40:24,zIndex:999,display:'flex',alignItems:'center',gap:16,background:D.card,borderRadius:20,padding:isTV?'20px 28px':'16px 22px',border:`1.5px solid ${presenceOverlay.color}55`,boxShadow:`0 0 40px ${presenceOverlay.color}18,0 12px 32px rgba(0,0,0,0.35)`,animation:'presenceIn .35s cubic-bezier(.4,0,.2,1)',cursor:'pointer',maxWidth:isTV?400:320,overflow:'hidden'}}
-          onClick={()=>{if(presenceTimerRef.current)clearTimeout(presenceTimerRef.current);setPresenceOverlay(null);}}>
-          <div style={{width:isTV?56:44,height:isTV?56:44,borderRadius:'50%',background:`${presenceOverlay.color}20`,border:`2px solid ${presenceOverlay.color}`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:isTV?26:20}}>
-            {presenceOverlay.type==='arrival'?'🏠':'👋'}
-          </div>
-          <div style={{flex:1,minWidth:0}}>
-            <div style={{fontSize:isTV?22:17,fontWeight:800,color:D.t1,letterSpacing:'-0.01em',lineHeight:1.2}}>{presenceOverlay.name}</div>
-            <div style={{fontSize:isTV?15:12,color:presenceOverlay.color,fontWeight:600,marginTop:3}}>
-              {presenceOverlay.type==='arrival'?'Welcome home!':'has left'}
-            </div>
-            <PresenceBar key={presenceOverlay.ts} duration={120000} color={presenceOverlay.color}/>
-          </div>
-        </div>
-      )}
-
       {/* Header — clock + date */}
       <div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-between',flexShrink:0}}>
         <div style={{display:'flex',alignItems:'baseline',gap:8}}>
@@ -9508,6 +9450,30 @@ function App(){
     return()=>clearInterval(id);
   },[loading,auth,kiosk,refreshMs]);
 
+  // Presence overlay — lives in App so it fires in both display and manage modes
+  const [presenceOverlay,setPresenceOverlay]=useState(null);
+  const presenceTimerRef=useRef(null);
+  const appMembersRef=useRef(members);
+  useEffect(()=>{appMembersRef.current=members;},[members]);
+  useEffect(()=>{
+    if(loading||(!auth&&!kiosk)) return;
+    const es=new EventSource('/api/events/stream');
+    es.addEventListener('arrival',e=>{
+      try{
+        const d=JSON.parse(e.data);
+        if(d.ts&&Date.now()-d.ts>10*60*1000) return;
+        const first=(d.name||'').toLowerCase();
+        const m=appMembersRef.current.find(x=>x.name.toLowerCase()===first||x.name.toLowerCase().startsWith(first+' '));
+        const color=m?.color||'#34C759';
+        if(presenceTimerRef.current)clearTimeout(presenceTimerRef.current);
+        setPresenceOverlay({type:'arrival',name:d.name,color,ts:Date.now()});
+        presenceTimerRef.current=setTimeout(()=>setPresenceOverlay(null),120000);
+      }catch{}
+    });
+    return()=>es.close();
+  },[loading,auth,kiosk]);
+  useEffect(()=>()=>{if(presenceTimerRef.current)clearTimeout(presenceTimerRef.current);},[]);
+
   if(!authChecked) return(
     <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',background:A.systemBg}}>
       <div style={{width:36,height:36,border:`3px solid ${A.sep}`,borderTop:`3px solid ${A.blue}`,borderRadius:'50%',animation:'spin 0.8s linear infinite'}}/>
@@ -9529,9 +9495,23 @@ function App(){
 
   const goDisplay=()=>{localStorage.setItem('kith_mode','display');setMode('display');};
   const goManage=()=>{localStorage.setItem('kith_mode','manage');setMode('manage');};
-  return mode==='display'
+  const sysDark=window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const isDarkNow=darkMode==='Dark'||(darkMode==='System'&&sysDark);
+  return <>{mode==='display'
     ?<DisplayMode onManage={goManage} events={events} chores={chores} setChores={setChores} meals={meals} grocery={grocery} setGrocery={setGrocery} countdowns={countdowns} photos={photos} clockFormat={clockFormat} weather={weather} nightModeStart={nightModeStart} nightModeEnd={nightModeEnd} goals={goals} notes={notes} polls={polls} rotationMs={rotationMs} wifiQrData={wifiQrData} quickActions={quickActions} members={members} packages={packages} setPackages={setPackages} messages={messages} setMessages={setMessages} appliances={appliances} consumables={consumables} maintenanceItems={maintenanceItems} pets={pets} subscriptions={subscriptions} pantry={pantry} projects={projects}/>
-    :<ManageMode onDisplay={goDisplay} onLogout={handleLogout} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources} inboxCount={inboxCount} setInboxCount={setInboxCount} countdowns={countdowns} setCountdowns={setCountdowns} members={members} setMembers={setMembers} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} weather={weather} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} goals={goals} setGoals={setGoals} notes={notes} setNotes={setNotes} polls={polls} setPolls={setPolls} bookmarks={bookmarks} setBookmarks={setBookmarks} quickActions={quickActions} setQuickActions={setQuickActions} setRotationMs={setRotationMs} setWifiQrData={setWifiQrData} darkMode={darkMode} onDarkMode={handleDarkMode} packages={packages} setPackages={setPackages} messages={messages} setMessages={setMessages} recipes={recipes} setRecipes={setRecipes} bills={bills} setBills={setBills} payments={payments} setPayments={setPayments} vehicles={vehicles} setVehicles={setVehicles} appliances={appliances} setAppliances={setAppliances} consumables={consumables} setConsumables={setConsumables} pets={pets} setPets={setPets} contacts={contacts} setContacts={setContacts} maintenanceItems={maintenanceItems} setMaintenanceItems={setMaintenanceItems} budget={budget} setBudget={setBudget} subscriptions={subscriptions} setSubscriptions={setSubscriptions} projects={projects} setProjects={setProjects} pantry={pantry} setPantry={setPantry} isAdmin={!!auth&&!currentMember&&!kiosk}/>;
+    :<ManageMode onDisplay={goDisplay} onLogout={handleLogout} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources} inboxCount={inboxCount} setInboxCount={setInboxCount} countdowns={countdowns} setCountdowns={setCountdowns} members={members} setMembers={setMembers} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} weather={weather} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} goals={goals} setGoals={setGoals} notes={notes} setNotes={setNotes} polls={polls} setPolls={setPolls} bookmarks={bookmarks} setBookmarks={setBookmarks} quickActions={quickActions} setQuickActions={setQuickActions} setRotationMs={setRotationMs} setWifiQrData={setWifiQrData} darkMode={darkMode} onDarkMode={handleDarkMode} packages={packages} setPackages={setPackages} messages={messages} setMessages={setMessages} recipes={recipes} setRecipes={setRecipes} bills={bills} setBills={setBills} payments={payments} setPayments={setPayments} vehicles={vehicles} setVehicles={setVehicles} appliances={appliances} setAppliances={setAppliances} consumables={consumables} setConsumables={setConsumables} pets={pets} setPets={setPets} contacts={contacts} setContacts={setContacts} maintenanceItems={maintenanceItems} setMaintenanceItems={setMaintenanceItems} budget={budget} setBudget={setBudget} subscriptions={subscriptions} setSubscriptions={setSubscriptions} projects={projects} setProjects={setProjects} pantry={pantry} setPantry={setPantry} isAdmin={!!auth&&!currentMember&&!kiosk}/>}
+    {presenceOverlay&&(
+      <div style={{position:'fixed',bottom:24,right:24,zIndex:9999,display:'flex',alignItems:'center',gap:16,background:isDarkNow?'#1c1c1e':'#ffffff',borderRadius:20,padding:'16px 22px',border:`1.5px solid ${presenceOverlay.color}55`,boxShadow:`0 0 40px ${presenceOverlay.color}18,0 12px 32px rgba(0,0,0,0.35)`,animation:'presenceIn .35s cubic-bezier(.4,0,.2,1)',cursor:'pointer',maxWidth:340,overflow:'hidden'}}
+        onClick={()=>{if(presenceTimerRef.current)clearTimeout(presenceTimerRef.current);setPresenceOverlay(null);}}>
+        <div style={{width:44,height:44,borderRadius:'50%',background:`${presenceOverlay.color}20`,border:`2px solid ${presenceOverlay.color}`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:20}}>🏠</div>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:17,fontWeight:800,color:isDarkNow?'#f2f2f7':'#000000',letterSpacing:'-0.01em',lineHeight:1.2}}>{presenceOverlay.name}</div>
+          <div style={{fontSize:12,color:presenceOverlay.color,fontWeight:600,marginTop:3}}>Welcome home!</div>
+          <PresenceBar key={presenceOverlay.ts} duration={120000} color={presenceOverlay.color}/>
+        </div>
+      </div>
+    )}
+  </>;
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);

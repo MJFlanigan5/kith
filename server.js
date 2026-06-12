@@ -4421,7 +4421,7 @@ function homeySocketConnect() {
       const wasPresent = _homeyPresence[userId];
       _homeyPresence[userId] = nowPresent;
       // Only fire if transitioning from an explicit away state (not undefined/unknown)
-      if (nowPresent && wasPresent === false) {
+      if (nowPresent && wasPresent !== true) {
         fireArrival(_homeyNames[userId] || userId, userId, 'homey');
       } else if (!nowPresent && wasPresent === true) {
         noteDeparture(userId);

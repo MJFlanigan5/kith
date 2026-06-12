@@ -882,6 +882,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
   const lowPantryItems=useMemo(()=>(pantry||[]).filter(p=>p.expiry_status==='expired'||p.expiry_status==='expiring_soon'||(p.low_stock_at>0&&Number(p.quantity)<=Number(p.low_stock_at))),[pantry]);
   const inProgressProjects=useMemo(()=>(projects||[]).filter(p=>p.status==='in_progress'),[projects]);
   const centerPanels=[
+    ...(messages.some(m=>m.expires_at&&new Date(m.expires_at.replace(' ','T')+'Z').getTime()>Date.now())?['w_messages']:[]),
     'dinner',
     ...(dueC.length>0?['chores']:[]),
     ...(dueSoonVehicles.length>0?['due_soon']:[]),
@@ -915,7 +916,6 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
     ...(uncheckedGrocery.length>0?['w_grocery']:[]),
     ...(photos.length>0?['w_photos']:[]),
     ...(packages.length>0?['w_packages']:[]),
-    ...(messages.some(m=>m.expires_at&&new Date(m.expires_at.replace(' ','T')+'Z').getTime()>Date.now())?['w_messages']:[]),
     ...(nowPlaying.playing&&nowPlaying.title?['w_music']:[]),
     ...(expiringAppliances.length>0?['w_home_warranty']:[]),
     ...(urgentConsumables.length>0?['w_home_consumables']:[]),

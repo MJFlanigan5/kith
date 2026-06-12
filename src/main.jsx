@@ -3427,11 +3427,10 @@ function ChoresScreen({chores,setChores,goals=[],members=[],toastAdd}){
   };
 
   const deleteChore=async id=>{
-    try{
-      await api.del(`/api/chores/${id}`);
-      setChores(p=>p.filter(c=>c.id!==id));
-      toastAdd('Deleted','blue');
-    }catch{toastAdd('Failed to delete','red');}
+    const r=await api.del(`/api/chores/${id}`).catch(()=>null);
+    if(r?.error){toastAdd('Failed to delete','red');return;}
+    setChores(p=>p.filter(c=>c.id!==id));
+    toastAdd('Deleted','blue');
   };
 
   const toggleDone=async c=>{
@@ -3760,8 +3759,8 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,recipes=[],toastAdd}){
       removeTimers.current[id]=setTimeout(()=>{
         setRemoving(s=>{const n=new Set(s);n.add(id);return n;});
         const fadeTimer=setTimeout(async()=>{
-          await api.del(`/api/grocery/${id}`);
-          setGrocery(p=>p.filter(i=>i.id!==id));
+          const dr=await api.del(`/api/grocery/${id}`).catch(()=>null);
+          if(!dr?.error){setGrocery(p=>p.filter(i=>i.id!==id));}
           setRemoving(s=>{const n=new Set(s);n.delete(id);return n;});
           delete removeTimers.current[`${id}_fade`];
         },350);
@@ -3783,7 +3782,8 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,recipes=[],toastAdd}){
       breakfast:field==='breakfast' ?mealInput:(current.breakfast||''),
       lunch:    field==='lunch'     ?mealInput:(current.lunch||''),
     };
-    await api.put(`/api/meals/${day}`,body);
+    const r=await api.put(`/api/meals/${day}`,body).catch(()=>null);
+    if(r?.error){toastAdd(r.error||'Failed to save meal','red');return;}
     setMeals(p=>p.map(m=>m.day===day?{...m,...body}:m));
     setEditingField(null); setMealInput('');
   };
@@ -3896,8 +3896,8 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,recipes=[],toastAdd}){
                 const DAY_ABBR={Monday:'Mon',Tuesday:'Tue',Wednesday:'Wed',Thursday:'Thu',Friday:'Fri',Saturday:'Sat',Sunday:'Sun'};
                 for(const m of r.meals){
                   const abbr=DAY_ABBR[m.day]||m.day;
-                  await api.put(`/api/meals/${abbr}`,{meal:m.meal,breakfast:'',lunch:''}).catch(()=>{});
-                  setMeals(p=>p.map(mx=>mx.day===abbr?{...mx,meal:m.meal}:mx));
+                  const mr=await api.put(`/api/meals/${abbr}`,{meal:m.meal,breakfast:'',lunch:''}).catch(()=>null);
+                  if(!mr?.error) setMeals(p=>p.map(mx=>mx.day===abbr?{...mx,meal:m.meal}:mx));
                 }
                 toastAdd('Week planned!','green');
               }

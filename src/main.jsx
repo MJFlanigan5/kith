@@ -3703,7 +3703,7 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,recipes=[],toastAdd}){
         setRemoving(s=>{const n=new Set(s);n.add(id);return n;});
         const fadeTimer=setTimeout(async()=>{
           const dr=await api.del(`/api/grocery/${id}`).catch(()=>null);
-          if(!dr?.error){setGrocery(p=>p.filter(i=>i.id!==id));}
+          if(dr&&!dr?.error){setGrocery(p=>p.filter(i=>i.id!==id));}
           setRemoving(s=>{const n=new Set(s);n.delete(id);return n;});
           delete removeTimers.current[`${id}_fade`];
         },350);
@@ -3726,7 +3726,7 @@ function GroceryScreen({grocery,setGrocery,meals,setMeals,recipes=[],toastAdd}){
       lunch:    field==='lunch'     ?mealInput:(current.lunch||''),
     };
     const r=await api.put(`/api/meals/${day}`,body).catch(()=>null);
-    if(r?.error){toastAdd(r.error||'Failed to save meal','red');return;}
+    if(!r||r.error){toastAdd(r?.error||'Failed to save meal','red');return;}
     setMeals(p=>p.map(m=>m.day===day?{...m,...body}:m));
     setEditingField(null); setMealInput('');
   };

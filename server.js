@@ -2091,8 +2091,9 @@ app.get('/api/widgets/data', async (req, res) => {
 
   const nextdnsKey = gs('nextdns_api_key');
   const nextdnsProfile = gs('nextdns_profile_id');
-  if (!nextdnsKey || !nextdnsProfile)
-    console.log(`[nextdns] skipping — key=${!!nextdnsKey} profile=${JSON.stringify(nextdnsProfile)}`);
+  if (!nextdnsKey || !nextdnsProfile) {
+    // skip silently — nextdns is optional
+  }
   if (nextdnsKey && nextdnsProfile)
     p.push(_wFetch(`nextdns:${nextdnsProfile}`, 300000, async () => {
       const headers = { 'X-Api-Key': nextdnsKey };

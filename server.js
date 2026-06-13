@@ -4310,7 +4310,7 @@ async function homeyPoll() {
   try {
     const tlRaw = await fetch(`${homeyUrl}/api/manager/timeline/timeline/`, {
       headers: hdrs, signal: AbortSignal.timeout(8000),
-    }).then(r => r.json()).catch(() => null);
+    }).then(r => r.json()).catch(e => { console.warn('[homey-poll] timeline fetch error:', e?.message); return null; });
     const tlData = unwrap(tlRaw);
     if (tlData && typeof tlData === 'object') {
       // Find newest entry by dateCreated (handles both UUIDs and numeric keys)
@@ -4333,32 +4333,44 @@ async function homeyPoll() {
         }
         _homeyTlKey = newestKey;
       }
+    } else {
+      console.warn('[homey-poll] timeline: unexpected response shape:', JSON.stringify(tlRaw)?.slice(0, 200));
     }
-  } catch (_) {}
+  } catch (e) { console.warn('[homey-poll] timeline error:', e?.message); }
 
   // Presence — detect changes for mapped Homey users
   const personStr = g('homey_person_devices');
-  if (!personStr) return;
+  if (!personStr) { console.warn('[homey-poll] homey_person_devices not set — skipping presence'); return; }
   try {
     const uids = personStr.split(',').map(s => s.trim()).filter(Boolean);
     const urRaw = await fetch(`${homeyUrl}/api/manager/users/user/`, {
       headers: hdrs, signal: AbortSignal.timeout(8000),
-    }).then(r => r.json()).catch(() => null);
+    }).then(r => r.json()).catch(e => { console.warn('[homey-poll] users fetch error:', e?.message); return null; });
     const usersData = unwrap(urRaw);
-    if (!usersData || typeof usersData !== 'object') return;
+    if (!usersData || typeof usersData !== 'object') {
+      console.warn('[homey-poll] users: unexpected response:', JSON.stringify(urRaw)?.slice(0, 200));
+      return;
+    }
     const usersMap = Array.isArray(usersData)
       ? Object.fromEntries(usersData.map(u => [u.id, u]))
       : usersData;
+    const availableUids = Object.keys(usersMap);
     const firstRun = Object.keys(_homeyPresence).length === 0;
+    if (firstRun) console.log('[homey-poll] first run — seeding presence, available UIDs:', availableUids);
     let changed = false;
     for (const uid of uids) {
-      const u = usersMap[uid]; if (!u) continue;
+      const u = usersMap[uid];
+      if (!u) {
+        console.warn(`[homey-poll] configured UID "${uid}" not found in Homey users. Available: ${availableUids.join(', ')}`);
+        continue;
+      }
       const name = (u.name || uid).split(' ')[0];
       _homeyNames[uid] = name;
       if (_homeyPresence[uid] !== u.present) {
         const wasPresent = _homeyPresence[uid];
         _homeyPresence[uid] = u.present;
         changed = true;
+        console.log(`[homey-poll] presence change: ${name} (${uid}) ${wasPresent} → ${u.present} firstRun=${firstRun}`);
         if (!firstRun && u.present === true && wasPresent !== true) {
           fireArrival(name, uid, 'homey');
         } else if (!firstRun && u.present !== true && wasPresent === true) {
@@ -4370,7 +4382,7 @@ async function homeyPoll() {
       _wInvalidate('who_home');
       broadcastSSE('refresh', { source: 'homey', widgets: ['who_home'] });
     }
-  } catch (_) {}
+  } catch (e) { console.warn('[homey-poll] presence error:', e?.message); }
 }
 
 setInterval(() => homeyPoll().catch(() => {}), 15000);

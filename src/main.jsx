@@ -613,7 +613,7 @@ function PresenceBar({duration,color}){
 }
 
 /* ── Display Mode ────────────────────────────────────────────────────── */
-function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,countdowns,photos=[],weather,clockFormat='12h',nightModeStart='23:00',nightModeEnd='06:00',goals=[],notes=[],polls=[],rotationMs=10000,wifiQrData=null,quickActions=[],members=[],packages=[],setPackages,messages=[],setMessages,appliances=[],consumables=[],maintenanceItems=[],pets=[],subscriptions=[],pantry=[],projects=[]}){
+function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGrocery,countdowns,photos=[],weather,clockFormat='12h',nightModeStart='23:00',nightModeEnd='06:00',goals=[],notes=[],polls=[],rotationMs=10000,wifiQrData=null,quickActions=[],members=[],packages=[],setPackages,messages=[],setMessages,appliances=[],consumables=[],maintenanceItems=[],pets=[],subscriptions=[],pantry=[],projects=[]}){
   const isMobile=useIsMobile();
   const now=useClock();
   const [liveGames,setLiveGames]=useState([]);
@@ -737,7 +737,8 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
     const show=()=>{setShowControls(true);clearTimeout(hideTimer.current);hideTimer.current=setTimeout(()=>setShowControls(false),3000);};
     window.addEventListener('mousemove',show);
     window.addEventListener('touchstart',show);
-    return()=>{window.removeEventListener('mousemove',show);window.removeEventListener('touchstart',show);clearTimeout(hideTimer.current);};
+    window.addEventListener('click',show);
+    return()=>{window.removeEventListener('mousemove',show);window.removeEventListener('touchstart',show);window.removeEventListener('click',show);clearTimeout(hideTimer.current);};
   },[]);
   const calScrollRef=useRef(null);
   const _calScroll=useRef({timer:null,pauseT:null,unPauseT:null,pausing:false});
@@ -1511,7 +1512,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
                       </>
                     )}
                     {visiblePanelId==='w_nextdns'&&(()=>{
-                      const nd=widgetData.nextdns;
+                      const nd=widgetData.nextdns;if(!nd)return null;
                       return(
                         <>
                           <WLabel>NextDNS — 24h</WLabel>

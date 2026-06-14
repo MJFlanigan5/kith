@@ -30,7 +30,20 @@ self.addEventListener('fetch', e => {
     return
   }
 
-  // Everything else: cache-first, refresh in background
+  // HTML document: network-first so deploys take effect immediately
+  if (url.pathname === '/' || url.pathname.endsWith('.html')) {
+    e.respondWith(
+      fetch(e.request)
+        .then(res => {
+          if (res.ok) caches.open(CACHE).then(c => c.put(e.request, res.clone()))
+          return res
+        })
+        .catch(() => caches.match(e.request))
+    )
+    return
+  }
+
+  // Static assets (JS/CSS/images): cache-first, refresh in background
   e.respondWith(
     caches.match(e.request).then(cached => {
       const fresh = fetch(e.request).then(res => {

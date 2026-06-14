@@ -1649,7 +1649,7 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
                           <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',gap:10}}>
                             {persons.map(p=>(
                               <div key={p.entity_id} style={{display:'flex',alignItems:'center',gap:12}}>
-                                <div style={{width:34,height:34,borderRadius:'50%',background:stateColor(p.state),opacity:isHome(p.state)?1:0.35,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                                <div style={{width:34,height:34,borderRadius:'50%',background:stateColor(p.state),opacity:isHome(p.state)?1:0.35,filter:p.state==='not_home'?'grayscale(1)':'none',animation:isHome(p.state)?'presenceGlow 2.4s ease-out infinite':'none',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
                                   <span style={{fontSize:13,fontWeight:700,color:'#fff'}}>{initials(p.name)}</span>
                                 </div>
                                 <span style={{fontSize:15,fontWeight:600,color:D.t1,flex:1}}>{p.name}</span>

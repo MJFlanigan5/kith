@@ -1241,7 +1241,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
                     {visiblePanelId==='members'&&(
                       <>
                         <WLabel>Family Progress</WLabel>
-                        <div ref={membersScrollRef} style={{flex:1,display:'flex',flexDirection:'column',gap:14,justifyContent:'center',overflowY:'auto',minHeight:0,marginTop:2,WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
+                        <div ref={membersScrollRef} style={{flex:1,display:'flex',flexDirection:'column',gap:14,overflowY:'auto',minHeight:0,marginTop:2,WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
                           {progressMembers.map(m=>{
                             const pct=m.monthly_goal>0?Math.min(100,Math.round((m.points/m.monthly_goal)*100)):0;
                             const hit=m.points>=m.monthly_goal;

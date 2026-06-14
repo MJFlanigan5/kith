@@ -712,9 +712,8 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
   const [centerIdx,setCenterIdx]=useState(0);
   const [visiblePanelId,setVisiblePanelId]=useState('dinner');
   const [panelOpacity,setPanelOpacity]=useState(1);
-  const [panelY,setPanelY]=useState(0);
-  const [panelTx,setPanelTx]=useState(true);
   const panelFirstRender=useRef(true);
+  const panelFadeTimer=useRef(null);
   useEffect(()=>{
     let id;
     const start=()=>{id=setInterval(()=>setCenterIdx(i=>i+1),rotationMs);};
@@ -939,15 +938,13 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
   const activePanelId=centerPanels[centerIdx%Math.max(1,centerPanels.length)];
   useEffect(()=>{
     if(panelFirstRender.current){panelFirstRender.current=false;setVisiblePanelId(activePanelId);return;}
-    // Exit: fade + slide down
-    setPanelTx(true);setPanelOpacity(0);setPanelY(10);
-    const t=setTimeout(()=>{
-      // Snap above (no transition) then enter
-      setPanelTx(false);setPanelY(-10);
+    clearTimeout(panelFadeTimer.current);
+    setPanelOpacity(0);
+    panelFadeTimer.current=setTimeout(()=>{
       setVisiblePanelId(activePanelId);
-      requestAnimationFrame(()=>requestAnimationFrame(()=>{setPanelTx(true);setPanelOpacity(1);setPanelY(0);}));
-    },320);
-    return()=>clearTimeout(t);
+      setPanelOpacity(1);
+    },380);
+    return()=>clearTimeout(panelFadeTimer.current);
   },[activePanelId]);
 
   const [dmChoreConfetti,setDmChoreConfetti]=useState(false);
@@ -1112,7 +1109,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
                       </div>
                     )}
                   </div>
-                  <div ref={calScrollRef} style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:14,WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
+                  <div ref={calScrollRef} style={{flex:1,overflowY:'auto',minHeight:0,display:'flex',flexDirection:'column',gap:14,WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
                     {agendaDays.filter(({date})=>eventDateSet.has(date)).map(({label,date})=>{
                       const evs=displayEvents.filter(e=>e.date===date);
                       return(
@@ -1158,7 +1155,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
                         })}
                       </div>
                     )}
-                    <div style={{flex:1,display:'flex',flexDirection:'column',minHeight:0,opacity:panelOpacity,transform:`translateY(${panelY}px)`,transition:panelTx?'opacity 0.32s cubic-bezier(.4,0,.2,1),transform 0.32s cubic-bezier(.4,0,.2,1)':'none'}}>
+                    <div style={{flex:1,display:'flex',flexDirection:'column',minHeight:0,opacity:panelOpacity,transition:'opacity 0.35s ease'}}>
                     {visiblePanelId==='due_soon'&&(
                       <>
                         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
@@ -1220,7 +1217,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
                     {visiblePanelId==='goals'&&(
                       <>
                         <WLabel>Goals</WLabel>
-                        <div ref={goalsScrollRef} style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:16,marginTop:2,WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
+                        <div ref={goalsScrollRef} style={{flex:1,overflowY:'auto',minHeight:0,display:'flex',flexDirection:'column',gap:16,marginTop:2,WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
                           {goals.map(g=>{
                             const pct=g.progress_target>0?Math.min(100,Math.round((g.progress_current/g.progress_target)*100)):0;
                             const done=pct>=100;
@@ -1244,7 +1241,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
                     {visiblePanelId==='members'&&(
                       <>
                         <WLabel>Family Progress</WLabel>
-                        <div ref={membersScrollRef} style={{flex:1,display:'flex',flexDirection:'column',gap:14,justifyContent:'center',overflowY:'auto',marginTop:2,WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
+                        <div ref={membersScrollRef} style={{flex:1,display:'flex',flexDirection:'column',gap:14,justifyContent:'center',overflowY:'auto',minHeight:0,marginTop:2,WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
                           {progressMembers.map(m=>{
                             const pct=m.monthly_goal>0?Math.min(100,Math.round((m.points/m.monthly_goal)*100)):0;
                             const hit=m.points>=m.monthly_goal;

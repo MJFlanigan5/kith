@@ -712,6 +712,8 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
   const [centerIdx,setCenterIdx]=useState(0);
   const [visiblePanelId,setVisiblePanelId]=useState('dinner');
   const [panelOpacity,setPanelOpacity]=useState(1);
+  const [panelY,setPanelY]=useState(0);
+  const [panelTx,setPanelTx]=useState(true);
   const panelFirstRender=useRef(true);
   useEffect(()=>{
     let id;
@@ -763,6 +765,56 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
     },200);
     return()=>{clearTimeout(t);clearInterval(s.timer);clearTimeout(s.pauseT);clearTimeout(s.unPauseT);};
   },[events]);
+  const vehicleScrollRef=useRef(null);
+  const _vehicleScroll=useRef({timer:null,pauseT:null,unPauseT:null,pausing:false});
+  useEffect(()=>{
+    if(visiblePanelId!=='due_soon') return;
+    const el=vehicleScrollRef.current; const s=_vehicleScroll.current;
+    clearInterval(s.timer);clearTimeout(s.pauseT);clearTimeout(s.unPauseT);s.pausing=false;
+    if(!el) return; el.scrollTop=0;
+    const t=setTimeout(()=>{if(el.scrollHeight<=el.clientHeight+20)return;s.timer=setInterval(()=>{if(s.pausing)return;el.scrollTop+=0.4;if(el.scrollTop+el.clientHeight>=el.scrollHeight-4){s.pausing=true;s.pauseT=setTimeout(()=>{el.scrollTop=0;s.unPauseT=setTimeout(()=>{s.pausing=false;},1500);},3000);}},16);},400);
+    return()=>{clearTimeout(t);clearInterval(s.timer);clearTimeout(s.pauseT);clearTimeout(s.unPauseT);};
+  },[dueSoonVehicles,visiblePanelId]);
+  const choresScrollRef=useRef(null);
+  const _choresScroll=useRef({timer:null,pauseT:null,unPauseT:null,pausing:false});
+  useEffect(()=>{
+    if(visiblePanelId!=='chores') return;
+    const el=choresScrollRef.current; const s=_choresScroll.current;
+    clearInterval(s.timer);clearTimeout(s.pauseT);clearTimeout(s.unPauseT);s.pausing=false;
+    if(!el) return; el.scrollTop=0;
+    const t=setTimeout(()=>{if(el.scrollHeight<=el.clientHeight+20)return;s.timer=setInterval(()=>{if(s.pausing)return;el.scrollTop+=0.4;if(el.scrollTop+el.clientHeight>=el.scrollHeight-4){s.pausing=true;s.pauseT=setTimeout(()=>{el.scrollTop=0;s.unPauseT=setTimeout(()=>{s.pausing=false;},1500);},3000);}},16);},400);
+    return()=>{clearTimeout(t);clearInterval(s.timer);clearTimeout(s.pauseT);clearTimeout(s.unPauseT);};
+  },[dueC,visiblePanelId]);
+  const cdScrollRef=useRef(null);
+  const _cdScroll=useRef({timer:null,pauseT:null,unPauseT:null,pausing:false});
+  useEffect(()=>{
+    if(visiblePanelId!=='countdowns') return;
+    const el=cdScrollRef.current; const s=_cdScroll.current;
+    clearInterval(s.timer);clearTimeout(s.pauseT);clearTimeout(s.unPauseT);s.pausing=false;
+    if(!el) return; el.scrollTop=0;
+    const t=setTimeout(()=>{if(el.scrollHeight<=el.clientHeight+20)return;s.timer=setInterval(()=>{if(s.pausing)return;el.scrollTop+=0.4;if(el.scrollTop+el.clientHeight>=el.scrollHeight-4){s.pausing=true;s.pauseT=setTimeout(()=>{el.scrollTop=0;s.unPauseT=setTimeout(()=>{s.pausing=false;},1500);},3000);}},16);},400);
+    return()=>{clearTimeout(t);clearInterval(s.timer);clearTimeout(s.pauseT);clearTimeout(s.unPauseT);};
+  },[upCD,visiblePanelId]);
+  const goalsScrollRef=useRef(null);
+  const _goalsScroll=useRef({timer:null,pauseT:null,unPauseT:null,pausing:false});
+  useEffect(()=>{
+    if(visiblePanelId!=='goals') return;
+    const el=goalsScrollRef.current; const s=_goalsScroll.current;
+    clearInterval(s.timer);clearTimeout(s.pauseT);clearTimeout(s.unPauseT);s.pausing=false;
+    if(!el) return; el.scrollTop=0;
+    const t=setTimeout(()=>{if(el.scrollHeight<=el.clientHeight+20)return;s.timer=setInterval(()=>{if(s.pausing)return;el.scrollTop+=0.4;if(el.scrollTop+el.clientHeight>=el.scrollHeight-4){s.pausing=true;s.pauseT=setTimeout(()=>{el.scrollTop=0;s.unPauseT=setTimeout(()=>{s.pausing=false;},1500);},3000);}},16);},400);
+    return()=>{clearTimeout(t);clearInterval(s.timer);clearTimeout(s.pauseT);clearTimeout(s.unPauseT);};
+  },[goals,visiblePanelId]);
+  const membersScrollRef=useRef(null);
+  const _membersScroll=useRef({timer:null,pauseT:null,unPauseT:null,pausing:false});
+  useEffect(()=>{
+    if(visiblePanelId!=='members') return;
+    const el=membersScrollRef.current; const s=_membersScroll.current;
+    clearInterval(s.timer);clearTimeout(s.pauseT);clearTimeout(s.unPauseT);s.pausing=false;
+    if(!el) return; el.scrollTop=0;
+    const t=setTimeout(()=>{if(el.scrollHeight<=el.clientHeight+20)return;s.timer=setInterval(()=>{if(s.pausing)return;el.scrollTop+=0.4;if(el.scrollTop+el.clientHeight>=el.scrollHeight-4){s.pausing=true;s.pauseT=setTimeout(()=>{el.scrollTop=0;s.unPauseT=setTimeout(()=>{s.pausing=false;},1500);},3000);}},16);},400);
+    return()=>{clearTimeout(t);clearInterval(s.timer);clearTimeout(s.pauseT);clearTimeout(s.unPauseT);};
+  },[progressMembers,visiblePanelId]);
   const h12=now.getHours()%12||12;
   const min=String(now.getMinutes()).padStart(2,'0');
   const ampm=now.getHours()>=12?'PM':'AM';
@@ -887,11 +939,14 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
   const activePanelId=centerPanels[centerIdx%Math.max(1,centerPanels.length)];
   useEffect(()=>{
     if(panelFirstRender.current){panelFirstRender.current=false;setVisiblePanelId(activePanelId);return;}
-    setPanelOpacity(0);
+    // Exit: fade + slide down
+    setPanelTx(true);setPanelOpacity(0);setPanelY(10);
     const t=setTimeout(()=>{
+      // Snap above (no transition) then enter
+      setPanelTx(false);setPanelY(-10);
       setVisiblePanelId(activePanelId);
-      requestAnimationFrame(()=>requestAnimationFrame(()=>setPanelOpacity(1)));
-    },300);
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{setPanelTx(true);setPanelOpacity(1);setPanelY(0);}));
+    },320);
     return()=>clearTimeout(t);
   },[activePanelId]);
 
@@ -1103,14 +1158,14 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
                         })}
                       </div>
                     )}
-                    <div style={{flex:1,display:'flex',flexDirection:'column',minHeight:0,opacity:panelOpacity,transition:'opacity 0.3s ease'}}>
+                    <div style={{flex:1,display:'flex',flexDirection:'column',minHeight:0,opacity:panelOpacity,transform:`translateY(${panelY}px)`,transition:panelTx?'opacity 0.32s cubic-bezier(.4,0,.2,1),transform 0.32s cubic-bezier(.4,0,.2,1)':'none'}}>
                     {visiblePanelId==='due_soon'&&(
                       <>
                         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
                           <WLabel>Vehicle Services</WLabel>
                           <span style={{fontSize:11,fontWeight:700,color:A.amber}}>{dueSoonVehicles.length} service{dueSoonVehicles.length===1?'':'s'}</span>
                         </div>
-                        <div style={{flex:1,overflowY:'auto',WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
+                        <div ref={vehicleScrollRef} style={{flex:1,overflowY:'auto',WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
                           {dueSoonVehicles.map(e=>{
                             const days=daysUntil(e.date);
                             const [svcName,vehName]=(e.title||'').split(' — ');
@@ -1134,7 +1189,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
                           <WLabel>Chores</WLabel>
                           <span style={{fontSize:11,fontWeight:700,color:A.amber}}>{dueC.length} due</span>
                         </div>
-                        <div style={{flex:1,overflowY:'auto',WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
+                        <div ref={choresScrollRef} style={{flex:1,overflowY:'auto',WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
                           {dueC.map(c=>(
                             <div key={c.id} onClick={()=>toggleChore(c.id)} style={{display:'flex',alignItems:'center',gap:12,padding:'9px 0',borderBottom:`1px solid ${D.sep}`,cursor:'pointer'}}>
                               <div style={{width:22,height:22,borderRadius:'50%',flexShrink:0,border:`1.5px solid ${D.t4}`,display:'flex',alignItems:'center',justifyContent:'center'}}/>
@@ -1148,7 +1203,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
                     {visiblePanelId==='countdowns'&&(
                       <>
                         <WLabel>Countdowns</WLabel>
-                        <div style={{flex:1,overflowY:'auto',marginTop:2}}>
+                        <div ref={cdScrollRef} style={{flex:1,overflowY:'auto',marginTop:2,WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
                           {upCD.map(c=>{
                             const days=daysUntil(c.date);
                             return(
@@ -1165,7 +1220,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
                     {visiblePanelId==='goals'&&(
                       <>
                         <WLabel>Goals</WLabel>
-                        <div style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:16,marginTop:2}}>
+                        <div ref={goalsScrollRef} style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:16,marginTop:2,WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
                           {goals.map(g=>{
                             const pct=g.progress_target>0?Math.min(100,Math.round((g.progress_current/g.progress_target)*100)):0;
                             const done=pct>=100;
@@ -1189,7 +1244,7 @@ function DisplayMode({onManage,events,chores,setChores,meals,grocery,setGrocery,
                     {visiblePanelId==='members'&&(
                       <>
                         <WLabel>Family Progress</WLabel>
-                        <div style={{flex:1,display:'flex',flexDirection:'column',gap:14,justifyContent:'center',overflowY:'auto',marginTop:2}}>
+                        <div ref={membersScrollRef} style={{flex:1,display:'flex',flexDirection:'column',gap:14,justifyContent:'center',overflowY:'auto',marginTop:2,WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
                           {progressMembers.map(m=>{
                             const pct=m.monthly_goal>0?Math.min(100,Math.round((m.points/m.monthly_goal)*100)):0;
                             const hit=m.points>=m.monthly_goal;
@@ -9295,7 +9350,7 @@ function App(){
   const [nightModeStart,setNightModeStart]=useState('23:00');
   const [nightModeEnd,setNightModeEnd]=useState('06:00');
   const [refreshMs,setRefreshMs]=useState(60000);
-  const [rotationMs,setRotationMs]=useState(10000);
+  const [rotationMs,setRotationMs]=useState(20000);
   const [weather,setWeather]=useState(null);
   const [wifiQrData,setWifiQrData]=useState(null);
   const [loading,setLoading]=useState(true);
@@ -9453,24 +9508,34 @@ function App(){
   // Presence overlay — lives in App so it fires in both display and manage modes
   const [presenceOverlay,setPresenceOverlay]=useState(null);
   const presenceTimerRef=useRef(null);
+  const lastArrivalRef=useRef({name:null,ts:0});
   const appMembersRef=useRef(members);
   useEffect(()=>{appMembersRef.current=members;},[members]);
   useEffect(()=>{
     if(loading||(!auth&&!kiosk)) return;
-    const es=new EventSource('/api/events/stream');
-    es.addEventListener('arrival',e=>{
-      try{
-        const d=JSON.parse(e.data);
-        if(d.ts&&Date.now()-d.ts>10*60*1000) return;
-        const first=(d.name||'').toLowerCase();
-        const m=appMembersRef.current.find(x=>x.name.toLowerCase()===first||x.name.toLowerCase().startsWith(first+' '));
-        const color=m?.color||'#34C759';
-        if(presenceTimerRef.current)clearTimeout(presenceTimerRef.current);
-        setPresenceOverlay({type:'arrival',name:d.name,color,ts:Date.now()});
-        presenceTimerRef.current=setTimeout(()=>setPresenceOverlay(null),120000);
-      }catch{}
-    });
-    return()=>es.close();
+    let es;let reconnectT;
+    const connect=()=>{
+      es=new EventSource('/api/events/stream');
+      es.addEventListener('arrival',e=>{
+        try{
+          const d=JSON.parse(e.data);
+          if(d.ts&&Date.now()-d.ts>10*60*1000) return;
+          // Debounce: ignore same-member arrival within 5s
+          const now=Date.now();
+          if((d.name||'').toLowerCase()===lastArrivalRef.current.name&&now-lastArrivalRef.current.ts<5000) return;
+          lastArrivalRef.current={name:(d.name||'').toLowerCase(),ts:now};
+          const first=(d.name||'').toLowerCase();
+          const m=appMembersRef.current.find(x=>x.name.toLowerCase()===first||x.name.toLowerCase().startsWith(first+' '));
+          const color=m?.color||'#34C759';
+          if(presenceTimerRef.current)clearTimeout(presenceTimerRef.current);
+          setPresenceOverlay({type:'arrival',name:d.name,color,ts:now});
+          presenceTimerRef.current=setTimeout(()=>setPresenceOverlay(null),120000);
+        }catch{}
+      });
+      es.onerror=()=>{es.close();clearTimeout(reconnectT);reconnectT=setTimeout(connect,4000);};
+    };
+    connect();
+    return()=>{es?.close();clearTimeout(reconnectT);};
   },[loading,auth,kiosk]);
   useEffect(()=>()=>{if(presenceTimerRef.current)clearTimeout(presenceTimerRef.current);},[]);
 
@@ -9520,11 +9585,11 @@ function App(){
     ?<DisplayMode onManage={goManage} events={events} chores={chores} setChores={setChores} meals={meals} grocery={grocery} setGrocery={setGrocery} countdowns={countdowns} photos={photos} clockFormat={clockFormat} weather={weather} nightModeStart={nightModeStart} nightModeEnd={nightModeEnd} goals={goals} notes={notes} polls={polls} rotationMs={rotationMs} wifiQrData={wifiQrData} quickActions={quickActions} members={members} packages={packages} setPackages={setPackages} messages={messages} setMessages={setMessages} appliances={appliances} consumables={consumables} maintenanceItems={maintenanceItems} pets={pets} subscriptions={subscriptions} pantry={pantry} projects={projects}/>
     :<ManageMode onDisplay={goDisplay} onLogout={handleLogout} events={events} setEvents={setEvents} chores={chores} setChores={setChores} grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} icsSources={icsSources} setIcsSources={setIcsSources} inboxCount={inboxCount} setInboxCount={setInboxCount} countdowns={countdowns} setCountdowns={setCountdowns} members={members} setMembers={setMembers} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} weather={weather} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} goals={goals} setGoals={setGoals} notes={notes} setNotes={setNotes} polls={polls} setPolls={setPolls} bookmarks={bookmarks} setBookmarks={setBookmarks} quickActions={quickActions} setQuickActions={setQuickActions} setRotationMs={setRotationMs} setWifiQrData={setWifiQrData} darkMode={darkMode} onDarkMode={handleDarkMode} packages={packages} setPackages={setPackages} messages={messages} setMessages={setMessages} recipes={recipes} setRecipes={setRecipes} bills={bills} setBills={setBills} payments={payments} setPayments={setPayments} vehicles={vehicles} setVehicles={setVehicles} appliances={appliances} setAppliances={setAppliances} consumables={consumables} setConsumables={setConsumables} pets={pets} setPets={setPets} contacts={contacts} setContacts={setContacts} maintenanceItems={maintenanceItems} setMaintenanceItems={setMaintenanceItems} budget={budget} setBudget={setBudget} subscriptions={subscriptions} setSubscriptions={setSubscriptions} projects={projects} setProjects={setProjects} pantry={pantry} setPantry={setPantry} isAdmin={!!auth&&!currentMember&&!kiosk}/>}
     {presenceOverlay&&(
-      <div style={{position:'fixed',bottom:24,right:24,zIndex:9999,display:'flex',alignItems:'center',gap:16,background:isDarkNow?'#1c1c1e':'#ffffff',borderRadius:20,padding:'16px 22px',border:`1.5px solid ${presenceOverlay.color}55`,boxShadow:`0 0 40px ${presenceOverlay.color}18,0 12px 32px rgba(0,0,0,0.35)`,animation:'presenceIn .35s cubic-bezier(.4,0,.2,1)',cursor:'pointer',maxWidth:340,overflow:'hidden'}}
+      <div style={{position:'fixed',bottom:24,right:24,zIndex:9999,display:'flex',alignItems:'center',gap:16,background:'rgba(18,18,22,0.88)',backdropFilter:'blur(18px)',WebkitBackdropFilter:'blur(18px)',borderRadius:20,padding:'16px 22px',border:`1.5px solid ${presenceOverlay.color}60`,boxShadow:`0 0 40px ${presenceOverlay.color}25,0 12px 32px rgba(0,0,0,0.5)`,animation:'presenceIn .35s cubic-bezier(.4,0,.2,1)',cursor:'pointer',maxWidth:340,overflow:'hidden'}}
         onClick={()=>{if(presenceTimerRef.current)clearTimeout(presenceTimerRef.current);setPresenceOverlay(null);}}>
-        <div style={{width:44,height:44,borderRadius:'50%',background:`${presenceOverlay.color}20`,border:`2px solid ${presenceOverlay.color}`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:20}}>🏠</div>
+        <div style={{width:44,height:44,borderRadius:'50%',background:`${presenceOverlay.color}25`,border:`2px solid ${presenceOverlay.color}`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:20}}>🏠</div>
         <div style={{flex:1,minWidth:0}}>
-          <div style={{fontSize:17,fontWeight:800,color:isDarkNow?'#f2f2f7':'#000000',letterSpacing:'-0.01em',lineHeight:1.2}}>{presenceOverlay.name}</div>
+          <div style={{fontSize:17,fontWeight:800,color:'#f2f2f7',letterSpacing:'-0.01em',lineHeight:1.2}}>{presenceOverlay.name}</div>
           <div style={{fontSize:12,color:presenceOverlay.color,fontWeight:600,marginTop:3}}>Welcome home!</div>
           <PresenceBar key={presenceOverlay.ts} duration={120000} color={presenceOverlay.color}/>
         </div>

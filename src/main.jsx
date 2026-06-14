@@ -765,56 +765,6 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
     },200);
     return()=>{clearTimeout(t);clearInterval(s.timer);clearTimeout(s.pauseT);clearTimeout(s.unPauseT);};
   },[events]);
-  const vehicleScrollRef=useRef(null);
-  const _vehicleScroll=useRef({timer:null,pauseT:null,unPauseT:null,pausing:false});
-  useEffect(()=>{
-    if(visiblePanelId!=='due_soon') return;
-    const el=vehicleScrollRef.current; const s=_vehicleScroll.current;
-    clearInterval(s.timer);clearTimeout(s.pauseT);clearTimeout(s.unPauseT);s.pausing=false;
-    if(!el) return; el.scrollTop=0;
-    const t=setTimeout(()=>{if(el.scrollHeight<=el.clientHeight+20)return;s.timer=setInterval(()=>{if(s.pausing)return;el.scrollTop+=0.4;if(el.scrollTop+el.clientHeight>=el.scrollHeight-4){s.pausing=true;s.pauseT=setTimeout(()=>{el.scrollTop=0;s.unPauseT=setTimeout(()=>{s.pausing=false;},1500);},3000);}},16);},400);
-    return()=>{clearTimeout(t);clearInterval(s.timer);clearTimeout(s.pauseT);clearTimeout(s.unPauseT);};
-  },[dueSoonVehicles,visiblePanelId]);
-  const choresScrollRef=useRef(null);
-  const _choresScroll=useRef({timer:null,pauseT:null,unPauseT:null,pausing:false});
-  useEffect(()=>{
-    if(visiblePanelId!=='chores') return;
-    const el=choresScrollRef.current; const s=_choresScroll.current;
-    clearInterval(s.timer);clearTimeout(s.pauseT);clearTimeout(s.unPauseT);s.pausing=false;
-    if(!el) return; el.scrollTop=0;
-    const t=setTimeout(()=>{if(el.scrollHeight<=el.clientHeight+20)return;s.timer=setInterval(()=>{if(s.pausing)return;el.scrollTop+=0.4;if(el.scrollTop+el.clientHeight>=el.scrollHeight-4){s.pausing=true;s.pauseT=setTimeout(()=>{el.scrollTop=0;s.unPauseT=setTimeout(()=>{s.pausing=false;},1500);},3000);}},16);},400);
-    return()=>{clearTimeout(t);clearInterval(s.timer);clearTimeout(s.pauseT);clearTimeout(s.unPauseT);};
-  },[dueC,visiblePanelId]);
-  const cdScrollRef=useRef(null);
-  const _cdScroll=useRef({timer:null,pauseT:null,unPauseT:null,pausing:false});
-  useEffect(()=>{
-    if(visiblePanelId!=='countdowns') return;
-    const el=cdScrollRef.current; const s=_cdScroll.current;
-    clearInterval(s.timer);clearTimeout(s.pauseT);clearTimeout(s.unPauseT);s.pausing=false;
-    if(!el) return; el.scrollTop=0;
-    const t=setTimeout(()=>{if(el.scrollHeight<=el.clientHeight+20)return;s.timer=setInterval(()=>{if(s.pausing)return;el.scrollTop+=0.4;if(el.scrollTop+el.clientHeight>=el.scrollHeight-4){s.pausing=true;s.pauseT=setTimeout(()=>{el.scrollTop=0;s.unPauseT=setTimeout(()=>{s.pausing=false;},1500);},3000);}},16);},400);
-    return()=>{clearTimeout(t);clearInterval(s.timer);clearTimeout(s.pauseT);clearTimeout(s.unPauseT);};
-  },[upCD,visiblePanelId]);
-  const goalsScrollRef=useRef(null);
-  const _goalsScroll=useRef({timer:null,pauseT:null,unPauseT:null,pausing:false});
-  useEffect(()=>{
-    if(visiblePanelId!=='goals') return;
-    const el=goalsScrollRef.current; const s=_goalsScroll.current;
-    clearInterval(s.timer);clearTimeout(s.pauseT);clearTimeout(s.unPauseT);s.pausing=false;
-    if(!el) return; el.scrollTop=0;
-    const t=setTimeout(()=>{if(el.scrollHeight<=el.clientHeight+20)return;s.timer=setInterval(()=>{if(s.pausing)return;el.scrollTop+=0.4;if(el.scrollTop+el.clientHeight>=el.scrollHeight-4){s.pausing=true;s.pauseT=setTimeout(()=>{el.scrollTop=0;s.unPauseT=setTimeout(()=>{s.pausing=false;},1500);},3000);}},16);},400);
-    return()=>{clearTimeout(t);clearInterval(s.timer);clearTimeout(s.pauseT);clearTimeout(s.unPauseT);};
-  },[goals,visiblePanelId]);
-  const membersScrollRef=useRef(null);
-  const _membersScroll=useRef({timer:null,pauseT:null,unPauseT:null,pausing:false});
-  useEffect(()=>{
-    if(visiblePanelId!=='members') return;
-    const el=membersScrollRef.current; const s=_membersScroll.current;
-    clearInterval(s.timer);clearTimeout(s.pauseT);clearTimeout(s.unPauseT);s.pausing=false;
-    if(!el) return; el.scrollTop=0;
-    const t=setTimeout(()=>{if(el.scrollHeight<=el.clientHeight+20)return;s.timer=setInterval(()=>{if(s.pausing)return;el.scrollTop+=0.4;if(el.scrollTop+el.clientHeight>=el.scrollHeight-4){s.pausing=true;s.pauseT=setTimeout(()=>{el.scrollTop=0;s.unPauseT=setTimeout(()=>{s.pausing=false;},1500);},3000);}},16);},400);
-    return()=>{clearTimeout(t);clearInterval(s.timer);clearTimeout(s.pauseT);clearTimeout(s.unPauseT);};
-  },[progressMembers,visiblePanelId]);
   const h12=now.getHours()%12||12;
   const min=String(now.getMinutes()).padStart(2,'0');
   const ampm=now.getHours()>=12?'PM':'AM';
@@ -1163,7 +1113,7 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
                           <WLabel>Vehicle Services</WLabel>
                           <span style={{fontSize:11,fontWeight:700,color:A.amber}}>{dueSoonVehicles.length} service{dueSoonVehicles.length===1?'':'s'}</span>
                         </div>
-                        <div ref={vehicleScrollRef} style={{flex:1,overflowY:'auto',WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
+                        <div style={{flex:1,overflowY:'auto',WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
                           {dueSoonVehicles.map(e=>{
                             const days=daysUntil(e.date);
                             const [svcName,vehName]=(e.title||'').split(' — ');
@@ -1187,7 +1137,7 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
                           <WLabel>Chores</WLabel>
                           <span style={{fontSize:11,fontWeight:700,color:A.amber}}>{dueC.length} due</span>
                         </div>
-                        <div ref={choresScrollRef} style={{flex:1,overflowY:'auto',WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
+                        <div style={{flex:1,overflowY:'auto',WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
                           {dueC.map(c=>(
                             <div key={c.id} onClick={()=>toggleChore(c.id)} style={{display:'flex',alignItems:'center',gap:12,padding:'9px 0',borderBottom:`1px solid ${D.sep}`,cursor:'pointer'}}>
                               <div style={{width:22,height:22,borderRadius:'50%',flexShrink:0,border:`1.5px solid ${D.t4}`,display:'flex',alignItems:'center',justifyContent:'center'}}/>
@@ -1201,7 +1151,7 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
                     {visiblePanelId==='countdowns'&&(
                       <>
                         <WLabel>Countdowns</WLabel>
-                        <div ref={cdScrollRef} style={{flex:1,overflowY:'auto',marginTop:2,WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
+                        <div style={{flex:1,overflowY:'auto',marginTop:2,WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
                           {upCD.map(c=>{
                             const days=daysUntil(c.date);
                             return(
@@ -1218,7 +1168,7 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
                     {visiblePanelId==='goals'&&(
                       <>
                         <WLabel>Goals</WLabel>
-                        <div ref={goalsScrollRef} style={{flex:1,overflowY:'auto',minHeight:0,display:'flex',flexDirection:'column',gap:16,marginTop:2,WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
+                        <div style={{flex:1,overflowY:'auto',minHeight:0,display:'flex',flexDirection:'column',gap:16,marginTop:2,WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
                           {goals.map(g=>{
                             const pct=g.progress_target>0?Math.min(100,Math.round((g.progress_current/g.progress_target)*100)):0;
                             const done=pct>=100;
@@ -1242,7 +1192,7 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
                     {visiblePanelId==='members'&&(
                       <>
                         <WLabel>Family Progress</WLabel>
-                        <div ref={membersScrollRef} style={{flex:1,display:'flex',flexDirection:'column',gap:14,overflowY:'auto',minHeight:0,marginTop:2,WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
+                        <div style={{flex:1,display:'flex',flexDirection:'column',gap:14,overflowY:'auto',minHeight:0,marginTop:2,WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
                           {progressMembers.map(m=>{
                             const pct=m.monthly_goal>0?Math.min(100,Math.round((m.points/m.monthly_goal)*100)):0;
                             const hit=m.points>=m.monthly_goal;

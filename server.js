@@ -4167,9 +4167,6 @@ app.delete('/api/school/:id/classes/:cid', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
-// ── SPA fallback ──────────────────────────────────────────────────────────────
-app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'dist', 'index.html')));
-
 // ── Arrival/departure tracking — prevents glitch-driven and reconnection-driven false arrivals ──
 // Two failure modes:
 //   1. GPS/Homey glitch: HA reports home→not_home→home in seconds. Without departure tracking,
@@ -4837,5 +4834,8 @@ app.get('/api/debug/homey-status', requireAdmin, (req, res) => {
     min_away_ms: MIN_AWAY_MS,
   });
 });
+
+// ── SPA fallback ──────────────────────────────────────────────────────────────
+app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'dist', 'index.html')));
 
 app.listen(PORT, () => console.log(`Kith running → http://localhost:${PORT}`));

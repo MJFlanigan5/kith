@@ -874,10 +874,20 @@ app.get('/api/ics/export', (req, res) => {
   if (!storedToken || req.query.token !== storedToken) return res.status(401).send('Unauthorized');
   const events = db.prepare("SELECT * FROM events WHERE source != 'bill' ORDER BY date").all();
   const esc = s => (s || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
+  // Times stored as "3:30 PM" — parse correctly before building ISO string
+  const parseTime12 = timeStr => {
+    const m = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+    if (!m) return { h: 0, min: 0 };
+    let h = parseInt(m[1]), min = parseInt(m[2]);
+    const ap = m[3].toUpperCase();
+    if (ap === 'PM' && h !== 12) h += 12;
+    if (ap === 'AM' && h === 12) h = 0;
+    return { h, min };
+  };
   const fmtDt = (dateStr, timeStr) => {
     if (!timeStr || timeStr === 'All day') return `DTSTART;VALUE=DATE:${dateStr.replace(/-/g, '')}`;
-    const [h, m] = timeStr.split(':').map(Number);
-    const d = new Date(`${dateStr}T${String(h).padStart(2,'0')}:${String(m||0).padStart(2,'0')}:00`);
+    const { h, min } = parseTime12(timeStr);
+    const d = new Date(`${dateStr}T${String(h).padStart(2,'0')}:${String(min).padStart(2,'0')}:00`);
     return `DTSTART:${d.toISOString().replace(/[-:]/g,'').split('.')[0]}Z`;
   };
   const fmtDtEnd = (dateStr, timeStr, duration) => {
@@ -886,9 +896,9 @@ app.get('/api/ics/export', (req, res) => {
       d.setDate(d.getDate() + 1);
       return `DTEND;VALUE=DATE:${localDate(d).replace(/-/g, '')}`;
     }
-    const [h, m] = timeStr.split(':').map(Number);
+    const { h, min } = parseTime12(timeStr);
     const durH = parseInt(duration) || 1;
-    const d = new Date(`${dateStr}T${String(h).padStart(2,'0')}:${String(m||0).padStart(2,'0')}:00`);
+    const d = new Date(`${dateStr}T${String(h).padStart(2,'0')}:${String(min).padStart(2,'0')}:00`);
     d.setHours(d.getHours() + durH);
     return `DTEND:${d.toISOString().replace(/[-:]/g,'').split('.')[0]}Z`;
   };
@@ -1340,8 +1350,10 @@ app.post('/api/members', requireAdmin, (req, res) => {
 
 app.delete('/api/members/:id', requireAdmin, (req, res) => {
   const id = Number(req.params.id);
+  db.prepare("DELETE FROM events WHERE member_id=? AND source='birthday'").run(id);
   db.prepare('UPDATE events SET member_id=NULL WHERE member_id=?').run(id);
   db.prepare('DELETE FROM chore_completions WHERE member_id=?').run(id);
+  db.prepare('DELETE FROM member_health WHERE member_id=?').run(id);
   db.prepare('DELETE FROM family_members WHERE id=?').run(id);
   res.json({ ok: true });
 });

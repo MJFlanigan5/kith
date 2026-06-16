@@ -1379,7 +1379,11 @@ app.put('/api/members/:id', requireAdmin, (req, res) => {
     const ins = db.prepare('INSERT INTO events (title,date,time,color,source,member_id,calendar,duration,recurring_rule) VALUES (?,?,?,?,?,?,?,?,?)');
     const isLeapYear = y => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
     const today = new Date();
-    for (let y = today.getFullYear(); y <= today.getFullYear() + 2; y++) {
+    const todayStr = localDate(today);
+    const startYear = (localDate(new Date(today.getFullYear(), bMonth - 1, bDay)) < todayStr)
+      ? today.getFullYear() + 1
+      : today.getFullYear();
+    for (let y = startYear; y <= startYear + 2; y++) {
       const effectiveDay = (bMonth === 2 && bDay === 29 && !isLeapYear(y)) ? 28 : bDay;
       const d = new Date(y, bMonth - 1, effectiveDay);
       ins.run(`${name}'s Birthday`, localDate(d), 'All day', color, 'birthday', m.id, 'kith', '1h', 'Annually');

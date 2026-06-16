@@ -890,11 +890,16 @@ app.get('/api/ics/export', (req, res) => {
     const d = new Date(`${dateStr}T${String(h).padStart(2,'0')}:${String(min).padStart(2,'0')}:00`);
     return `DTSTART:${d.toISOString().replace(/[-:]/g,'').split('.')[0]}Z`;
   };
-  const fmtDtEnd = (dateStr, timeStr, duration) => {
+  const fmtDtEnd = (dateStr, timeStr, endTimeStr, duration) => {
     if (!timeStr || timeStr === 'All day') {
       const d = new Date(dateStr + 'T12:00:00');
       d.setDate(d.getDate() + 1);
       return `DTEND;VALUE=DATE:${localDate(d).replace(/-/g, '')}`;
+    }
+    if (endTimeStr) {
+      const { h, min } = parseTime12(endTimeStr);
+      const d = new Date(`${dateStr}T${String(h).padStart(2,'0')}:${String(min).padStart(2,'0')}:00`);
+      return `DTEND:${d.toISOString().replace(/[-:]/g,'').split('.')[0]}Z`;
     }
     const { h, min } = parseTime12(timeStr);
     const durH = parseInt(duration) || 1;
@@ -913,7 +918,7 @@ app.get('/api/ics/export', (req, res) => {
     const stamp = (ev.created_at || new Date().toISOString()).replace(/[-:]/g,'').replace(' ','T').split('.')[0] + 'Z';
     cal.push('BEGIN:VEVENT');
     cal.push(fmtDt(ev.date, ev.time));
-    cal.push(fmtDtEnd(ev.date, ev.time, ev.duration));
+    cal.push(fmtDtEnd(ev.date, ev.time, ev.end_time, ev.duration));
     cal.push(`SUMMARY:${esc(ev.title)}`);
     if (ev.notes) cal.push(`DESCRIPTION:${esc(ev.notes)}`);
     cal.push(`UID:${ev.id}@kith`);
@@ -1372,9 +1377,11 @@ app.put('/api/members/:id', requireAdmin, (req, res) => {
   if (birthday && /^\d{4}-\d{2}-\d{2}$/.test(birthday)) {
     const [, bMonth, bDay] = birthday.split('-').map(Number);
     const ins = db.prepare('INSERT INTO events (title,date,time,color,source,member_id,calendar,duration,recurring_rule) VALUES (?,?,?,?,?,?,?,?,?)');
+    const isLeapYear = y => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
     const today = new Date();
     for (let y = today.getFullYear(); y <= today.getFullYear() + 2; y++) {
-      const d = new Date(y, bMonth - 1, bDay);
+      const effectiveDay = (bMonth === 2 && bDay === 29 && !isLeapYear(y)) ? 28 : bDay;
+      const d = new Date(y, bMonth - 1, effectiveDay);
       ins.run(`${name}'s Birthday`, localDate(d), 'All day', color, 'birthday', m.id, 'kith', '1h', 'Annually');
     }
   }

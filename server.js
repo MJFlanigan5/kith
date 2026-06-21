@@ -251,7 +251,7 @@ function wmoInfo(code) {
   return ['🌡️', '--'];
 }
 
-app.get('/api/weather/geocode', async (req, res) => {
+app.get('/api/weather/geocode', requireAuth, async (req, res) => {
   const { city } = req.query;
   if (!city) return res.status(400).json({ error: 'city required' });
   try {
@@ -269,7 +269,7 @@ app.get('/api/weather/geocode', async (req, res) => {
   }
 });
 
-app.get('/api/weather', async (req, res) => {
+app.get('/api/weather', requireAuth, async (req, res) => {
   if (_weatherCache && Date.now() - _weatherCacheAt < WEATHER_TTL) {
     return res.json(_weatherCache);
   }
@@ -310,7 +310,7 @@ app.get('/api/weather', async (req, res) => {
   }
 });
 
-app.get('/api/uptime', (req, res) => res.json({ seconds: Math.floor(process.uptime()) }));
+app.get('/api/uptime', requireAuth, (req, res) => res.json({ seconds: Math.floor(process.uptime()) }));
 
 // ── Routes: Auth ──────────────────────────────────────────────────────────────
 
@@ -597,7 +597,9 @@ app.post('/api/chores/:id/photo', requireAuth, (req, res) => {
   try {
     fs.writeFileSync(path.join(PHOTOS_DIR, safe), Buffer.from(data.split(',')[1], 'base64'));
     const memberId = req.user.sub === 'admin' ? null : Number(req.user.sub);
-    const completion = db.prepare("SELECT id FROM chore_completions WHERE chore_id=? ORDER BY completed_at DESC LIMIT 1").get(id);
+    const completion = memberId
+      ? db.prepare("SELECT id FROM chore_completions WHERE chore_id=? AND member_id=? ORDER BY completed_at DESC LIMIT 1").get(id, memberId)
+      : db.prepare("SELECT id FROM chore_completions WHERE chore_id=? ORDER BY completed_at DESC LIMIT 1").get(id);
     if (completion) {
       db.prepare("UPDATE chore_completions SET photo_filename=? WHERE id=?").run(safe, completion.id);
     }
@@ -738,8 +740,8 @@ app.post('/api/meals/suggest', requireAuth, async (req, res) => {
   try {
     const pantry = db.prepare('SELECT name, quantity, unit FROM pantry_items WHERE quantity > 0').all();
     const recent_meals = db.prepare("SELECT DISTINCT meal FROM meals WHERE meal != '' AND meal IS NOT NULL").all();
-    const dietaryGoal = g('dietary_goal') || '';
-    const dietaryRestrictions = g('dietary_restrictions') || '';
+    const dietaryGoal = gs('dietary_goal') || '';
+    const dietaryRestrictions = gs('dietary_restrictions') || '';
     let dietaryClause = '';
     if (dietaryGoal) dietaryClause += ` Goal: ${dietaryGoal}.`;
     if (dietaryRestrictions) dietaryClause += ` Dietary restrictions: ${dietaryRestrictions}. Strictly honor these — never suggest meals that violate them.`;
@@ -831,6 +833,7 @@ app.post('/api/ics/sources', requireAdmin, async (req, res) => {
   const { name, color } = req.body;
   const url = (req.body.url || '').replace(/^webcal:\/\//i, 'https://');
   if (!name?.trim() || !url.trim()) return res.status(400).json({ error: 'name and url required' });
+  if (!/^https?:\/\//i.test(url)) return res.status(400).json({ error: 'url must start with http:// or https://' });
   try {
     const r = db.prepare('INSERT INTO ics_sources (name,url,color) VALUES (?,?,?)').run(name, url, color||'#3B82F6');
     const source = db.prepare('SELECT * FROM ics_sources WHERE id=?').get(r.lastInsertRowid);
@@ -844,6 +847,7 @@ app.post('/api/ics/sources', requireAdmin, async (req, res) => {
 app.put('/api/ics/sources/:id', requireAdmin, async (req, res) => {
   const { name, url, color } = req.body || {};
   if (!name?.trim() || !url?.trim()) return res.status(400).json({ error: 'name and url required' });
+  if (!/^https?:\/\//i.test(url)) return res.status(400).json({ error: 'url must start with http:// or https://' });
   db.prepare('UPDATE ics_sources SET name=?,url=?,color=? WHERE id=?').run(name.trim(), url.trim(), color||'#3B82F6', req.params.id);
   const source = db.prepare('SELECT * FROM ics_sources WHERE id=?').get(req.params.id);
   try {
@@ -1134,7 +1138,7 @@ const ESPN_PATHS = {
   nascar:'racing/nascar', f1:'racing/f1',
 };
 
-app.get('/api/sports', async (req, res) => {
+app.get('/api/sports', requireAuth, async (req, res) => {
   const getSetting = key => db.prepare('SELECT value FROM settings WHERE key=?').get(key)?.value;
   const leagues = (getSetting('sports_leagues') || 'nba,nfl,mlb,nhl').split(',').filter(Boolean);
   const customPaths = (getSetting('custom_sport_paths') || '').split(',').map(s=>s.trim()).filter(Boolean);
@@ -1193,7 +1197,7 @@ function parseRSS(xml) {
   return items;
 }
 
-app.get('/api/news', async (req, res) => {
+app.get('/api/news', requireAuth, async (req, res) => {
   if (_newsCache && Date.now() - _newsCacheAt < NEWS_TTL) return res.json(_newsCache);
   const getSetting = key => db.prepare('SELECT value FROM settings WHERE key=?').get(key)?.value;
   const feedUrls = (getSetting('news_feed') || 'https://feeds.npr.org/1001/rss.xml')
@@ -1313,6 +1317,7 @@ app.get('/api/countdowns', requireAuth, (req, res) => {
 app.post('/api/countdowns', requireAuth, (req, res) => {
   const { label, date, emoji = '🎉' } = req.body;
   if (!label?.trim() || !date) return res.status(400).json({ error: 'label and date are required' });
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ error: 'date must be YYYY-MM-DD' });
   const r = db.prepare('INSERT INTO countdowns (label,date,emoji) VALUES (?,?,?)').run(label.trim(), date, emoji);
   res.json({ id: r.lastInsertRowid, label: label.trim(), date, emoji });
 });
@@ -1322,6 +1327,7 @@ app.put('/api/countdowns/:id', requireAuth, (req, res) => {
   if (!c) return res.status(404).json({ error: 'Not found' });
   const label = req.body?.label?.trim() || c.label;
   const date  = req.body?.date  || c.date;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ error: 'date must be YYYY-MM-DD' });
   const emoji = req.body?.emoji || c.emoji;
   db.prepare('UPDATE countdowns SET label=?,date=?,emoji=? WHERE id=?').run(label, date, emoji, c.id);
   res.json({ id: c.id, label, date, emoji });
@@ -1793,7 +1799,7 @@ app.post('/api/homey/discover', requireAdmin, async (req, res) => {
   res.json({ ok: true, users, thermostats, allDevices });
 });
 
-app.get('/api/ha/pull', async (req, res) => {
+app.get('/api/ha/pull', requireAuth, async (req, res) => {
   const get = k => db.prepare(`SELECT value FROM settings WHERE key=?`).get(k)?.value;
   const haUrl = get('ha_url'); const haToken = get('ha_token');
   const homeyUrl = get('homey_url'); const homeyToken = get('homey_token');
@@ -1862,7 +1868,7 @@ app.put('/api/quick-actions', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
-app.post('/api/quick-actions/trigger', requireAuth, async (req, res) => {
+app.post('/api/quick-actions/trigger', requireAdmin, async (req, res) => {
   const { id } = req.body || {};
   const raw = db.prepare("SELECT value FROM settings WHERE key='quick_actions'").get()?.value;
   let actions; try { actions = JSON.parse(raw || '[]'); } catch { actions = []; }
@@ -1895,8 +1901,12 @@ async function _wFetch(key, ttlMs, fn) {
   _wInflight[key] = (async () => {
     try {
       const data = await fn();
-      const cacheable = data !== null && data !== undefined;
-      if (cacheable) { _wCache[key] = { data, at: Date.now() }; delete _wErrors[key]; }
+      if (data !== null && data !== undefined) {
+        _wCache[key] = { data, at: Date.now() }; delete _wErrors[key];
+      } else {
+        // Cache null with a short TTL (60s) to avoid hammering APIs on misconfigured widgets
+        _wCache[key] = { data: null, at: Date.now() - ttlMs + 60000 };
+      }
       return data;
     } catch(e) {
       _wErrors[key] = e?.message || String(e);
@@ -2642,10 +2652,12 @@ app.get('/api/widgets/data', requireAuth, async (req, res) => {
   // Evict stale dated cache keys (wotd: daily, compliment: hourly) to prevent unbounded memory growth
   const _today = localDate(); // local date — avoids word changing at UTC midnight (8 PM Eastern etc.)
   const _hour  = new Date().toISOString().slice(0, 13);
+  const _uptimeKey = `uptime:${gs('uptime_urls')}`;
   for (const k of Object.keys(_wCache)) {
     if ((k.startsWith('wotd:') && k !== `wotd:${_today}`) ||
         (k.startsWith('compliment:') && k !== `compliment:${_hour}`) ||
-        (k.startsWith('quote:') && k !== `quote:${_today}`)) {
+        (k.startsWith('quote:') && k !== `quote:${_today}`) ||
+        (k.startsWith('uptime:') && k !== _uptimeKey)) {
       delete _wCache[k]; delete _wErrors[k];
     }
   }
@@ -2742,7 +2754,7 @@ app.get('/api/widgets/debug', requireAdmin, (req, res) => {
 // ── Routes: Music (Last.fm now-playing) ──────────────────────────────────────
 let _lastfmCache = null; let _lastfmCacheAt = 0;
 
-app.get('/api/plex/thumb', async (req, res) => {
+app.get('/api/plex/thumb', requireAuth, async (req, res) => {
   const plexUrl = gs('plex_url');
   const plexToken = gs('plex_token');
   if (!plexUrl || !plexToken) return res.status(404).end();
@@ -2768,7 +2780,7 @@ app.get('/api/plex/thumb', async (req, res) => {
   } catch { res.status(502).end(); }
 });
 
-app.get('/api/music/now-playing', async (req, res) => {
+app.get('/api/music/now-playing', requireAuth, async (req, res) => {
   try {
     if (_lastfmCache && Date.now() - _lastfmCacheAt < 8000) return res.json(_lastfmCache);
     // HA media player takes priority over Last.fm
@@ -3045,21 +3057,25 @@ app.post('/api/email/inbound', async (req, res) => {
     callAiForBill(subject || '', body || '').catch(() => null),
   ]);
 
-  const inboxDup = db.prepare("SELECT id FROM inbox WHERE subject=? OR (event_name=? AND event_date=? AND event_name!='')").get(subject || '', event_name, event_date);
-  if (!inboxDup) {
-    db.prepare('INSERT INTO inbox (subject,event_name,event_date,event_time,recurrence,confidence) VALUES (?,?,?,?,?,?)')
-      .run(subject || '', event_name, event_date, event_time, recurrence, confidence);
-  }
+  db.transaction(() => {
+    const inboxDup = db.prepare("SELECT id FROM inbox WHERE subject=? OR (event_name=? AND event_date=? AND event_name!='')").get(subject || '', event_name, event_date);
+    if (!inboxDup) {
+      db.prepare('INSERT INTO inbox (subject,event_name,event_date,event_time,recurrence,confidence) VALUES (?,?,?,?,?,?)')
+        .run(subject || '', event_name, event_date, event_time, recurrence, confidence);
+    }
+  })();
 
   if (pkg?.is_shipping) {
-    const pkgExists = pkg.tracking_number
-      ? db.prepare('SELECT id FROM packages WHERE tracking_number=?').get(pkg.tracking_number)
-      : db.prepare('SELECT id FROM packages WHERE source_subject=?').get(subject || '');
-    if (!pkgExists) {
-      db.prepare('INSERT INTO packages (carrier,tracking_number,description,expected_date,source_subject) VALUES (?,?,?,?,?)')
-        .run(pkg.carrier || '', pkg.tracking_number || '', pkg.description || '', pkg.expected_date || '', subject || '');
-      broadcastSSE('packages', { action: 'reload' });
-    }
+    db.transaction(() => {
+      const pkgExists = pkg.tracking_number
+        ? db.prepare('SELECT id FROM packages WHERE tracking_number=?').get(pkg.tracking_number)
+        : db.prepare('SELECT id FROM packages WHERE source_subject=?').get(subject || '');
+      if (!pkgExists) {
+        db.prepare('INSERT INTO packages (carrier,tracking_number,description,expected_date,source_subject) VALUES (?,?,?,?,?)')
+          .run(pkg.carrier || '', pkg.tracking_number || '', pkg.description || '', pkg.expected_date || '', subject || '');
+        broadcastSSE('packages', { action: 'reload' });
+      }
+    })();
   }
 
   if (bill?.is_bill && bill.payee) {
@@ -3320,7 +3336,7 @@ function computeConsumable(item) {
   return { ...item, next_due: nextStr, days_remaining: days, status: days < 0 ? 'overdue' : days <= 7 ? 'due_soon' : 'ok' };
 }
 
-app.get('/api/home/appliances', (req, res) => {
+app.get('/api/home/appliances', requireAuth, (req, res) => {
   const rows = db.prepare('SELECT * FROM home_appliances ORDER BY CASE WHEN warranty_date=\'\' THEN 1 ELSE 0 END, warranty_date, name').all();
   res.json(rows);
 });
@@ -3346,7 +3362,7 @@ app.delete('/api/home/appliances/:id', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-app.get('/api/home/consumables', (req, res) => {
+app.get('/api/home/consumables', requireAuth, (req, res) => {
   const rows = db.prepare('SELECT * FROM home_consumables').all().map(computeConsumable);
   rows.sort((a, b) => {
     if (a.days_remaining === null && b.days_remaining === null) return 0;
@@ -3369,6 +3385,8 @@ app.put('/api/home/consumables/:id', requireAuth, (req, res) => {
   const c = db.prepare('SELECT * FROM home_consumables WHERE id=?').get(Number(req.params.id));
   if (!c) return res.status(404).json({ error: 'Not found' });
   const { name, location, interval_days, last_replaced, notes } = req.body || {};
+  if (interval_days != null && (isNaN(Number(interval_days)) || Number(interval_days) < 1))
+    return res.status(400).json({ error: 'interval_days must be a positive number' });
   db.prepare('UPDATE home_consumables SET name=?,location=?,interval_days=?,last_replaced=?,notes=? WHERE id=?')
     .run(name?.trim() || c.name, location ?? c.location, interval_days != null ? Number(interval_days) : c.interval_days, last_replaced ?? c.last_replaced, notes ?? c.notes, c.id);
   res.json(computeConsumable(db.prepare('SELECT * FROM home_consumables WHERE id=?').get(c.id)));
@@ -3410,7 +3428,7 @@ function computeMaintenance(item) {
   return { ...item, next_due: nextDue, days_remaining: homeDaysUntil(nextDue), status };
 }
 
-app.get('/api/home/maintenance', (req, res) => {
+app.get('/api/home/maintenance', requireAuth, (req, res) => {
   const statusOrder = { overdue: 0, due_this_month: 1, upcoming: 2, done_this_year: 3 };
   const rows = db.prepare('SELECT * FROM home_maintenance ORDER BY month').all().map(computeMaintenance);
   rows.sort((a, b) => (statusOrder[a.status] ?? 4) - (statusOrder[b.status] ?? 4) || a.month - b.month);
@@ -3681,15 +3699,20 @@ app.post('/api/budget/import/preview', requireAdmin, (req, res) => {
 app.post('/api/budget/import/confirm', requireAdmin, (req, res) => {
   const { rows, category_id } = req.body || {};
   if (!Array.isArray(rows) || !category_id) return res.status(400).json({ error: 'rows and category_id required' });
+  const validRows = rows.filter(r => {
+    const amt = Number(r.amount);
+    return !isNaN(amt) && /^\d{4}-\d{2}-\d{2}$/.test(r.date || '');
+  });
+  if (validRows.length === 0) return res.status(400).json({ error: 'No valid rows (each needs numeric amount and YYYY-MM-DD date)' });
   const ins = db.prepare('INSERT INTO budget_entries (category_id,amount,note,date) VALUES (?,?,?,?)');
   const insert = db.transaction(list => { for (const r of list) ins.run(Number(category_id), Number(r.amount), r.note||'', r.date); });
-  insert(rows);
-  res.json({ imported: rows.length });
+  insert(validRows);
+  res.json({ imported: validRows.length });
 });
 
 // ── Routes: Messages ──────────────────────────────────────────────────────────
 
-app.get('/api/messages', (req, res) => {
+app.get('/api/messages', requireAuth, (req, res) => {
   const rows = db.prepare("SELECT * FROM messages WHERE expires_at > datetime('now') ORDER BY created_at DESC").all();
   res.json(rows);
 });
@@ -3911,7 +3934,7 @@ cron.schedule('0 18 * * 0', async () => {
 });
 
 // ── Routes: Emergency info ────────────────────────────────────────────────────
-app.get('/api/emergency', (req, res) => {
+app.get('/api/emergency', requireAuth, (req, res) => {
   const rows = db.prepare('SELECT key,value FROM emergency_info').all();
   const out = {};
   for (const r of rows) out[r.key] = r.value || '';

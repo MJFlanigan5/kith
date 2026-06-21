@@ -1012,7 +1012,7 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
           <Widget style={{flex:1}}>
             <WLabel>Upcoming</WLabel>
             {agendaDays.slice(0,2).map(({label,date})=>{
-              const evs=events.filter(e=>e.date===date);
+              const evs=displayEvents.filter(e=>e.date===date);
               return(
                 <div key={date} style={{marginBottom:10}}>
                   <div style={{fontSize:10,fontWeight:700,color:D.t3,marginBottom:6,textTransform:'uppercase',letterSpacing:'.08em'}}>{label}</div>
@@ -2210,7 +2210,7 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
 }
 
 /* ── Dashboard ───────────────────────────────────────────────────────── */
-function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weather,clockFormat='12h',quickActions=[],bills=[],payments=[],projects=[],subscriptions=[],pantry=[]}){
+function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weather,clockFormat='12h',quickActions=[],bills=[],payments=[],projects=[],subscriptions=[],pantry=[],toastAdd=()=>{}}){
   const isMobile=useIsMobile();
   const now=useClock();
   const [news,setNews]=useState([]);
@@ -2724,7 +2724,7 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
     if(r?.error){toastAdd('Failed to delete event','red');return;}
     if(scope==='one') setEvents(p=>p.filter(e=>e.id!==id));
     else if(scope==='all'){ const ev=events.find(e=>e.id===id); const sid=String(ev?.external_id||id); setEvents(p=>p.filter(e=>String(e.id)!==sid&&String(e.external_id)!==sid)); }
-    else if(scope==='future'){ const ev=events.find(e=>e.id===id); const sid=String(ev?.external_id||id); setEvents(p=>p.filter(e=>!((String(e.id)===sid||String(e.external_id)===sid)&&e.date>=ev.date))); }
+    else if(scope==='future'){ const ev=events.find(e=>e.id===id); if(!ev){setEvents(p=>p.filter(e=>String(e.id)!==String(id)));} else{ const sid=String(ev.external_id||id); setEvents(p=>p.filter(e=>!((String(e.id)===sid||String(e.external_id)===sid)&&e.date>=ev.date))); } }
     setSelectedEvent(null);
     setDeleteConfirm(false);
     toastAdd('Event deleted','blue');
@@ -8753,7 +8753,7 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
   const nav=isKidMode?allNav.filter(item=>KID_SCREENS.has(item.id)):allNav;
 
   const screens={
-    dashboard:  <DashboardScreen events={events} setEvents={setEvents} chores={chores} grocery={grocery} meals={meals} countdowns={countdowns} weather={weather} clockFormat={clockFormat} quickActions={quickActions} bills={bills} payments={payments} projects={projects} subscriptions={subscriptions} pantry={pantry}/>,
+    dashboard:  <DashboardScreen events={events} setEvents={setEvents} chores={chores} grocery={grocery} meals={meals} countdowns={countdowns} weather={weather} clockFormat={clockFormat} quickActions={quickActions} bills={bills} payments={payments} projects={projects} subscriptions={subscriptions} pantry={pantry} toastAdd={toastAdd}/>,
     calendar:   <CalendarScreen events={events} setEvents={setEvents} icsSources={icsSources} toastAdd={toastAdd} members={members} clockFormat={clockFormat}/>,
     chores:     <ChoresScreen chores={chores} setChores={setChores} goals={goals} members={members} toastAdd={toastAdd}/>,
     grocery:    <GroceryScreen grocery={grocery} setGrocery={setGrocery} meals={meals} setMeals={setMeals} recipes={recipes} toastAdd={toastAdd}/>,

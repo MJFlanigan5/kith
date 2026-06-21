@@ -2259,16 +2259,18 @@ function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weath
   const currentYear=String(now.getFullYear());
   const paidSet=useMemo(()=>new Set((payments||[]).map(p=>`${p.bill_id}_${p.period}`)),[payments]);
   const isPaidBill=b=>paidSet.has(`${b.id}_${(b.recurrence==='monthly'?currentPeriod:b.recurrence==='annual'?currentYear:b.due_date)}`);
+  // Use today's date number only — not `now` (which ticks every second) — so this memo doesn't recompute 86400x/day
+  const todayDate=now.getDate();
   const billsDueSoon=useMemo(()=>(bills||[]).filter(b=>{
     if(!b.active||isPaidBill(b)) return false;
-    if(b.recurrence==='monthly'){const d=b.due_day-now.getDate();return d>=0&&d<=7;}
+    if(b.recurrence==='monthly'){const d=b.due_day-todayDate;return d>=0&&d<=7;}
     if(b.due_date){const d=daysUntil(b.due_date);return d>=0&&d<=7;}
     return false;
   }).sort((a,b)=>{
-    const da=a.recurrence==='monthly'?a.due_day-now.getDate():daysUntil(a.due_date);
-    const db=b.recurrence==='monthly'?b.due_day-now.getDate():daysUntil(b.due_date);
+    const da=a.recurrence==='monthly'?a.due_day-todayDate:daysUntil(a.due_date);
+    const db=b.recurrence==='monthly'?b.due_day-todayDate:daysUntil(b.due_date);
     return da-db;
-  }),[bills,paidSet,now]);
+  }),[bills,paidSet,todayDate]);
 
   const projectsDueSoon=useMemo(()=>(projects||[]).filter(p=>{
     if(p.status==='done'||!p.due_date) return false;
@@ -2806,6 +2808,8 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
                     const slotH=parseInt(t)+(t.includes('PM')&&!t.startsWith('12')?12:0);
                     const evs=filteredEvents.filter(e=>{
                       if(e.date!==d.date||!e.time||e.time==='All day') return false;
+                      // Skip times with no AM/PM — they can't be reliably placed in the grid
+                      if(!e.time.toUpperCase().includes('AM')&&!e.time.toUpperCase().includes('PM')) return false;
                       const eh=parseInt(e.time);
                       const eam=e.time.toUpperCase().includes('AM');
                       const epm=e.time.toUpperCase().includes('PM')&&!e.time.startsWith('12');

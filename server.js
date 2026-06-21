@@ -361,7 +361,7 @@ app.put('/api/auth/admin/pin', requireAdmin, async (req, res) => {
 app.get('/api/auth/me', requireAuth, (req, res) => res.json(req.user));
 
 // ── Routes: Events ────────────────────────────────────────────────────────────
-app.get('/api/events', (req, res) => {
+app.get('/api/events', requireAuth, (req, res) => {
   const events = db.prepare('SELECT * FROM events ORDER BY date, time').all();
   const pkgs = db.prepare("SELECT * FROM packages WHERE delivered=0 AND expected_date != '' ORDER BY expected_date").all();
   const pkgEvents = pkgs.map(p => ({
@@ -494,7 +494,7 @@ app.delete('/api/events/:id', requireAuth, (req, res) => {
 });
 
 // ── Routes: Chores ────────────────────────────────────────────────────────────
-app.get('/api/chores', (req, res) => {
+app.get('/api/chores', requireAuth, (req, res) => {
   updateChoreStatuses();
   res.json(db.prepare(`
     SELECT c.*, fm.name as member_name, fm.color as member_color, fm.initials as member_initials
@@ -503,7 +503,7 @@ app.get('/api/chores', (req, res) => {
   `).all());
 });
 
-app.get('/api/chores/leaderboard', (req, res) => {
+app.get('/api/chores/leaderboard', requireAuth, (req, res) => {
   const weekStart = new Date();
   weekStart.setDate(weekStart.getDate() - weekStart.getDay());
   weekStart.setHours(0,0,0,0);
@@ -632,7 +632,7 @@ app.get('/api/chores/:id/history', requireAuth, (req, res) => {
 });
 
 // ── Routes: Grocery ───────────────────────────────────────────────────────────
-app.get('/api/grocery', (req, res) => {
+app.get('/api/grocery', requireAuth, (req, res) => {
   res.json(db.prepare('SELECT * FROM grocery ORDER BY checked, category, created_at').all());
 });
 
@@ -714,7 +714,7 @@ app.post('/api/grocery/from-meals', requireAuth, (req, res) => {
 });
 
 // ── Routes: Meals ─────────────────────────────────────────────────────────────
-app.get('/api/meals', (req, res) => {
+app.get('/api/meals', requireAuth, (req, res) => {
   const order = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
   const rows = db.prepare('SELECT * FROM meals').all();
   rows.sort((a,b) => order.indexOf(a.day) - order.indexOf(b.day));
@@ -758,7 +758,7 @@ app.post('/api/meals/suggest', requireAuth, async (req, res) => {
 });
 
 // ── Routes: Inbox ─────────────────────────────────────────────────────────────
-app.get('/api/inbox', (req, res) => {
+app.get('/api/inbox', requireAuth, (req, res) => {
   res.json({
     pending: db.prepare('SELECT * FROM inbox ORDER BY created_at DESC').all(),
     recent:  db.prepare('SELECT * FROM recently_added ORDER BY added_at DESC LIMIT 10').all(),
@@ -956,7 +956,7 @@ app.post('/api/push/test', requireAuth, async (req, res) => {
 
 // ── Routes: Settings ──────────────────────────────────────────────────────────
 const SETTINGS_SENSITIVE = new Set(['email_webhook_secret','anthropic_api_key','ai_api_key','beehiiv_api_key','youtube_api_key','etsy_api_key','teslemetry_api_key','aviationstack_api_key','lastfm_api_key','nextdns_api_key','beszel_user','beszel_pass','jwt_secret','vapid_public','vapid_private','admin_pin_hash','resend_api_key','ha_webhook_secret','smart_home_token','ha_token','homey_token','plex_token','spotify_refresh_token','moen_pass','unifi_pass','wifi_password','smtp_pass','imap_pass','smtp_user','imap_user']);
-app.get('/api/settings', (req, res) => {
+app.get('/api/settings', requireAuth, (req, res) => {
   const rows = db.prepare('SELECT key,value FROM settings').all();
   res.json(Object.fromEntries(rows.filter(r=>!SETTINGS_SENSITIVE.has(r.key)).map(r=>[r.key,r.value])));
 });
@@ -1306,7 +1306,7 @@ cron.schedule('0 */6 * * *', async () => {
 });
 
 // ── Routes: Countdowns ───────────────────────────────────────────────────────
-app.get('/api/countdowns', (req, res) => {
+app.get('/api/countdowns', requireAuth, (req, res) => {
   res.json(db.prepare('SELECT * FROM countdowns ORDER BY date').all());
 });
 
@@ -1333,7 +1333,7 @@ app.delete('/api/countdowns/:id', requireAuth, (req, res) => {
 });
 
 // ── Routes: Family Members ────────────────────────────────────────────────────
-app.get('/api/members', (req, res) => {
+app.get('/api/members', requireAuth, (req, res) => {
   res.json(db.prepare('SELECT * FROM family_members ORDER BY created_at').all());
 });
 
@@ -1399,7 +1399,7 @@ app.put('/api/members/:id/goal', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
-app.get('/api/members/progress', (req, res) => {
+app.get('/api/members/progress', requireAuth, (req, res) => {
   const now = new Date();
   const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
   const members = db.prepare('SELECT * FROM family_members ORDER BY created_at').all();
@@ -1416,7 +1416,7 @@ app.get('/api/members/progress', (req, res) => {
 });
 
 // ── Routes: Household Goals ───────────────────────────────────────────────────
-app.get('/api/goals', (req, res) => {
+app.get('/api/goals', requireAuth, (req, res) => {
   res.json(db.prepare('SELECT * FROM household_goals ORDER BY created_at').all());
 });
 
@@ -1455,7 +1455,7 @@ app.delete('/api/goals/:id', requireAdmin, (req, res) => {
 });
 
 // ── Routes: Notes ─────────────────────────────────────────────────────────────
-app.get('/api/notes', (req, res) => {
+app.get('/api/notes', requireAuth, (req, res) => {
   res.json(db.prepare('SELECT * FROM notes ORDER BY pinned DESC, created_at DESC').all());
 });
 
@@ -1487,7 +1487,7 @@ app.delete('/api/notes/:id', requireAdmin, (req, res) => {
 });
 
 // ── Routes: Polls ─────────────────────────────────────────────────────────────
-app.get('/api/polls', (req, res) => {
+app.get('/api/polls', requireAuth, (req, res) => {
   res.json(db.prepare('SELECT * FROM polls ORDER BY created_at DESC').all().map(p => {
     try { return { ...p, options: JSON.parse(p.options), votes: JSON.parse(p.votes || '{}') }; }
     catch { return { ...p, options: [], votes: {} }; }
@@ -1561,7 +1561,7 @@ app.post('/api/webhook/ha', (req, res) => {
   res.json({ ok: true, id: r.lastInsertRowid });
 });
 
-app.get('/api/ha/events', (req, res) => {
+app.get('/api/ha/events', requireAuth, (req, res) => {
   db.prepare("DELETE FROM ha_events WHERE created_at < datetime('now','-24 hours')").run();
   res.json(db.prepare("SELECT * FROM ha_events ORDER BY created_at DESC LIMIT 10").all());
 });
@@ -1850,7 +1850,7 @@ app.get('/api/ha/pull', async (req, res) => {
 });
 
 // ── Routes: Quick Actions ─────────────────────────────────────────────────────
-app.get('/api/quick-actions', (req, res) => {
+app.get('/api/quick-actions', requireAuth, (req, res) => {
   const raw = db.prepare("SELECT value FROM settings WHERE key='quick_actions'").get()?.value;
   try { res.json(JSON.parse(raw || '[]')); } catch { res.json([]); }
 });
@@ -1910,7 +1910,7 @@ async function _wFetch(key, ttlMs, fn) {
 }
 const gs = k => db.prepare('SELECT value FROM settings WHERE key=?').get(k)?.value || '';
 
-app.get('/api/widgets/data', async (req, res) => {
+app.get('/api/widgets/data', requireAuth, async (req, res) => {
   const result = {};
   const p = [];
 
@@ -2821,7 +2821,7 @@ app.get('/api/music/now-playing', async (req, res) => {
 });
 
 // ── Routes: Photos (screensaver) ──────────────────────────────────────────────
-app.get('/api/photos', (req, res) => {
+app.get('/api/photos', requireAuth, (req, res) => {
   res.json(db.prepare('SELECT * FROM photos ORDER BY created_at DESC').all());
 });
 
@@ -3077,7 +3077,7 @@ app.post('/api/email/inbound', async (req, res) => {
 
 // ── Routes: Packages ─────────────────────────────────────────────────────────
 
-app.get('/api/packages', (req, res) => {
+app.get('/api/packages', requireAuth, (req, res) => {
   const rows = db.prepare("SELECT * FROM packages WHERE delivered=0 ORDER BY created_at DESC").all();
   res.json(rows);
 });
@@ -3978,6 +3978,8 @@ app.delete('/api/home/repairs/:id', requireAdmin, (req, res) => {
 // ── Routes: Member health ─────────────────────────────────────────────────────
 app.get('/api/members/:id/health', requireAuth, (req, res) => {
   const id = Number(req.params.id);
+  const member = db.prepare('SELECT id FROM family_members WHERE id=?').get(id);
+  if (!member) return res.status(404).json({ error: 'Member not found' });
   const row = db.prepare('SELECT * FROM member_health WHERE member_id=?').get(id);
   res.json(row || {});
 });

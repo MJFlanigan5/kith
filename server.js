@@ -1885,6 +1885,13 @@ app.post('/api/quick-actions/trigger', requireAdmin, async (req, res) => {
   let actions; try { actions = JSON.parse(raw || '[]'); } catch { actions = []; }
   const action = actions.find(a => a.id === id);
   if (!action) return res.status(404).json({ error: 'Action not found' });
+  // Block non-https URLs and RFC-1918 / link-local / loopback targets
+  if (!/^https?:\/\//i.test(action.url)) return res.status(400).json({ error: 'Action URL must use http(s)' });
+  try { new URL(action.url); } catch { return res.status(400).json({ error: 'Invalid action URL' }); }
+  const _u = new URL(action.url);
+  if (/^(localhost|127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.|::1|fd[0-9a-f]{2}:)/i.test(_u.hostname)) {
+    return res.status(400).json({ error: 'Action URL must not target private/loopback addresses' });
+  }
   try {
     let extraHeaders = {};
     try { extraHeaders = JSON.parse(action.headers || '{}'); } catch {}
@@ -3029,7 +3036,18 @@ async function callAiForBill(subject, body) {
   return callAi(sys, `Subject: ${subject}\nBody: ${body.slice(0, 3000)}`);
 }
 
-app.post('/api/email/inbound', async (req, res) => {
+// Simple in-memory rate limiter: max 20 requests per IP per minute
+const _inboundRateMap = new Map();
+setInterval(() => _inboundRateMap.clear(), 60 * 1000);
+function inboundRateLimit(req, res, next) {
+  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+  const count = (_inboundRateMap.get(ip) || 0) + 1;
+  _inboundRateMap.set(ip, count);
+  if (count > 20) return res.status(429).json({ error: 'Too many requests' });
+  next();
+}
+
+app.post('/api/email/inbound', inboundRateLimit, async (req, res) => {
   const secret = db.prepare('SELECT value FROM settings WHERE key=?').get('email_webhook_secret')?.value;
   if (!secret || req.headers['x-kith-secret'] !== secret) {
     return res.status(401).json({ error: secret ? 'Invalid secret' : 'Webhook secret not configured — set it in Settings → Notifications' });

@@ -422,12 +422,15 @@ function FamilyScreen({members,setMembers,toastAdd}){
   };
   useEffect(()=>{
     if(!members?.length) return;
+    let cancelled=false;
     Promise.all(members.map(m=>api.get(`/api/members/${m.id}/health`).then(r=>[m.id,r||{}]).catch(()=>[m.id,{}])))
       .then(pairs=>{
+        if(cancelled) return;
         const map={};
         for(const [id,rec] of pairs) if(rec&&rec.member_id) map[id]=rec;
         setHealth(map);
       });
+    return()=>{cancelled=true;};
   },[members?.length]);
   const COLORS=['#007AFF','#34C759','#FF3B30','#FF9500','#5856D6','#32ADE6','#AF52DE','#FF2D55','#FF6B35','#30D158'];
   const save=async()=>{

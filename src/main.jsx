@@ -296,11 +296,12 @@ function CountdownsScreen({countdowns,setCountdowns,toastAdd}){
   };
   const clearPast=async()=>{
     const past=countdowns.filter(c=>daysUntil(c.date)<0);
-    try{
-      await Promise.all(past.map(c=>api.del(`/api/countdowns/${c.id}`)));
-      setCountdowns(p=>p.filter(c=>daysUntil(c.date)>=0));
-      toastAdd(`Cleared ${past.length}`,'blue');
-    }catch{toastAdd('Failed to clear','red');}
+    const results=await Promise.allSettled(past.map(c=>api.del(`/api/countdowns/${c.id}`)));
+    const deleted=new Set(past.filter((_,i)=>results[i].status==='fulfilled').map(c=>c.id));
+    if(deleted.size) setCountdowns(p=>p.filter(c=>!deleted.has(c.id)));
+    const failed=results.filter(r=>r.status==='rejected').length;
+    if(failed) toastAdd(`${failed} failed to delete`,'red');
+    else toastAdd(`Cleared ${deleted.size}`,'blue');
   };
   return(
     <div style={{maxWidth:640}}>
@@ -667,7 +668,7 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
   const [online,setOnline]=useState(true);
   useEffect(()=>{
     const loadHA=()=>api.get('/api/ha/events').then(d=>{if(Array.isArray(d))setHaEvents(d);}).catch(()=>{});
-    const loadSm=()=>fetch('/api/ha/pull').then(r=>r.json()).then(d=>{if(Array.isArray(d))setSmEvents(d);}).catch(()=>{});
+    const loadSm=()=>api.get('/api/ha/pull').then(d=>{if(Array.isArray(d))setSmEvents(d);}).catch(()=>{});
     const loadWidgets=()=>api.get('/api/widgets/data').then(d=>setWidgetData(d||{})).catch(()=>{});
     loadHA(); loadSm(); loadWidgets();
     // Fallback polls in case SSE drops
@@ -675,7 +676,8 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
     const fb=setInterval(loadSm,60000);
     const fc=setInterval(loadWidgets,3*60*1000);
     // Single SSE connection handles activity push + widget/smart-home refresh
-    const es=new EventSource('/api/events/stream');
+    const _sseToken=localStorage.getItem('kith_token')||'';
+    const es=new EventSource(`/api/events/stream?token=${encodeURIComponent(_sseToken)}`);
     es.addEventListener('activity',e=>{try{const ev=JSON.parse(e.data);setSmEvents(p=>[ev,...p].slice(0,10));}catch{}});
     es.addEventListener('refresh',()=>{loadHA();loadSm();loadWidgets();});
     es.addEventListener('grocery',e=>{try{const d=JSON.parse(e.data);if(setGrocery){if(d.action==='add')setGrocery(p=>[...p,d.item]);else if(d.action==='remove')setGrocery(p=>p.filter(i=>i.id!==d.id));else if(d.action==='toggle')setGrocery(p=>p.map(i=>i.id===d.id?{...i,checked:d.checked}:i));else if(d.action==='clear_checked')setGrocery(p=>p.filter(i=>!i.checked));}}catch{}});
@@ -2248,6 +2250,8 @@ function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weath
       if(Array.isArray(updated)) setEvents(updated);
       setQaOpen(false);
       setQaForm({title:'',date:localDate(),time:'',cal:'kith'});
+    } catch(e) {
+      toastAdd(e?.message||'Failed to save event','red');
     } finally {
       setQaLoading(false);
     }
@@ -2294,10 +2298,11 @@ function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weath
   const [smEvents,setSmEvents]=useState([]);
   useEffect(()=>{
     const loadHA=()=>api.get('/api/ha/events').then(d=>{if(Array.isArray(d))setHaEvents(d);}).catch(()=>{});
-    const loadSm=()=>fetch('/api/ha/pull').then(r=>r.json()).then(d=>{if(Array.isArray(d))setSmEvents(d);}).catch(()=>{});
+    const loadSm=()=>api.get('/api/ha/pull').then(d=>{if(Array.isArray(d))setSmEvents(d);}).catch(()=>{});
     loadHA(); loadSm();
     const fa=setInterval(loadHA,60000); const fb=setInterval(loadSm,60000);
-    const es=new EventSource('/api/events/stream');
+    const _sseToken=localStorage.getItem('kith_token')||'';
+    const es=new EventSource(`/api/events/stream?token=${encodeURIComponent(_sseToken)}`);
     es.addEventListener('activity',e=>{try{const ev=JSON.parse(e.data);setSmEvents(p=>[ev,...p].slice(0,10));}catch{}});
     es.addEventListener('refresh',()=>{loadHA();loadSm();});
     return()=>{clearInterval(fa);clearInterval(fb);es.close();};
@@ -4508,7 +4513,8 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
                     return;
                   }
                   toastAdd('Scanning — this may take a minute…','blue');
-                  const es=new EventSource('/api/events/stream');
+                  const _sseToken=localStorage.getItem('kith_token')||'';
+                  const es=new EventSource(`/api/events/stream?token=${encodeURIComponent(_sseToken)}`);
                   const tid=setTimeout(()=>{es.close();setImapScanning(false);},5*60*1000);
                   es.addEventListener('scan_complete',e=>{
                     clearTimeout(tid);es.close();setImapScanning(false);
@@ -5005,7 +5011,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
             }} disabled={homeySaving}>{homeySaving?'Saving…':'Save'}</Btn>
             <Btn sm variant="ghost" onClick={async()=>{
               setSmTesting(true);
-              const r=await fetch('/api/ha/pull').then(x=>x.json()).catch(()=>({error:'Request failed'}));
+              const r=await api.get('/api/ha/pull').catch(()=>({error:'Request failed'}));
               setSmTesting(false);
               if(Array.isArray(r)) toastAdd(r.length>0?`Connected — ${r.length} notification${r.length!==1?'s':''}  found`:'Connected — no notifications right now');
               else toastAdd(r.error||'Connection failed','red');
@@ -9467,7 +9473,8 @@ function App(){
     if(loading||(!auth&&!kiosk)) return;
     let es;let reconnectT;
     const connect=()=>{
-      es=new EventSource('/api/events/stream');
+      const _sseToken=localStorage.getItem('kith_token')||'';
+      es=new EventSource(`/api/events/stream?token=${encodeURIComponent(_sseToken)}`);
       es.addEventListener('arrival',e=>{
         try{
           const d=JSON.parse(e.data);

@@ -610,7 +610,11 @@ app.post('/api/chores/:id/photo', requireAuth, (req, res) => {
 });
 
 app.delete('/api/chores/:id', requireAdmin, (req, res) => {
-  db.prepare('DELETE FROM chores WHERE id=?').run(req.params.id);
+  const id = Number(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid id' });
+  const chore = db.prepare('SELECT id FROM chores WHERE id=?').get(id);
+  if (!chore) return res.status(404).json({ error: 'Not found' });
+  db.prepare('DELETE FROM chores WHERE id=?').run(id);
   res.json({ ok: true });
 });
 
@@ -723,7 +727,9 @@ app.get('/api/meals', requireAuth, (req, res) => {
   res.json(rows);
 });
 
+const VALID_MEAL_DAYS = new Set(['Mon','Tue','Wed','Thu','Fri','Sat','Sun']);
 app.put('/api/meals/:day', requireAuth, (req, res) => {
+  if (!VALID_MEAL_DAYS.has(req.params.day)) return res.status(400).json({ error: 'Invalid day' });
   const existing = db.prepare('SELECT * FROM meals WHERE day=?').get(req.params.day) || {};
   const meal      = req.body?.meal      ?? existing.meal      ?? '';
   const breakfast = req.body?.breakfast ?? existing.breakfast ?? '';
@@ -1535,7 +1541,12 @@ app.delete('/api/polls/:id', requireAdmin, (req, res) => {
 });
 
 // ── SSE stream endpoint ───────────────────────────────────────────────────────
+// EventSource can't send headers, so the token is passed as ?token= query param
 app.get('/api/events/stream', (req, res) => {
+  const token = req.query.token || (req.headers.authorization || '').replace('Bearer ', '');
+  if (!token) return res.status(401).end();
+  try { jwt.verify(token, getJwtSecret()); }
+  catch { return res.status(401).end(); }
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
@@ -2868,6 +2879,7 @@ app.get('/api/bookmarks', requireAuth, (req, res) => {
 app.post('/api/bookmarks', requireAuth, (req, res) => {
   const { title, url, category = '', emoji = '🔗' } = req.body;
   if (!title?.trim() || !url?.trim()) return res.status(400).json({ error: 'title and url required' });
+  if (!/^https?:\/\//i.test(url)) return res.status(400).json({ error: 'url must start with http:// or https://' });
   const r = db.prepare('INSERT INTO bookmarks (title, url, category, emoji) VALUES (?,?,?,?)').run(title.trim(), url.trim(), category.trim(), emoji);
   res.status(201).json({ id: r.lastInsertRowid, title: title.trim(), url: url.trim(), category: category.trim(), emoji });
 });

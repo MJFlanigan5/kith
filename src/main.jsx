@@ -2296,19 +2296,20 @@ function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weath
 
   useEffect(()=>{
     api.get('/api/chores/leaderboard').then(d=>setLeaderboard(Array.isArray(d)?d:[])).catch(()=>{});
-  },[chores]);
+  },[chores.length]);
 
   const [smEvents,setSmEvents]=useState([]);
   useEffect(()=>{
-    const loadHA=()=>api.get('/api/ha/events').then(d=>{if(Array.isArray(d))setHaEvents(d);}).catch(()=>{});
-    const loadSm=()=>api.get('/api/ha/pull').then(d=>{if(Array.isArray(d))setSmEvents(d);}).catch(()=>{});
+    let cancelled=false;
+    const loadHA=()=>api.get('/api/ha/events').then(d=>{if(!cancelled&&Array.isArray(d))setHaEvents(d);}).catch(()=>{});
+    const loadSm=()=>api.get('/api/ha/pull').then(d=>{if(!cancelled&&Array.isArray(d))setSmEvents(d);}).catch(()=>{});
     loadHA(); loadSm();
     const fa=setInterval(loadHA,60000); const fb=setInterval(loadSm,60000);
     const _sseToken=localStorage.getItem('kith_token')||'';
     const es=new EventSource(`/api/events/stream?token=${encodeURIComponent(_sseToken)}`);
     es.addEventListener('activity',e=>{try{const ev=JSON.parse(e.data);setSmEvents(p=>[ev,...p].slice(0,10));}catch{}});
     es.addEventListener('refresh',()=>{loadHA();loadSm();});
-    return()=>{clearInterval(fa);clearInterval(fb);es.close();};
+    return()=>{cancelled=true;clearInterval(fa);clearInterval(fb);es.close();};
   },[]);
   const allSmartEvents=useMemo(()=>[...smEvents,...haEvents].sort((a,b)=>new Date(b.created_at?.replace(' ','T'))-new Date(a.created_at?.replace(' ','T'))).slice(0,10),[smEvents,haEvents]);
 
@@ -3426,6 +3427,7 @@ function ChoresScreen({chores,setChores,goals=[],members=[],toastAdd}){
   };
 
   const histDateLabel=ts=>{
+    if(!ts) return '';
     const d=new Date(ts);
     const today=new Date(); today.setHours(0,0,0,0);
     const yesterday=new Date(today); yesterday.setDate(yesterday.getDate()-1);

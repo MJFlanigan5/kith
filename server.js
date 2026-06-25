@@ -27,6 +27,7 @@ const PHOTOS_DIR = path.join(process.env.DATA_DIR || path.join(__dirname, 'data'
 fs.mkdirSync(PHOTOS_DIR, { recursive: true });
 app.use('/photos', express.static(PHOTOS_DIR));
 
+app.set('trust proxy', 1); // trust first proxy (nginx/Caddy) so req.ip uses X-Forwarded-For
 app.use(express.json({ limit: '20mb' }));
 app.use(express.static(path.join(__dirname, 'dist')));
 
@@ -319,7 +320,13 @@ app.get('/api/auth/setup-status', (req, res) => {
   res.json({ configured: !!(hash && hash.length > 0) });
 });
 
+const _setupAttempts = new Map();
+setInterval(() => _setupAttempts.clear(), 60_000);
 app.post('/api/auth/setup', async (req, res) => {
+  const ip = req.ip || 'unknown';
+  const attempts = (_setupAttempts.get(ip) || 0) + 1;
+  _setupAttempts.set(ip, attempts);
+  if (attempts > 5) return res.status(429).json({ error: 'Too many attempts' });
   const existing = db.prepare('SELECT value FROM settings WHERE key=?').get('admin_pin_hash')?.value;
   if (existing) return res.status(403).json({ error: 'Admin already configured' });
   const { pin } = req.body;
@@ -1889,7 +1896,7 @@ app.post('/api/quick-actions/trigger', requireAdmin, async (req, res) => {
   if (!/^https?:\/\//i.test(action.url)) return res.status(400).json({ error: 'Action URL must use http(s)' });
   try { new URL(action.url); } catch { return res.status(400).json({ error: 'Invalid action URL' }); }
   const _u = new URL(action.url);
-  if (/^(localhost|127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.|::1|fd[0-9a-f]{2}:)/i.test(_u.hostname)) {
+  if (/^(localhost|127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.|0\.0\.0\.0|::1|::ffff:|fd[0-9a-f]{2}:|0x[0-9a-f]+$|0[0-7]+\.|[0-9]{8,10}$)/i.test(_u.hostname)) {
     return res.status(400).json({ error: 'Action URL must not target private/loopback addresses' });
   }
   try {
@@ -2080,7 +2087,7 @@ app.get('/api/widgets/data', requireAuth, async (req, res) => {
   const flightNum = gs('widget_flight_number').toUpperCase().replace(/\s/g, '');
   if (aviationKey && flightNum)
     p.push(_wFetch(`flight:${flightNum}`, 120000, async () => {
-      const r = await fetch(`http://api.aviationstack.com/v1/flights?access_key=${aviationKey}&flight_iata=${flightNum}&limit=1`, { signal: AbortSignal.timeout(8000) });
+      const r = await fetch(`https://api.aviationstack.com/v1/flights?access_key=${aviationKey}&flight_iata=${flightNum}&limit=1`, { signal: AbortSignal.timeout(8000) });
       const d = await r.json();
       const f = d.data?.[0]; if (!f) return null;
       return {
@@ -2778,8 +2785,9 @@ app.get('/api/plex/thumb', requireAuth, async (req, res) => {
   if (!plexUrl || !plexToken) return res.status(404).end();
   const thumbPath = req.query.path;
   if (!thumbPath || !thumbPath.startsWith('/')) return res.status(400).end();
-  // Block absolute/external URLs — path must be a relative Plex path
+  // Block absolute/external URLs and path traversal
   if (/^\/\/|https?:\/\//.test(thumbPath)) return res.status(400).end();
+  if (thumbPath.includes('..')) return res.status(400).end();
   try {
     const base = plexUrl.replace(/\/$/, '');
     const sep = thumbPath.includes('?') ? '&' : '?';
@@ -3629,6 +3637,7 @@ app.delete('/api/budget/categories/:id', requireAuth, (req, res) => {
 app.post('/api/budget/entries', requireAuth, (req, res) => {
   const { category_id, amount, note='', date } = req.body || {};
   if (!category_id || !amount || isNaN(Number(amount))) return res.status(400).json({ error: 'category_id and amount required' });
+  if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ error: 'date must be YYYY-MM-DD' });
   const r = db.prepare('INSERT INTO budget_entries (category_id,amount,note,date) VALUES (?,?,?,?)').run(Number(category_id), Number(amount), note, date || localDate());
   res.json(db.prepare('SELECT * FROM budget_entries WHERE id=?').get(r.lastInsertRowid));
 });
@@ -4099,13 +4108,20 @@ app.delete('/api/lists/:id/items/checked', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 app.put('/api/lists/:id/items/:iid', requireAuth, (req, res) => {
+  const listId = Number(req.params.id);
   const iid = Number(req.params.iid);
   const { checked } = req.body || {};
-  db.prepare('UPDATE shared_list_items SET checked=? WHERE id=?').run(checked?1:0, iid);
+  const item = db.prepare('SELECT id FROM shared_list_items WHERE id=? AND list_id=?').get(iid, listId);
+  if (!item) return res.status(404).json({ error: 'Item not found' });
+  db.prepare('UPDATE shared_list_items SET checked=? WHERE id=? AND list_id=?').run(checked?1:0, iid, listId);
   res.json(db.prepare('SELECT * FROM shared_list_items WHERE id=?').get(iid));
 });
 app.delete('/api/lists/:id/items/:iid', requireAuth, (req, res) => {
-  db.prepare('DELETE FROM shared_list_items WHERE id=?').run(Number(req.params.iid));
+  const listId = Number(req.params.id);
+  const iid = Number(req.params.iid);
+  const item = db.prepare('SELECT id FROM shared_list_items WHERE id=? AND list_id=?').get(iid, listId);
+  if (!item) return res.status(404).json({ error: 'Item not found' });
+  db.prepare('DELETE FROM shared_list_items WHERE id=? AND list_id=?').run(iid, listId);
   res.json({ ok: true });
 });
 
@@ -4819,8 +4835,13 @@ app.post('/api/imap/scan', requireAuth, (req, res) => {
   res.json({ ok: true, status: 'scanning' });
 });
 
-app.post('/api/imap/test', requireAuth, async (req, res) => {
+app.post('/api/imap/test', requireAdmin, async (req, res) => {
   const { host, port, user, pass } = req.body;
+  if (!host || typeof host !== 'string') return res.status(400).json({ error: 'host required' });
+  try { new URL(`https://${host}`); } catch { return res.status(400).json({ error: 'Invalid host' }); }
+  if (/^(localhost|127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.|0\.0\.0\.0|::1)/i.test(host)) {
+    return res.status(400).json({ error: 'Host must not be a private/loopback address' });
+  }
   const { ImapFlow } = require('imapflow');
   const client = new ImapFlow({ host, port: parseInt(port || '993'), secure: parseInt(port || '993') === 993, auth: { user, pass }, logger: false, connectionTimeout: 8000 });
   try {

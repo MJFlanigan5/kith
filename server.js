@@ -59,6 +59,25 @@ function requireAdmin(req, res, next) {
   } catch { res.status(401).json({ error: 'Invalid or expired token' }); }
 }
 
+// Constant-time secret comparison — hash both sides to normalise length
+const { timingSafeEqual, createHash } = require('crypto');
+function safeCompare(a, b) {
+  const ha = createHash('sha256').update(String(a)).digest();
+  const hb = createHash('sha256').update(String(b)).digest();
+  return timingSafeEqual(ha, hb);
+}
+
+// Rate limiter for PIN-based auth endpoints (10 attempts/ip/min)
+const _authAttempts = new Map();
+setInterval(() => _authAttempts.clear(), 60_000);
+function authRateLimit(req, res, next) {
+  const ip = req.ip || 'unknown';
+  const n = (_authAttempts.get(ip) || 0) + 1;
+  _authAttempts.set(ip, n);
+  if (n > 10) return res.status(429).json({ error: 'Too many attempts' });
+  next();
+}
+
 // ── VAPID setup ───────────────────────────────────────────────────────────────
 {
   let pub  = db.prepare('SELECT value FROM settings WHERE key=?').get('vapid_public')?.value;
@@ -337,7 +356,7 @@ app.post('/api/auth/setup', async (req, res) => {
   res.json({ token });
 });
 
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', authRateLimit, async (req, res) => {
   const { member_id, pin } = req.body;
   const member = db.prepare('SELECT * FROM family_members WHERE id=?').get(Number(member_id));
   if (!member) return res.status(401).json({ error: 'Member not found' });
@@ -349,7 +368,7 @@ app.post('/api/auth/login', async (req, res) => {
   res.json({ token, member: { id: member.id, name: member.name, color: member.color, initials: member.initials, family_role } });
 });
 
-app.post('/api/auth/admin', async (req, res) => {
+app.post('/api/auth/admin', authRateLimit, async (req, res) => {
   const hash = db.prepare('SELECT value FROM settings WHERE key=?').get('admin_pin_hash')?.value;
   if (!hash) return res.status(401).json({ error: 'Admin not configured' });
   if (!await bcrypt.compare(String(req.body.pin || ''), hash))
@@ -877,7 +896,7 @@ app.delete('/api/ics/sources/:id', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
-app.post('/api/ics/sync', requireAuth, async (req, res) => {
+app.post('/api/ics/sync', requireAdmin, async (req, res) => {
   const sources = db.prepare('SELECT * FROM ics_sources WHERE enabled=1').all();
   let total = 0;
   for (const src of sources) {
@@ -888,7 +907,7 @@ app.post('/api/ics/sync', requireAuth, async (req, res) => {
 
 app.get('/api/ics/export', (req, res) => {
   const storedToken = db.prepare("SELECT value FROM settings WHERE key='ics_export_token'").get()?.value || '';
-  if (!storedToken || req.query.token !== storedToken) return res.status(401).send('Unauthorized');
+  if (!storedToken || !safeCompare(req.query.token || '', storedToken)) return res.status(401).send('Unauthorized');
   const events = db.prepare("SELECT * FROM events WHERE source != 'bill' ORDER BY date").all();
   const esc = s => (s || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
   // Times stored as "3:30 PM" — parse correctly before building ISO string
@@ -1525,18 +1544,22 @@ app.post('/api/polls', requireAdmin, (req, res) => {
 
 app.post('/api/polls/:id/vote', requireAuth, (req, res) => {
   const { option } = req.body || {};
+  const voterId = String(req.user.sub);
   const votes = db.transaction(() => {
     const p = db.prepare('SELECT * FROM polls WHERE id=?').get(req.params.id);
     if (!p) return null;
+    if (db.prepare('SELECT 1 FROM poll_votes WHERE poll_id=? AND voter_id=?').get(p.id, voterId)) return 'duplicate';
     let options, votes;
     try { options = JSON.parse(p.options); } catch { return 'corrupt'; }
     try { votes = JSON.parse(p.votes || '{}'); } catch { votes = {}; }
     if (typeof option !== 'number' || option < 0 || option >= options.length) return 'invalid';
     votes[option] = (votes[option] || 0) + 1;
     db.prepare('UPDATE polls SET votes=? WHERE id=?').run(JSON.stringify(votes), p.id);
+    db.prepare('INSERT INTO poll_votes (poll_id, voter_id) VALUES (?,?)').run(p.id, voterId);
     return votes;
   })();
   if (votes === null) return res.status(404).json({ error: 'Not found' });
+  if (votes === 'duplicate') return res.status(409).json({ error: 'Already voted' });
   if (votes === 'corrupt') return res.status(500).json({ error: 'Corrupt poll data' });
   if (votes === 'invalid') return res.status(400).json({ error: 'Invalid option index' });
   res.json({ votes });
@@ -1571,7 +1594,7 @@ app.get('/api/events/stream', (req, res) => {
 app.post('/api/webhook/ha', (req, res) => {
   const secret = db.prepare("SELECT value FROM settings WHERE key='ha_webhook_secret'").get()?.value;
   const provided = req.headers['x-ha-secret'] || req.query.secret;
-  if (!secret || provided !== secret) return res.status(401).json({ error: 'Unauthorized' });
+  if (!secret || !safeCompare(provided || '', secret)) return res.status(401).json({ error: 'Unauthorized' });
   const { title, message='', icon='🏠' } = req.body || {};
   if (!title?.trim()) return res.status(400).json({ error: 'title is required' });
   // Auto-clean events older than 24h
@@ -2785,9 +2808,9 @@ app.get('/api/plex/thumb', requireAuth, async (req, res) => {
   if (!plexUrl || !plexToken) return res.status(404).end();
   const thumbPath = req.query.path;
   if (!thumbPath || !thumbPath.startsWith('/')) return res.status(400).end();
-  // Block absolute/external URLs and path traversal
+  // Block absolute/external URLs, path traversal, and query string injection
   if (/^\/\/|https?:\/\//.test(thumbPath)) return res.status(400).end();
-  if (thumbPath.includes('..')) return res.status(400).end();
+  if (thumbPath.includes('..') || thumbPath.includes('?') || thumbPath.includes('#')) return res.status(400).end();
   try {
     const base = plexUrl.replace(/\/$/, '');
     const sep = thumbPath.includes('?') ? '&' : '?';
@@ -3057,7 +3080,7 @@ function inboundRateLimit(req, res, next) {
 
 app.post('/api/email/inbound', inboundRateLimit, async (req, res) => {
   const secret = db.prepare('SELECT value FROM settings WHERE key=?').get('email_webhook_secret')?.value;
-  if (!secret || req.headers['x-kith-secret'] !== secret) {
+  if (!secret || !safeCompare(req.headers['x-kith-secret'] || '', secret)) {
     return res.status(401).json({ error: secret ? 'Invalid secret' : 'Webhook secret not configured — set it in Settings → Notifications' });
   }
 
@@ -3252,7 +3275,7 @@ app.get('/api/vehicles', requireAuth, (req, res) => {
 
 app.get('/api/vehicles/vin/:vin', requireAuth, async (req, res) => {
   const vin = (req.params.vin || '').trim().toUpperCase();
-  if (vin.length !== 17) return res.status(400).json({ error: 'VIN must be 17 characters' });
+  if (vin.length !== 17 || !/^[A-Z0-9]{17}$/.test(vin)) return res.status(400).json({ error: 'VIN must be 17 alphanumeric characters' });
   try {
     const data = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/decodevin/${vin}?format=json`).then(r => r.json());
     const get = label => (data.Results || []).find(r => r.Variable === label)?.Value || '';
@@ -4829,7 +4852,7 @@ async function scanImap30Days() {
   broadcastSSE('scan_complete', summary);
 }
 
-app.post('/api/imap/scan', requireAuth, (req, res) => {
+app.post('/api/imap/scan', requireAdmin, (req, res) => {
   if (_scanInProgress) return res.json({ ok: false, status: 'already_scanning' });
   scanImap30Days();
   res.json({ ok: true, status: 'scanning' });
@@ -4854,7 +4877,7 @@ app.post('/api/imap/test', requireAdmin, async (req, res) => {
 });
 
 // ── Routes: Data Export ───────────────────────────────────────────────────────
-app.get('/api/export', requireAuth, (req, res) => {
+app.get('/api/export', requireAdmin, (req, res) => {
   try {
     const data = {
       exported_at: new Date().toISOString(),

@@ -290,7 +290,6 @@ try { db.exec("ALTER TABLE meals ADD COLUMN lunch TEXT DEFAULT ''"); } catch {}
 try { db.exec("ALTER TABLE meals ADD COLUMN dinner_recipe_id INTEGER"); } catch {}
 try { db.exec("ALTER TABLE meals ADD COLUMN breakfast_recipe_id INTEGER"); } catch {}
 try { db.exec("ALTER TABLE meals ADD COLUMN lunch_recipe_id INTEGER"); } catch {}
-try { db.exec("ALTER TABLE wishlist_items ADD COLUMN notes TEXT DEFAULT ''"); } catch {}
 // Grocery quick-add history
 db.exec(`CREATE TABLE IF NOT EXISTS grocery_history (
   name TEXT PRIMARY KEY,
@@ -468,6 +467,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS wishlist_items (
   last_checked TEXT DEFAULT '',
   created_at TEXT DEFAULT (datetime('now'))
 )`)
+try { db.exec("ALTER TABLE wishlist_items ADD COLUMN notes TEXT DEFAULT ''"); } catch {}
 db.exec(`CREATE TABLE IF NOT EXISTS claude_inbox (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   sender TEXT NOT NULL DEFAULT 'mike',

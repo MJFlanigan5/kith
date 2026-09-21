@@ -535,7 +535,12 @@ app.get('/api/events', requireAuth, (req, res) => {
     member_id: null,
     recurring_rule: '',
   }));
-  const today = new Date();
+  // Year/month for the 3-month bill preview window, taken from the household's
+  // configured timezone (localDate()) rather than the server OS timezone's raw
+  // new Date() getters — those could put this window a month off right around
+  // a month boundary if Settings > Timezone differs from the deployment host's TZ.
+  const [tYear, tMonthNum] = localDate().split('-').map(Number);
+  const tMonth0 = tMonthNum - 1; // 0-indexed, to match Date constructor's month slot
   const pad = n => String(n).padStart(2,'0');
   const billRows = db.prepare('SELECT * FROM bills WHERE active=1').all();
   const paidBillSet = new Set(
@@ -545,8 +550,8 @@ app.get('/api/events', requireAuth, (req, res) => {
   for (const b of billRows) {
     if (b.recurrence === 'monthly') {
       for (let m = 0; m < 3; m++) {
-        const daysInMo = new Date(today.getFullYear(), today.getMonth() + m + 1, 0).getDate();
-        const d = new Date(today.getFullYear(), today.getMonth() + m, Math.min(b.due_day || 1, daysInMo));
+        const daysInMo = new Date(tYear, tMonth0 + m + 1, 0).getDate();
+        const d = new Date(tYear, tMonth0 + m, Math.min(b.due_day || 1, daysInMo));
         const ds = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
         const period = `${d.getFullYear()}-${pad(d.getMonth()+1)}`;
         if (paidBillSet.has(`${b.id}_${period}`)) continue;
@@ -554,8 +559,8 @@ app.get('/api/events', requireAuth, (req, res) => {
       }
     } else if (b.due_date) {
       const dueMs = new Date(b.due_date + 'T00:00:00').getTime();
-      if (dueMs >= new Date(today.getFullYear(), today.getMonth(), 1).getTime()) {
-        const period = b.recurrence === 'annual' ? String(today.getFullYear()) : b.due_date;
+      if (dueMs >= new Date(tYear, tMonth0, 1).getTime()) {
+        const period = b.recurrence === 'annual' ? String(tYear) : b.due_date;
         if (paidBillSet.has(`${b.id}_${period}`)) continue;
         billEvents.push({ id:`bill_${b.id}_${b.due_date}`, title:b.name, date:b.due_date, time:'All day', end_time:'', duration:'1h', calendar:'bills', color:b.color||'#3B82F6', notes:b.amount>0?`$${Number(b.amount).toFixed(2)}`:'', source:'bill', member_id:null, recurring_rule:'' });
       }
@@ -669,16 +674,27 @@ app.get('/api/chores', requireAuth, (req, res) => {
 });
 
 app.get('/api/chores/leaderboard', requireAuth, (req, res) => {
-  const weekStart = new Date();
-  weekStart.setDate(weekStart.getDate() - weekStart.getDay());
-  weekStart.setHours(0,0,0,0);
+  // Compute "today" and the week's Sunday entirely from the household's configured
+  // timezone (localDate()), not the server OS timezone new Date()/getDay() used to
+  // use — those disagree whenever Settings > Timezone differs from the deployment
+  // host's TZ, which could put a chore into the wrong week near the boundary.
+  // NOTE: chore_completions.completed_at is still a SQLite CURRENT_TIMESTAMP (UTC),
+  // so date(cc.completed_at) below compares UTC calendar dates against this local
+  // weekStart — a completion late at night local time can still land on the wrong
+  // side of the UTC date boundary. Leaving that as a known follow-up; fixing it
+  // needs completed_at itself stored/compared in local time, not just this cutoff.
+  const todayStr = localDate();
+  const dow = new Date(todayStr + 'T00:00:00Z').getUTCDay();
+  const weekStart = new Date(todayStr + 'T00:00:00Z');
+  weekStart.setUTCDate(weekStart.getUTCDate() - dow);
+  const weekStartStr = weekStart.toISOString().slice(0, 10);
   const rows = db.prepare(`
     SELECT cc.member_id, cc.member_name, SUM(cc.points) as points, fm.color, fm.initials
     FROM chore_completions cc
     LEFT JOIN family_members fm ON fm.id = cc.member_id
     WHERE date(cc.completed_at) >= date(?)
     GROUP BY cc.member_id ORDER BY points DESC
-  `).all(localDate(weekStart));
+  `).all(weekStartStr);
   res.json(rows);
 });
 
@@ -740,11 +756,23 @@ app.put('/api/chores/:id/done', requireAuth, (req, res) => {
     const member = memberId ? db.prepare('SELECT * FROM family_members WHERE id=?').get(memberId) : null;
     db.prepare('INSERT INTO chore_completions (chore_id,member_id,member_name,points) VALUES (?,?,?,?)')
       .run(c.id, member?.id ?? null, member?.name ?? 'Admin', c.points || 1);
+  } else if (!isRecurring) {
+    // Undo (one-time chore only, recurring never toggles back through this route):
+    // reverse the completion row that "Done" just created, so points/goal credit
+    // don't stay permanently counted after the user un-does an accidental tap.
+    const lastCompletion = db.prepare('SELECT id FROM chore_completions WHERE chore_id=? ORDER BY completed_at DESC LIMIT 1').get(c.id);
+    if (lastCompletion) db.prepare('DELETE FROM chore_completions WHERE id=?').run(lastCompletion.id);
   }
   if (done && c.goal_id) {
     const g = db.prepare('SELECT * FROM household_goals WHERE id=?').get(c.goal_id);
     if (g) {
       const newProgress = Math.min(g.progress_target, g.progress_current + (c.goal_amount || 1));
+      db.prepare('UPDATE household_goals SET progress_current=? WHERE id=?').run(newProgress, g.id);
+    }
+  } else if (!done && !isRecurring && c.goal_id) {
+    const g = db.prepare('SELECT * FROM household_goals WHERE id=?').get(c.goal_id);
+    if (g) {
+      const newProgress = Math.max(0, g.progress_current - (c.goal_amount || 1));
       db.prepare('UPDATE household_goals SET progress_current=? WHERE id=?').run(newProgress, g.id);
     }
   }
@@ -4695,7 +4723,7 @@ function _pantryEnrich(row) {
   if (!row) return row;
   const out = { ...row };
   if (row.expires_on) {
-    const today = new Date(); today.setHours(0,0,0,0);
+    const today = new Date(localDate() + 'T00:00:00');
     const exp = new Date(row.expires_on + 'T00:00:00');
     const days = Math.round((exp - today) / 86400000);
     out.days_until_expiry = days;

@@ -13,6 +13,28 @@ const { io: socketIoClient } = require('socket.io-client');
 const app  = express();
 const PORT = process.env.PORT || 7400;
 
+// ── Crash safety ──────────────────────────────────────────────────────────────
+// Express 4 does not forward a rejected promise from an async route handler to
+// next(), so an uncaught throw there became an unhandled rejection that killed
+// the process. Wrap every route handler so a throw/rejection becomes a 500 via
+// the error middleware at the bottom of this file instead.
+for (const m of ['get', 'post', 'put', 'patch', 'delete']) {
+  const orig = app[m].bind(app);
+  app[m] = (route, ...handlers) => {
+    if (!handlers.length) return orig(route); // app.get('setting-name') form
+    return orig(route, ...handlers.map(h => typeof h !== 'function' ? h : (req, res, next) => {
+      try { Promise.resolve(h(req, res, next)).catch(next); } catch (e) { next(e); }
+    }));
+  };
+}
+process.on('unhandledRejection', err => console.error('[unhandledRejection]', err));
+
+// Every outbound fetch (HA, Homey, Teslemetry, Flo, ...) gets a deadline unless
+// the caller set its own, so a hung upstream can't hang the request forever.
+const _fetch = globalThis.fetch;
+globalThis.fetch = (url, opts = {}) =>
+  _fetch(url, opts.signal ? opts : { ...opts, signal: AbortSignal.timeout(20_000) });
+
 // ── SSE push to all connected browser clients ─────────────────────────────────
 const _sseClients = new Set();
 function broadcastSSE(event, data) {
@@ -28,7 +50,24 @@ const MEDIA_TOKEN = require('crypto').randomBytes(32).toString('hex');
 
 const PHOTOS_DIR = path.join(process.env.DATA_DIR || path.join(__dirname, 'data'), 'photos');
 fs.mkdirSync(PHOTOS_DIR, { recursive: true });
-app.use('/photos', express.static(PHOTOS_DIR));
+
+// Uploaded photos. The extension of a stored file decides its Content-Type when
+// served, so only real image types are ever written (decided from the data: URL's
+// MIME, never from the client's filename) and only those extensions are served.
+const PHOTO_MIME_EXT = { 'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/png': 'png', 'image/webp': 'webp',
+  'image/gif': 'gif', 'image/heic': 'heic', 'image/heif': 'heif' };
+const PHOTO_SERVE_EXT = /\.(jpe?g|png|webp|gif|heic|heif)$/i;
+function parsePhotoDataUrl(data) {
+  const m = /^data:([a-z/+.-]+);base64,/i.exec(typeof data === 'string' ? data : '');
+  const ext = m && PHOTO_MIME_EXT[m[1].toLowerCase()];
+  return ext ? { ext, buf: Buffer.from(data.slice(m[0].length), 'base64') } : null;
+}
+// <img> tags can't send an Authorization header, so the viewer's login token
+// rides in ?t= — photos are only visible to a signed-in household member.
+app.use('/photos', (req, res, next) => {
+  if (!req.headers.authorization && req.query.t) req.headers.authorization = `Bearer ${req.query.t}`;
+  requireAuth(req, res, () => PHOTO_SERVE_EXT.test(req.path) ? next() : res.status(404).end());
+}, express.static(PHOTOS_DIR, { setHeaders: res => res.set('X-Content-Type-Options', 'nosniff') }));
 
 // Documents are NOT static-mounted (unlike photos) — served only through an
 // authenticated route since they may contain sensitive family paperwork.
@@ -268,6 +307,23 @@ async function syncICSSource(source) {
 // ── Timezone (configurable in Settings, falls back to container TZ) ───────────
 function getTimezone() {
   return db.prepare("SELECT value FROM settings WHERE key='timezone'").get()?.value || process.env.TZ || 'America/New_York';
+}
+
+// Wall-clock time in the household timezone -> UTC Date, independent of the
+// host's own TZ (the LXC install doesn't set one, so the host is usually UTC).
+function _tzOffsetMs(ts, tz) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  }).formatToParts(new Date(ts)).map(x => [x.type, x.value]));
+  return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second) - ts;
+}
+function zonedToUtc(dateStr, h, min, tz = getTimezone()) {
+  const [y, mo, d] = dateStr.split('-').map(Number);
+  const guess = Date.UTC(y, mo - 1, d, h, min);
+  let utc = guess - _tzOffsetMs(guess, tz);
+  utc = guess - _tzOffsetMs(utc, tz); // second pass settles DST boundaries
+  return new Date(utc);
 }
 
 // ── Local date helper (formats in the household's configured timezone,
@@ -783,12 +839,12 @@ app.put('/api/chores/:id/done', requireAuth, (req, res) => {
 
 app.post('/api/chores/:id/photo', requireAuth, async (req, res) => {
   const id = Number(req.params.id);
-  const { data, filename = 'photo.jpg' } = req.body || {};
-  if (!data?.startsWith('data:image/')) return res.status(400).json({ error: 'image data required' });
-  const ext = (filename.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z]/g, '') || 'jpg';
-  const safe = `chore-${Date.now()}.${ext}`;
+  const photo = parsePhotoDataUrl(req.body?.data);
+  if (!photo) return res.status(400).json({ error: 'JPEG, PNG, WebP, GIF or HEIC image data required' });
+  if (!db.prepare('SELECT id FROM chores WHERE id=?').get(id)) return res.status(404).json({ error: 'Not found' });
+  const safe = `chore-${require('crypto').randomUUID()}.${photo.ext}`;
   try {
-    await fs.promises.writeFile(path.join(PHOTOS_DIR, safe), Buffer.from(data.split(',')[1], 'base64'));
+    await fs.promises.writeFile(path.join(PHOTOS_DIR, safe), photo.buf);
     const memberId = req.user.sub === 'admin' ? null : Number(req.user.sub);
     const completion = memberId
       ? db.prepare("SELECT id FROM chore_completions WHERE chore_id=? AND member_id=? ORDER BY completed_at DESC LIMIT 1").get(id, memberId)
@@ -1165,24 +1221,21 @@ app.get('/api/ics/export', (req, res) => {
   const fmtDt = (dateStr, timeStr) => {
     if (!timeStr || timeStr === 'All day') return `DTSTART;VALUE=DATE:${dateStr.replace(/-/g, '')}`;
     const { h, min } = parseTime12(timeStr);
-    const d = new Date(`${dateStr}T${String(h).padStart(2,'0')}:${String(min).padStart(2,'0')}:00`);
-    return `DTSTART:${d.toISOString().replace(/[-:]/g,'').split('.')[0]}Z`;
+    return `DTSTART:${zonedToUtc(dateStr, h, min).toISOString().replace(/[-:]/g,'').split('.')[0]}Z`;
   };
   const fmtDtEnd = (dateStr, timeStr, endTimeStr, duration) => {
     if (!timeStr || timeStr === 'All day') {
-      const d = new Date(dateStr + 'T12:00:00');
-      d.setDate(d.getDate() + 1);
-      return `DTEND;VALUE=DATE:${localDate(d).replace(/-/g, '')}`;
+      const next = new Date(zonedToUtc(dateStr, 12, 0).getTime() + 24 * 3600_000);
+      return `DTEND;VALUE=DATE:${localDate(next).replace(/-/g, '')}`;
     }
+    let d;
     if (endTimeStr) {
       const { h, min } = parseTime12(endTimeStr);
-      const d = new Date(`${dateStr}T${String(h).padStart(2,'0')}:${String(min).padStart(2,'0')}:00`);
-      return `DTEND:${d.toISOString().replace(/[-:]/g,'').split('.')[0]}Z`;
+      d = zonedToUtc(dateStr, h, min);
+    } else {
+      const { h, min } = parseTime12(timeStr);
+      d = new Date(zonedToUtc(dateStr, h, min).getTime() + (parseInt(duration) || 1) * 3600_000);
     }
-    const { h, min } = parseTime12(timeStr);
-    const durH = parseInt(duration) || 1;
-    const d = new Date(`${dateStr}T${String(h).padStart(2,'0')}:${String(min).padStart(2,'0')}:00`);
-    d.setHours(d.getHours() + durH);
     return `DTEND:${d.toISOString().replace(/[-:]/g,'').split('.')[0]}Z`;
   };
   let cal = [
@@ -3216,11 +3269,11 @@ app.get('/api/photos', requireAuth, (req, res) => {
 
 app.post('/api/photos', requireAuth, async (req, res) => {
   const { filename, data } = req.body;
-  if (!filename || !data?.startsWith('data:image/')) return res.status(400).json({ error: 'filename and image data required' });
-  const ext = (filename.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z]/g, '') || 'jpg';
-  const safe = `${Date.now()}.${ext}`;
+  const photo = parsePhotoDataUrl(data);
+  if (!filename || !photo) return res.status(400).json({ error: 'filename and JPEG, PNG, WebP, GIF or HEIC image data required' });
+  const safe = `${require('crypto').randomUUID()}.${photo.ext}`;
   try {
-    await fs.promises.writeFile(path.join(PHOTOS_DIR, safe), Buffer.from(data.split(',')[1], 'base64'));
+    await fs.promises.writeFile(path.join(PHOTOS_DIR, safe), photo.buf);
     const r = db.prepare('INSERT INTO photos (filename) VALUES (?)').run(safe);
     res.json({ id: r.lastInsertRowid, filename: safe });
   } catch (e) {
@@ -5691,5 +5744,13 @@ app.get('/api/debug/homey-status', requireAdmin, (req, res) => {
 
 // ── SPA fallback ──────────────────────────────────────────────────────────────
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'dist', 'index.html')));
+
+// Final error handler: body-parser errors keep their 4xx status, everything else is a 500.
+app.use((err, req, res, next) => {
+  if (res.headersSent) return next(err);
+  const status = err.status >= 400 && err.status < 500 ? err.status : 500;
+  if (status === 500) console.error(`[error] ${req.method} ${req.originalUrl}`, err);
+  res.status(status).json({ error: status === 500 ? 'Internal server error' : err.message });
+});
 
 app.listen(PORT, () => console.log(`Kith running → http://localhost:${PORT}`));

@@ -123,6 +123,7 @@ function eventCountdownDays(ev){
 }
 
 /* ── API helper ──────────────────────────────────────────────────────── */
+const photoUrl=fn=>`/photos/${fn}?t=${encodeURIComponent(localStorage.getItem('kith_token')||'')}`;
 const _authHdr=()=>{const t=localStorage.getItem('kith_token');return t?{'Authorization':`Bearer ${t}`}:{};};
 const _parseRes=r=>r.ok?r.json():r.json().catch(()=>({})).then(b=>{throw Object.assign(new Error(b?.error||`HTTP ${r.status}`),{status:r.status,body:b});});
 const api={
@@ -2129,7 +2130,7 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
                       const p=photos[photoIdx%photos.length];
                       return(
                         <div style={{flex:1,borderRadius:10,overflow:'hidden',margin:'-2px'}}>
-                          <img key={p.id} src={`/photos/${p.filename}`} style={{width:'100%',height:'100%',objectFit:'cover',display:'block',animation:'fadeIn .8s ease'}} alt=""/>
+                          <img key={p.id} src={photoUrl(p.filename)} style={{width:'100%',height:'100%',objectFit:'cover',display:'block',animation:'fadeIn .8s ease'}} alt=""/>
                         </div>
                       );
                     })()}
@@ -5280,7 +5281,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
             <div style={{marginTop:14,display:'flex',flexWrap:'wrap',gap:8}}>
               {photos.map(p=>(
                 <div key={p.id} style={{position:'relative',width:72,height:72,borderRadius:A.rXs,overflow:'hidden',flexShrink:0}}>
-                  <img src={`/photos/${p.filename}`} style={{width:'100%',height:'100%',objectFit:'cover'}} alt=""/>
+                  <img src={photoUrl(p.filename)} style={{width:'100%',height:'100%',objectFit:'cover'}} alt=""/>
                   <button onClick={async()=>{const r=await api.del(`/api/photos/${p.id}`).catch(()=>null);if(r?.error){toastAdd('Failed to remove','red');return;}setPhotos(pr=>pr.filter(x=>x.id!==p.id));toastAdd('Removed','blue');}} style={{position:'absolute',top:2,right:2,width:20,height:20,borderRadius:'50%',background:'rgba(0,0,0,0.55)',border:'none',color:'#fff',fontSize:13,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1}}>×</button>
                 </div>
               ))}

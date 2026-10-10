@@ -532,20 +532,79 @@ app.post('/api/auth/setup', async (req, res) => {
   const existing = db.prepare('SELECT value FROM settings WHERE key=?').get('admin_pin_hash')?.value;
   if (existing) return res.status(403).json({ error: 'Admin already configured' });
   const { pin } = req.body;
-  if (!String(pin || '').match(/^\d{4,8}$/)) return res.status(400).json({ error: 'PIN must be 4–8 digits' });
+  if (!String(pin || '').match(/^\d{6,8}$/)) return res.status(400).json({ error: 'Admin PIN must be 6–8 digits' });
   const hash = await bcrypt.hash(String(pin), 10);
   db.prepare('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)').run('admin_pin_hash', hash);
   const token = jwt.sign({ sub: 'admin', role: 'admin', pv: getAdminPinVersion() }, getJwtSecret(), { expiresIn: '30d' });
   res.json({ token });
 });
 
+// ── Per-account PIN lockout ───────────────────────────────────────────────────
+// The per-IP limiter above doesn't stop a slow or multi-IP guesser, so each
+// account also locks itself: 5 wrong PINs within 15 min -> locked 5 min, doubling
+// with each further lock (1h cap); a correct PIN clears everything; state older
+// than 24h is forgotten. Attempts are counted BEFORE the (async) bcrypt compare so
+// a burst of parallel guesses can't all slip through before the first failure lands.
+const LOCK_MAX_FAILS = 5, LOCK_BASE_MS = 5 * 60_000, LOCK_CAP_MS = 60 * 60_000;
+const LOCK_FAIL_WINDOW_MS = 15 * 60_000, LOCK_FORGET_MS = 24 * 60 * 60_000;
+
+function _lockRow(key, now) {
+  const r = db.prepare('SELECT * FROM login_failures WHERE key=?').get(key)
+    || { key, fails: 0, strikes: 0, locked_until: 0, updated_at: 0 };
+  if (r.updated_at && now - r.updated_at > LOCK_FORGET_MS) return { key, fails: 0, strikes: 0, locked_until: 0, updated_at: 0 };
+  if (r.fails && r.locked_until <= now && now - r.updated_at > LOCK_FAIL_WINDOW_MS) r.fails = 0;
+  return r;
+}
+function _lockSave(r) {
+  db.prepare('INSERT OR REPLACE INTO login_failures (key,fails,strikes,locked_until,updated_at) VALUES (?,?,?,?,?)')
+    .run(r.key, r.fails, r.strikes, r.locked_until, r.updated_at);
+}
+// Call before checking a PIN. Returns { retryAfterSec } if the attempt must be refused,
+// otherwise counts the attempt and returns null.
+function loginGate(key) {
+  const now = Date.now();
+  const r = _lockRow(key, now);
+  if (r.locked_until > now) return { retryAfterSec: Math.ceil((r.locked_until - now) / 1000) };
+  if (r.fails >= LOCK_MAX_FAILS) return { retryAfterSec: 5 }; // earlier guesses still being checked
+  r.fails += 1; r.updated_at = now; _lockSave(r);
+  return null;
+}
+// Call after a wrong PIN. Returns { retryAfterSec } if this failure locked the account.
+function loginFailed(key, label) {
+  const now = Date.now();
+  const r = _lockRow(key, now);
+  if (r.fails < LOCK_MAX_FAILS) return null;
+  r.strikes += 1; r.fails = 0; r.updated_at = now;
+  const ms = Math.min(LOCK_BASE_MS * 2 ** (r.strikes - 1), LOCK_CAP_MS);
+  r.locked_until = now + ms; _lockSave(r);
+  const msg = `${label} PIN locked for ${Math.round(ms / 60_000)} min after ${LOCK_MAX_FAILS} wrong attempts`;
+  console.warn(`[auth] ${msg}`);
+  sendPushToAll({ title: 'Kith security', body: msg, tag: 'pin-lock' }).catch(() => {});
+  notifyHaMobile(msg, 'Kith security');
+  return { retryAfterSec: Math.ceil(ms / 1000) };
+}
+const loginClear = key => db.prepare('DELETE FROM login_failures WHERE key=?').run(key);
+function lockedResponse(res, retryAfterSec) {
+  const mins = Math.ceil(retryAfterSec / 60);
+  res.set('Retry-After', String(retryAfterSec));
+  return res.status(429).json({ error: retryAfterSec < 60
+    ? 'Too many wrong PINs — try again in a few seconds'
+    : `Too many wrong PINs — locked for ${mins} more minute${mins === 1 ? '' : 's'}` });
+}
+
 app.post('/api/auth/login', authRateLimit, async (req, res) => {
   const { member_id, pin } = req.body;
   const member = db.prepare('SELECT * FROM family_members WHERE id=?').get(Number(member_id));
   if (!member) return res.status(401).json({ error: 'Member not found' });
   if (!member.pin_hash) return res.status(401).json({ error: 'PIN not set for this member' });
-  if (!await bcrypt.compare(String(pin || ''), member.pin_hash))
-    return res.status(401).json({ error: 'Wrong PIN' });
+  const lockKey = `member:${member.id}`;
+  const gated = loginGate(lockKey);
+  if (gated) return lockedResponse(res, gated.retryAfterSec);
+  if (!await bcrypt.compare(String(pin || ''), member.pin_hash)) {
+    const locked = loginFailed(lockKey, member.name);
+    return locked ? lockedResponse(res, locked.retryAfterSec) : res.status(401).json({ error: 'Wrong PIN' });
+  }
+  loginClear(lockKey);
   const family_role = member.family_role || 'adult';
   const token = jwt.sign({ sub: member.id, name: member.name, role: 'member', family_role }, getJwtSecret(), { expiresIn: '30d' });
   res.json({ token, member: { id: member.id, name: member.name, color: member.color, initials: member.initials, family_role } });
@@ -554,20 +613,26 @@ app.post('/api/auth/login', authRateLimit, async (req, res) => {
 app.post('/api/auth/admin', authRateLimit, async (req, res) => {
   const hash = db.prepare('SELECT value FROM settings WHERE key=?').get('admin_pin_hash')?.value;
   if (!hash) return res.status(401).json({ error: 'Admin not configured' });
-  if (!await bcrypt.compare(String(req.body.pin || ''), hash))
-    return res.status(401).json({ error: 'Wrong PIN' });
+  const gated = loginGate('admin');
+  if (gated) return lockedResponse(res, gated.retryAfterSec);
+  if (!await bcrypt.compare(String(req.body.pin || ''), hash)) {
+    const locked = loginFailed('admin', 'Admin');
+    return locked ? lockedResponse(res, locked.retryAfterSec) : res.status(401).json({ error: 'Wrong PIN' });
+  }
+  loginClear('admin');
   const token = jwt.sign({ sub: 'admin', role: 'admin', pv: getAdminPinVersion() }, getJwtSecret(), { expiresIn: '30d' });
   res.json({ token });
 });
 
 app.put('/api/auth/admin/pin', requireAdmin, async (req, res) => {
   const { pin } = req.body;
-  if (!String(pin || '').match(/^\d{4,8}$/)) return res.status(400).json({ error: 'PIN must be 4–8 digits' });
+  if (!String(pin || '').match(/^\d{6,8}$/)) return res.status(400).json({ error: 'Admin PIN must be 6–8 digits' });
   db.prepare('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)').run('admin_pin_hash', await bcrypt.hash(String(pin), 10));
   // Bump the version so every admin token issued before this PIN change is
   // rejected on its next request — otherwise a stolen/old admin token would
   // stay valid for its full 30-day life even after the PIN was rotated.
   db.prepare('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)').run('admin_pin_version', String(getAdminPinVersion() + 1));
+  loginClear('admin');
   res.json({ ok: true });
 });
 
@@ -1723,6 +1788,7 @@ app.put('/api/members/:id/pin', requireAdmin, async (req, res) => {
   if (!String(pin || '').match(/^\d{4,8}$/)) return res.status(400).json({ error: 'PIN must be 4–8 digits' });
   const hash = await bcrypt.hash(String(pin), 10);
   db.prepare('UPDATE family_members SET pin_hash=? WHERE id=?').run(hash, Number(req.params.id));
+  loginClear(`member:${Number(req.params.id)}`); // admin resetting a PIN also lifts any lockout
   res.json({ ok: true });
 });
 

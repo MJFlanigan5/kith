@@ -123,7 +123,6 @@ function eventCountdownDays(ev){
 }
 
 /* ── API helper ──────────────────────────────────────────────────────── */
-const photoUrl=fn=>`/photos/${fn}?t=${encodeURIComponent(localStorage.getItem('kith_token')||'')}`;
 const _authHdr=()=>{const t=localStorage.getItem('kith_token');return t?{'Authorization':`Bearer ${t}`}:{};};
 const _parseRes=r=>r.ok?r.json():r.json().catch(()=>({})).then(b=>{throw Object.assign(new Error(b?.error||`HTTP ${r.status}`),{status:r.status,body:b});});
 const api={
@@ -132,6 +131,16 @@ const api={
   put:(path,data)=>fetch(path,{method:'PUT',headers:{'Content-Type':'application/json',..._authHdr()},body:JSON.stringify(data)}).then(_parseRes),
   del:(path)=>fetch(path,{method:'DELETE',headers:{..._authHdr()}}).then(_parseRes),
 };
+
+/* Photos are served behind a short-lived photo-only token (never the login JWT in a URL). */
+let _photoTok=null,_photoTokExp=0,_photoTokP=null;
+const _photoTokFresh=()=>_photoTok&&Date.now()<_photoTokExp?_photoTok:null;
+const getPhotoToken=()=>_photoTokFresh()?Promise.resolve(_photoTok):(_photoTokP||(_photoTokP=api.get('/api/photos/token').then(r=>{_photoTok=r.token;_photoTokExp=Date.now()+(r.expires_in-300)*1000;return _photoTok;}).finally(()=>{_photoTokP=null;})));
+function PhotoImg({filename,...rest}){
+  const [tok,setTok]=useState(_photoTokFresh());
+  useEffect(()=>{let live=true;getPhotoToken().then(t=>live&&setTok(t)).catch(()=>{});return()=>{live=false;};},[filename]);
+  return tok?<img src={`/photos/${filename}?t=${encodeURIComponent(tok)}`} {...rest}/>:null;
+}
 
 /* ── Time formatting helper ─────────────────────────────────────────── */
 function fmtTime(t, fmt='12h'){
@@ -2130,7 +2139,7 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
                       const p=photos[photoIdx%photos.length];
                       return(
                         <div style={{flex:1,borderRadius:10,overflow:'hidden',margin:'-2px'}}>
-                          <img key={p.id} src={photoUrl(p.filename)} style={{width:'100%',height:'100%',objectFit:'cover',display:'block',animation:'fadeIn .8s ease'}} alt=""/>
+                          <PhotoImg key={p.id} filename={p.filename} style={{width:'100%',height:'100%',objectFit:'cover',display:'block',animation:'fadeIn .8s ease'}} alt=""/>
                         </div>
                       );
                     })()}
@@ -5281,7 +5290,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
             <div style={{marginTop:14,display:'flex',flexWrap:'wrap',gap:8}}>
               {photos.map(p=>(
                 <div key={p.id} style={{position:'relative',width:72,height:72,borderRadius:A.rXs,overflow:'hidden',flexShrink:0}}>
-                  <img src={photoUrl(p.filename)} style={{width:'100%',height:'100%',objectFit:'cover'}} alt=""/>
+                  <PhotoImg filename={p.filename} style={{width:'100%',height:'100%',objectFit:'cover'}} alt=""/>
                   <button onClick={async()=>{const r=await api.del(`/api/photos/${p.id}`).catch(()=>null);if(r?.error){toastAdd('Failed to remove','red');return;}setPhotos(pr=>pr.filter(x=>x.id!==p.id));toastAdd('Removed','blue');}} style={{position:'absolute',top:2,right:2,width:20,height:20,borderRadius:'50%',background:'rgba(0,0,0,0.55)',border:'none',color:'#fff',fontSize:13,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1}}>×</button>
                 </div>
               ))}

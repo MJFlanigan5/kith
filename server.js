@@ -62,11 +62,15 @@ function parsePhotoDataUrl(data) {
   const ext = m && PHOTO_MIME_EXT[m[1].toLowerCase()];
   return ext ? { ext, buf: Buffer.from(data.slice(m[0].length), 'base64') } : null;
 }
-// <img> tags can't send an Authorization header, so the viewer's login token
-// rides in ?t= — photos are only visible to a signed-in household member.
+// <img> tags can't send an Authorization header, so photos are fetched with a short-lived,
+// photo-only token in ?t= (GET /api/photos/token). The login JWT never goes in a URL here,
+// and a photo token is useless anywhere else (requireAuth / SSE reject typ 'photo').
 app.use('/photos', (req, res, next) => {
-  if (!req.headers.authorization && req.query.t) req.headers.authorization = `Bearer ${req.query.t}`;
-  requireAuth(req, res, () => PHOTO_SERVE_EXT.test(req.path) ? next() : res.status(404).end());
+  let ok = false;
+  try { ok = jwt.verify(String(req.query.t || ''), getJwtSecret()).typ === 'photo'; } catch {}
+  if (!ok) return res.status(401).end();
+  if (!PHOTO_SERVE_EXT.test(req.path)) return res.status(404).end();
+  next();
 }, express.static(PHOTOS_DIR, { setHeaders: res => res.set('X-Content-Type-Options', 'nosniff') }));
 
 // Documents are NOT static-mounted (unlike photos) — served only through an
@@ -101,7 +105,11 @@ function getAdminPinVersion() {
 function requireAuth(req, res, next) {
   const token = (req.headers.authorization || '').replace('Bearer ', '');
   if (!token) return res.status(401).json({ error: 'Authentication required' });
-  try { req.user = jwt.verify(token, getJwtSecret()); next(); }
+  try {
+    const user = jwt.verify(token, getJwtSecret());
+    if (user.typ === 'photo') throw new Error('photo token is not a login token');
+    req.user = user; next();
+  }
   catch { res.status(401).json({ error: 'Invalid or expired token' }); }
 }
 
@@ -1990,7 +1998,7 @@ app.delete('/api/polls/:id', requireAdmin, (req, res) => {
 app.get('/api/events/stream', (req, res) => {
   const token = req.query.token || (req.headers.authorization || '').replace('Bearer ', '');
   if (!token) return res.status(401).end();
-  try { jwt.verify(token, getJwtSecret()); }
+  try { if (jwt.verify(token, getJwtSecret()).typ === 'photo') throw new Error('photo token'); }
   catch { return res.status(401).end(); }
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -3331,6 +3339,10 @@ app.get('/api/music/now-playing', requireAuth, async (req, res) => {
 // ── Routes: Photos (screensaver) ──────────────────────────────────────────────
 app.get('/api/photos', requireAuth, (req, res) => {
   res.json(db.prepare('SELECT * FROM photos ORDER BY created_at DESC').all());
+});
+
+app.get('/api/photos/token', requireAuth, (req, res) => {
+  res.json({ token: jwt.sign({ typ: 'photo' }, getJwtSecret(), { expiresIn: '1h' }), expires_in: 3600 });
 });
 
 app.post('/api/photos', requireAuth, async (req, res) => {

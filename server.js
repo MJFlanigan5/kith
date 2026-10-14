@@ -3618,6 +3618,24 @@ function recordWishlistCheck(id, price) {
   }
 }
 
+// Models occasionally add commentary after the JSON ("Unexpected non-whitespace character after
+// JSON"), which used to drop that email's result. Fall back to the first balanced {...} / [...].
+function parseAiJson(text) {
+  try { return JSON.parse(text); } catch (e) {
+    const start = text.search(/[{[]/);
+    if (start < 0) throw e;
+    let depth = 0, inStr = false, esc = false;
+    for (let i = start; i < text.length; i++) {
+      const c = text[i];
+      if (inStr) { if (esc) esc = false; else if (c === '\\') esc = true; else if (c === '"') inStr = false; continue; }
+      if (c === '"') inStr = true;
+      else if (c === '{' || c === '[') depth++;
+      else if ((c === '}' || c === ']') && --depth === 0) return JSON.parse(text.slice(start, i + 1));
+    }
+    throw e;
+  }
+}
+
 // Shared AI caller — system prompt + user content, returns parsed JSON or null
 async function callAi(systemPrompt, userContent) {
   const getSetting = k => db.prepare('SELECT value FROM settings WHERE key=?').get(k)?.value || '';
@@ -3655,7 +3673,7 @@ async function callAi(systemPrompt, userContent) {
       text = data.content?.[0]?.text;
     }
     if (text) text = text.replace(/^```[^\n]*\n?/, '').replace(/\n?```$/, '').trim();
-    return text ? JSON.parse(text) : null;
+    return text ? parseAiJson(text) : null;
   } catch (e) { console.error('[ai] error:', e?.message); return null; }
 }
 

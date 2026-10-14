@@ -5507,6 +5507,9 @@ const SHIPPING_RE = /\b(ship(?:ped|ping|ment)?|track(?:ing)?|deliver(?:y|ed|ing)
 const BILL_RE = /\b(bill|statement|invoice|payment due|amount due|minimum payment|your balance|autopay|auto-pay|past due|balance due)\b/i;
 const APPT_RE = /\b(appointment|reservation|itinerary|check.in|boarding pass|your flight|your hotel|your trip|your stay|rsvp|your reservation|your booking|your event)\b/i;
 let _scanInProgress = false;
+// imapflow's own message is just "Command failed"; the useful part (e.g. AUTHENTICATIONFAILED:
+// Invalid credentials) is on serverResponseCode / responseText.
+const imapErrText = e => [e?.serverResponseCode, e?.responseText || e?.message || e].filter(Boolean).join(': ');
 
 async function pollImap() {
   if (g('imap_enabled') !== '1') return;
@@ -5592,7 +5595,7 @@ async function pollImap() {
     }
     await client.logout();
   } catch (e) {
-    console.error('[imap]', e?.message || e);
+    console.error('[imap]', imapErrText(e));
   }
 }
 
@@ -5716,7 +5719,7 @@ async function scanImap30Days() {
     console.log(`[imap scan] done — packages:${summary.packages} bills:${summary.bills} events:${summary.events} appointments:${summary.appointments}${truncated ? ' (truncated at 50)' : ''}`);
     summary.truncated = truncated;
   } catch (e) {
-    console.error('[imap scan]', e?.message || e);
+    console.error('[imap scan]', imapErrText(e));
     broadcastSSE('scan_complete', { ...summary, error: e?.message || 'Scan failed' });
     return;
   } finally {

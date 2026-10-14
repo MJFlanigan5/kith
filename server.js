@@ -2308,7 +2308,7 @@ app.get('/api/ha/pull', requireAuth, async (req, res) => {
     const unwrap = r => (r && typeof r === 'object' && 'result' in r) ? r.result : r;
 
     // Timeline — flow execution history with notification messages
-    const tlRaw = await fetch(`${base}/api/manager/timeline/timeline/`, { headers: hdrs, signal: AbortSignal.timeout(6000) }).then(r => r.json()).catch(() => null);
+    const tlRaw = await fetch(`${base}/api/manager/notifications/notification/`, { headers: hdrs, signal: AbortSignal.timeout(6000) }).then(r => r.json()).catch(() => null);
     const tlData = unwrap(tlRaw);
     if (tlData && Object.keys(tlData).length) console.log('[homey/timeline] sample entry:', JSON.stringify(Object.values(tlData)[0] ?? {}).slice(0, 300));
     const timeline = tlData && typeof tlData === 'object'
@@ -5179,7 +5179,7 @@ async function homeyPoll() {
 
   // Timeline — detect new flow notification entries
   try {
-    const tlRaw = await fetch(`${homeyUrl}/api/manager/timeline/timeline/`, {
+    const tlRaw = await fetch(`${homeyUrl}/api/manager/notifications/notification/`, {
       headers: hdrs, signal: AbortSignal.timeout(8000),
     }).then(r => r.json()).catch(e => { console.warn('[homey-poll] timeline fetch error:', e?.message); return null; });
     const tlData = unwrap(tlRaw);
@@ -5187,7 +5187,9 @@ async function homeyPoll() {
       // Find newest entry by dateCreated (handles both UUIDs and numeric keys)
       const entries = Object.entries(tlData).map(([key, val]) => ({ _key: key, ...val }));
       if (entries.length) {
-        entries.sort((a, b) => Number(b.dateCreated || 0) - Number(a.dateCreated || 0));
+        // dateCreated is a unix number on old firmware, an ISO string on current Homey notifications
+        const ts = e => { const n = Number(e.dateCreated); return isNaN(n) ? (Date.parse(e.dateCreated) || 0) : n; };
+        entries.sort((a, b) => ts(b) - ts(a));
         const newest = entries[0];
         const newestKey = newest._key;
         if (_homeyTlKey !== null && newestKey !== _homeyTlKey) {
@@ -5195,6 +5197,7 @@ async function homeyPoll() {
           if (newest.dateCreated) {
             const num = Number(newest.dateCreated);
             if (!isNaN(num)) created_at = new Date(num < 1e10 ? num * 1000 : num).toISOString();
+            else if (Date.parse(newest.dateCreated)) created_at = new Date(newest.dateCreated).toISOString();
           }
           broadcastSSE('activity', {
             title: newest.title || newest.excerpt || 'Homey',

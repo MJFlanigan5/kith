@@ -5455,7 +5455,7 @@ function upsertPackage(pkg, subject) {
     const byTracking = db.prepare('SELECT id FROM packages WHERE tracking_number=?').get(pkg.tracking_number);
     if (byTracking) return false;
     // Upgrade a subject-only entry to include the tracking number
-    const bySubject = db.prepare('SELECT id FROM packages WHERE source_subject=? AND (tracking_number IS NULL OR tracking_number="")').get(subject);
+    const bySubject = db.prepare(`SELECT id FROM packages WHERE source_subject=? AND (tracking_number IS NULL OR tracking_number='')`).get(subject);
     if (bySubject) {
       db.prepare('UPDATE packages SET tracking_number=?,carrier=?,expected_date=? WHERE id=?')
         .run(pkg.tracking_number, carrier, pkg.expected_date || '', bySubject.id);

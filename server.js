@@ -5515,6 +5515,7 @@ async function pollImap() {
   const { ImapFlow } = require('imapflow');
   const { simpleParser } = require('mailparser');
   const client = new ImapFlow({ host, port, secure: port === 993, auth: { user, pass }, logger: false });
+  client.on('error', e => console.error('[imap]', e.message)); // an unhandled ImapFlow 'error' event kills the process
   const mbKey = `${user}:INBOX`;
 
   try {
@@ -5630,6 +5631,7 @@ async function scanImap30Days() {
     const { ImapFlow } = require('imapflow');
     const { simpleParser } = require('mailparser');
     const client = new ImapFlow({ host, port, secure: port === 993, auth: { user, pass }, logger: false });
+    client.on('error', e => console.error('[imap]', e.message)); // an unhandled ImapFlow 'error' event kills the process
     const mbKey = `${user}:INBOX`;
 
     await client.connect();
@@ -5744,6 +5746,7 @@ app.post('/api/imap/test', requireAdmin, async (req, res) => {
   }
   const { ImapFlow } = require('imapflow');
   const client = new ImapFlow({ host, port: parseInt(port || '993'), secure: parseInt(port || '993') === 993, auth: { user, pass }, logger: false, connectionTimeout: 8000 });
+  client.on('error', e => console.error('[imap]', e.message)); // an unhandled ImapFlow 'error' event kills the process
   try {
     await client.connect();
     await client.logout();

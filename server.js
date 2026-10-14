@@ -1542,6 +1542,27 @@ app.put('/api/settings/email', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
+// Inbox scanning (IMAP) credentials. imap_user/imap_pass are on SETTINGS_SENSITIVE, so the generic
+// PUT /api/settings silently drops them (the UI's Save used to report success without saving).
+app.get('/api/settings/imap', requireAdmin, (req, res) => {
+  const get = k => db.prepare('SELECT value FROM settings WHERE key=?').get(k)?.value || '';
+  res.json({
+    imap_host: get('imap_host'), imap_port: get('imap_port'), imap_user: get('imap_user'),
+    has_password: !!get('imap_pass'), imap_enabled: get('imap_enabled'), imap_poll_interval: get('imap_poll_interval'),
+  });
+});
+
+app.put('/api/settings/imap', requireAdmin, (req, res) => {
+  const b = req.body || {};
+  const upd = db.prepare('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)');
+  for (const k of ['imap_host', 'imap_port', 'imap_user', 'imap_enabled', 'imap_poll_interval']) {
+    if (b[k] !== undefined) upd.run(k, String(b[k]));
+  }
+  if (b.imap_pass) upd.run('imap_pass', String(b.imap_pass)); // write-only; never returned
+  _lastImapPoll = 0; // credentials changed — poll on the next minute tick instead of waiting out the interval
+  res.json({ ok: true });
+});
+
 // ── Sports (ESPN) ─────────────────────────────────────────────────────────────
 const _sportsCache = {};
 const _sportsCacheAt = {};

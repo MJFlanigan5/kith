@@ -4729,7 +4729,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
       if(st.ics_export_token) setIcsExportToken(st.ics_export_token);
       if(st.imap_host) setImapHost(st.imap_host);
       if(st.imap_port) setImapPort(st.imap_port);
-      if(st.imap_user) setImapUser(st.imap_user);
+      api.get('/api/settings/imap').then(i=>{ if(i?.imap_user) setImapUser(i.imap_user); }).catch(()=>{});
       setImapEnabled(st.imap_enabled==='1');
       if(st.imap_poll_interval) setImapInterval(st.imap_poll_interval);
       if(st.dietary_goal) setDietaryGoal(st.dietary_goal);
@@ -5023,7 +5023,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
                 setImapSaving(true);
                 const payload={imap_host:imapHost,imap_port:imapPort,imap_user:imapUser,imap_enabled:imapEnabled?'1':'0',imap_poll_interval:imapInterval};
                 if(imapPass) payload.imap_pass=imapPass;
-                const r=await api.put('/api/settings',payload).catch(()=>null);
+                const r=await api.put('/api/settings/imap',payload).catch(()=>null);
                 setImapSaving(false);
                 if(!r||r.error){toastAdd(r?.error||'Save failed','red');}else{toastAdd('IMAP settings saved');}
               }}>Save</Btn>

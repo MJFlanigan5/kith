@@ -1128,7 +1128,6 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
     ...(widgetData.who_home?['w_who_home']:[]),
     ...(widgetData.thermostat?['w_thermostat']:[]),
     ...(widgetData.ha_sensors?['w_ha_sensors']:[]),
-    ...(allSmartEvents.length>0?['w_notifications']:[]),
     ...(polls.length>0?['w_polls']:[]),
     ...(uncheckedGrocery.length>0?['w_grocery']:[]),
     ...(photos.length>0?['w_photos']:[]),

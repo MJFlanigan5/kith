@@ -1136,6 +1136,8 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
     ...(pwActive?['w_powerwall']:[]),
     ...(widgetData.moen&&widgetData.moen.daily_gal>0?['w_moen']:[]),
     ...(widgetData.flight?['w_flight']:[]),
+    ...((widgetData.uptime||[]).length>0?['w_uptime']:[]),
+    ...((widgetData.beszel||[]).length>0?['w_beszel']:[]),
     ...(polls.length>0?['w_polls']:[]),
     ...(uncheckedGrocery.length>0?['w_grocery']:[]),
     ...(photos.length>0?['w_photos']:[]),
@@ -1220,8 +1222,6 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
   if(pwW&&pwW.grid_status&&pwW.grid_status!=='Active') alerts.push(`Grid down · on battery ${pwW.battery_pct}%`);
   else if(pwW&&pwW.battery_pct<20) alerts.push(`Battery low · ${pwW.battery_pct}%`);
   if(moenW?.has_alert) alerts.push('Water leak alert');
-  (widgetData.uptime||[]).filter(m=>m.ok===false).forEach(m=>alerts.push(`${m.name} is down`));
-  (widgetData.beszel||[]).filter(x=>x.status&&x.status!=='up'&&x.status!=='unknown').forEach(x=>alerts.push(`${x.name} is ${x.status}`));
   if(widgetData.unifi&&!['up','unknown'].includes(widgetData.unifi.status)) alerts.push('Internet down');
   const tickerItems=[
     ...alerts.map(t=>({t,alert:true})),
@@ -1389,7 +1389,7 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
         <div style={{flex:1,display:'flex',flexDirection:'column',gap:12,minHeight:0}}>
 
           {/* Main 3-col grid */}
-          <div style={{flex:1,display:'grid',gridTemplateColumns:'1.05fr 1.35fr 1fr',gap:isTV?16:12,minHeight:0,zoom:isTV?1.1:undefined}}>
+          <div style={{flex:1,display:'grid',gridTemplateColumns:'1.05fr 1.35fr 1fr',gap:isTV?16:12,minHeight:0}}>
 
             {/* LEFT: today and tomorrow, chores due in the next 3 days, counts for later */}
             <Widget style={{display:'flex',flexDirection:'column',overflow:'hidden'}}>
@@ -2399,24 +2399,7 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
                     ))}
                   </div>
                 )}
-                {wifiQrData&&(
-                  <div style={{marginTop:'auto',display:'flex',gap:12,alignItems:'center',borderTop:`1px solid ${D.sep}`,paddingTop:10,flexShrink:0}}>
-                    <img src={wifiQrData.dataUrl} alt="Wi-Fi QR" style={{width:isTV?84:72,height:isTV?84:72,objectFit:'contain',borderRadius:8,background:'#edecea',padding:4,display:'block'}}/>
-                    <div><div style={{fontSize:13,fontWeight:700,color:D.t1}}>Guest Wi-Fi</div><div style={{fontSize:11,color:D.t3}}>{wifiQrData.ssid} · scan to join</div></div>
-                  </div>
-                )}
               </Widget>
-              {/* Emergency info — always-visible, rotates through configured
-                  fields every 4s. Tap to expand full detail. Deliberately
-                  not in centerPanels or gated behind hover-only controls —
-                  in an emergency you shouldn't have to wait or walk up and
-                  poke around to see it. */}
-              {emergencyHasValue&&(
-                <Widget onClick={()=>setEmergencyForced(f=>!f)} style={{flexShrink:0,cursor:'pointer',border:`1px solid ${emergencyForced?A.indigo:D.border}`,background:emergencyForced?'rgba(88,86,214,0.12)':undefined}}>
-                  <div style={{fontSize:11,fontWeight:600,color:D.t3,marginBottom:3}}>{EMERGENCY_LABELS[emergencyFilled[emergencyChipIdx%emergencyFilled.length]?.[0]]}</div>
-                  <div style={{fontSize:14,color:D.t1,fontWeight:600,lineHeight:1.3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{emergencyFilled[emergencyChipIdx%emergencyFilled.length]?.[1]}</div>
-                </Widget>
-              )}
               {pinnedNotes.length>0&&(
                 <Widget style={{flexShrink:0,maxHeight:'30%',display:'flex',flexDirection:'column',overflow:'hidden'}}>
                   <WLabel>Notes</WLabel>

@@ -831,6 +831,19 @@ function PresenceBar({duration,color}){
 }
 
 /* ── Display Mode ────────────────────────────────────────────────────── */
+const DISPLAY_D={
+  bg:'#0c0c0e',card:'#18181b',border:'#29292d',
+  t1:'#edecea',t2:'#b9b8bd',t3:'#87868c',t4:'#4f4e54',
+  sep:'#202023',on:'#7fd99a',
+};
+function DisplayWidget({children,style:s={},onClick}){
+  const D=DISPLAY_D, isTV=window.innerWidth>=1440;
+  return <div onClick={onClick} style={{background:D.card,borderRadius:14,border:`1px solid ${D.border}`,padding:isTV?'18px 22px':'14px 16px',overflow:'hidden',...s}}>{children}</div>;
+}
+function DisplayWLabel({children}){
+  const D=DISPLAY_D, isTV=window.innerWidth>=1440;
+  return <div style={{fontSize:isTV?13:11,fontWeight:600,color:D.t3,marginBottom:isTV?14:12}}>{children}</div>;
+}
 function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGrocery,countdowns,photos=[],weather,clockFormat='12h',nightModeStart='23:00',nightModeEnd='06:00',goals=[],notes=[],polls=[],rotationMs=10000,wifiQrData=null,quickActions=[],members=[],packages=[],setPackages,messages=[],setMessages,appliances=[],consumables=[],maintenanceItems=[],pets=[],subscriptions=[],pantry=[],projects=[]}){
   const isMobile=useIsMobile();
   const now=useMinuteClock();
@@ -1248,18 +1261,11 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
   // Dark dashboard tokens
   // Foyer ambient tokens (ha-wall-kiosk pwa-app :root). Neutral everywhere; D.on
   // (Foyer's green) only for things that are live right now.
-  const D={
-    bg:'#0c0c0e',card:'#18181b',border:'#29292d',
-    t1:'#edecea',t2:'#b9b8bd',t3:'#87868c',t4:'#4f4e54',
-    sep:'#202023',on:'#7fd99a',
-  };
+  const D=DISPLAY_D;
   const isTV=window.innerWidth>=1440;
-  const Widget=({children,style:s={},onClick})=>(
-    <div onClick={onClick} style={{background:D.card,borderRadius:14,border:`1px solid ${D.border}`,padding:isTV?'18px 22px':'14px 16px',overflow:'hidden',...s}}>{children}</div>
-  );
-  const WLabel=({children})=>(
-    <div style={{fontSize:isTV?13:11,fontWeight:600,color:D.t3,marginBottom:isTV?14:12}}>{children}</div>
-  );
+  // Defined at module level: declared in here, every re-render made a new component type,
+  // so React rebuilt every card (and restarted its animations) on each timer tick — the blink.
+  const Widget=DisplayWidget, WLabel=DisplayWLabel;
 
   if(isNightMode) return(
     <div onClick={dismissNight} style={{width:'100vw',height:'100vh',background:D.bg,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',cursor:'pointer',userSelect:'none',position:'relative'}}>

@@ -835,7 +835,7 @@ app.post('/api/chores', requireAdmin, (req, res) => {
   const status = nextDue <= today ? 'due' : 'upcoming';
   const r = db.prepare(
     'INSERT INTO chores (name,recurrence,next_due,status,points,outdoor,goal_id,goal_amount,member_id) VALUES (?,?,?,?,?,?,?,?,?)'
-  ).run(name.trim(), recurrence.trim(), nextDue, status, Number(points)||1, outdoor?1:0, goal_id||null, Number(goal_amount)||1, member_id||null);
+  ).run(decodeXmlEntities(name.trim()), recurrence.trim(), nextDue, status, Number(points)||1, outdoor?1:0, goal_id||null, Number(goal_amount)||1, member_id||null);
   res.json(db.prepare(`
     SELECT c.*, fm.name as member_name, fm.color as member_color, fm.initials as member_initials
     FROM chores c LEFT JOIN family_members fm ON fm.id = c.member_id WHERE c.id=?
@@ -851,7 +851,7 @@ app.put('/api/chores/:id', requireAdmin, (req, res) => {
   const status = nd < today ? 'overdue' : nd === today ? 'due' : 'upcoming';
   db.prepare('UPDATE chores SET name=?,recurrence=?,next_due=?,status=?,points=?,outdoor=?,goal_id=?,goal_amount=?,member_id=? WHERE id=?')
     .run(
-      name || c.name, recurrence || c.recurrence, nd, status,
+      name ? decodeXmlEntities(name) : c.name, recurrence || c.recurrence, nd, status,
       points != null ? Number(points) : (c.points||1),
       outdoor != null ? (outdoor?1:0) : (c.outdoor||0),
       goal_id !== undefined ? (goal_id||null) : c.goal_id,
@@ -5004,7 +5004,7 @@ app.post('/api/wishlist', requireAuth, (req, res) => {
   const { name, url='', target_price=null, category='Other', notes='' } = req.body || {};
   if (!name?.trim()) return res.status(400).json({ error: 'name required' });
   const r = db.prepare('INSERT INTO wishlist_items (name,url,target_price,category,notes) VALUES (?,?,?,?,?)')
-    .run(name.trim(), url, target_price!=null && target_price!==''?Number(target_price):null, category, notes);
+    .run(decodeXmlEntities(name.trim()), url, target_price!=null && target_price!==''?Number(target_price):null, category, notes);
   res.json(db.prepare('SELECT * FROM wishlist_items WHERE id=?').get(r.lastInsertRowid));
 });
 app.put('/api/wishlist/:id', requireAuth, (req, res) => {
@@ -5013,7 +5013,7 @@ app.put('/api/wishlist/:id', requireAuth, (req, res) => {
   const { name, url, target_price, category, notes } = req.body || {};
   const nextTarget = target_price !== undefined ? (target_price!=null && target_price!==''?Number(target_price):null) : w.target_price;
   db.prepare('UPDATE wishlist_items SET name=?,url=?,target_price=?,category=?,notes=? WHERE id=?')
-    .run((name??w.name).trim(), url??w.url, nextTarget, category??w.category, notes??w.notes, w.id);
+    .run(decodeXmlEntities((name??w.name).trim()), url??w.url, nextTarget, category??w.category, notes??w.notes, w.id);
   res.json(db.prepare('SELECT * FROM wishlist_items WHERE id=?').get(w.id));
 });
 app.delete('/api/wishlist/:id', requireAuth, (req, res) => {
@@ -5950,4 +5950,16 @@ app.use((err, req, res, next) => {
 });
 
 try { reconcileDeliveredPackages(); } catch (err) { console.error('[packages] reconcile failed:', err.message); }
+// Names saved from web pages and emails sometimes kept HTML codes ("Trap &amp; Bucket").
+try {
+  let fixed = 0;
+  for (const [table, col] of [['chores', 'name'], ['wishlist_items', 'name']]) {
+    const upd = db.prepare(`UPDATE ${table} SET ${col}=? WHERE id=?`);
+    for (const r of db.prepare(`SELECT id, ${col} AS v FROM ${table} WHERE ${col} LIKE '%&%;%'`).all()) {
+      const clean = decodeXmlEntities(r.v);
+      if (clean !== r.v) fixed += upd.run(clean, r.id).changes;
+    }
+  }
+  if (fixed) console.log(`[names] decoded HTML codes in ${fixed} name(s)`);
+} catch (err) { console.error('[names] decode failed:', err.message); }
 app.listen(PORT, () => console.log(`Kith running → http://localhost:${PORT}`));

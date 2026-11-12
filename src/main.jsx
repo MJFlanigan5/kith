@@ -60,6 +60,14 @@ function eventTimeMinutes(timeStr){
    Scoped to recurring_rule==='Annually' only, so a one-time event that
    happens to end in "(1990)" for an unrelated reason (e.g. a historical
    note) isn't misinterpreted as a birth year. */
+// Homey timeline text marks names as **bold**. Render that, and tell when the
+// message line just repeats the title.
+const stripMdBold=s=>String(s||'').replace(/\*\*(.+?)\*\*/g,'$1').trim().replace(/\.$/,'');
+function mdBold(s){
+  return String(s||'').split(/(\*\*.+?\*\*)/g).map((part,i)=>/^\*\*.+\*\*$/.test(part)?<b key={i}>{part.slice(2,-2)}</b>:part);
+}
+const eventMessageRepeats=ev=>!ev.message||stripMdBold(ev.message)===stripMdBold(ev.title);
+
 function displayEventTitle(ev){
   if(ev.recurring_rule!=='Annually') return ev.title;
   const m=ev.title.match(/^(.*\S)\s*\((\d{4})\)\s*$/);
@@ -337,6 +345,13 @@ function Drawer({open,onClose,title,children,width=440}){
   const isMobile=useIsMobile();
   const effectiveWidth=isMobile?'100%':width;
   const translateOut=isMobile?'translateY(100%)':`translateX(${width+20}px)`;
+  // The phone tab bar and + button sit above the page's stacking context, so they
+  // would cover the bottom of an open drawer. Count open drawers on <body> to hide them.
+  useEffect(()=>{
+    if(!open) return;
+    const b=document.body; b.dataset.drawers=String((+b.dataset.drawers||0)+1);
+    return()=>{const n=(+b.dataset.drawers||1)-1; if(n>0) b.dataset.drawers=String(n); else delete b.dataset.drawers;};
+  },[open]);
   return(
     <>
       {open&&<div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.18)',zIndex:100,animation:'fadeIn .15s'}}/>}
@@ -2070,8 +2085,8 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
                               <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 10px',background:'rgba(255,255,255,0.06)',borderRadius:10}}>
                                 <span style={{fontSize:22,flexShrink:0}}>{ev.icon||'🏠'}</span>
                                 <div style={{flex:1,minWidth:0}}>
-                                  <div style={{fontSize:13,fontWeight:600,color:D.t1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{displayEventTitle(ev)}</div>
-                                  {ev.message&&<div style={{fontSize:11,color:D.t3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginTop:1}}>{ev.message}</div>}
+                                  <div style={{fontSize:13,fontWeight:500,color:D.t1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{mdBold(displayEventTitle(ev))}</div>
+                                  {!eventMessageRepeats(ev)&&<div style={{fontSize:11,color:D.t3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginTop:1}}>{mdBold(ev.message)}</div>}
                                 </div>
                                 <span style={{fontSize:10,color:D.t4,flexShrink:0,whiteSpace:'nowrap'}}>{fmtAgo(ev.created_at)}</span>
                               </div>
@@ -2728,8 +2743,8 @@ function DashboardScreen({events,setEvents,chores,grocery,meals,countdowns,weath
               <div key={ev.id||i} style={{display:'flex',alignItems:'center',gap:12,padding:'11px 16px',borderTop:i>0?`1px solid ${A.sep}`:'none'}}>
                 <span style={{fontSize:18,flexShrink:0}}>{ev.icon||'🏠'}</span>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:14,fontWeight:600,color:A.label1}}>{displayEventTitle(ev)}</div>
-                  {ev.message&&<div style={{fontSize:13,color:A.label4,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ev.message}</div>}
+                  <div style={{fontSize:14,fontWeight:500,color:A.label1}}>{mdBold(displayEventTitle(ev))}</div>
+                  {!eventMessageRepeats(ev)&&<div style={{fontSize:13,color:A.label4,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{mdBold(ev.message)}</div>}
                 </div>
                 <span style={{fontSize:12,color:A.label5,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{agoStr}</span>
               </div>
@@ -4535,7 +4550,7 @@ function WebhookSecretPanel({toastAdd}){
 }
 
 /* ── Settings ────────────────────────────────────────────────────────── */
-function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setPhotos,clockFormat,setClockFormat,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd,setRefreshMs,parseRefreshMs,setQuickActions,setRotationMs,setWifiQrData,darkMode,onDarkMode}){
+function SettingsScreen({pageList=[],hiddenPages,onTogglePage,toastAdd,icsSources,setIcsSources,onDisplay,photos,setPhotos,clockFormat,setClockFormat,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd,setRefreshMs,parseRefreshMs,setQuickActions,setRotationMs,setWifiQrData,darkMode,onDarkMode}){
   const isMobile=useIsMobile();
   const [timezone,setTimezone]=useState('America/New_York');
   const [weatherCity,setWeatherCity]=useState('');
@@ -5139,6 +5154,17 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
           </div>
         </div>
       </FormGroup>
+
+      {hiddenPages&&onTogglePage&&pageList.length>0&&(
+        <FormGroup label="Pages" footer="Switched-off pages leave the menu. Nothing is deleted; switch one back on to bring it back.">
+          {pageList.map(p=>(
+            <div key={p.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 16px'}}>
+              <span style={{display:'flex',alignItems:'center',gap:10,fontSize:15,color:A.label1}}><span style={{color:A.label3,display:'flex'}}>{p.icon}</span>{p.label}</span>
+              <Toggle checked={!hiddenPages.has(p.id)} onChange={()=>onTogglePage(p.id)}/>
+            </div>
+          ))}
+        </FormGroup>
+      )}
 
       <FormGroup label="Display">
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px'}}>
@@ -7116,7 +7142,7 @@ function BillsScreen({bills,setBills,payments,setPayments,toastAdd}){
             {monthTotal>0&&` · $${monthTotal.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})} / mo`}
           </p>
         </div>
-        <Btn onClick={openNew}>+ Add</Btn>
+        <Btn onClick={openNew} style={{whiteSpace:'nowrap',flexShrink:0}}>+ Add</Btn>
       </div>
 
       {bills.length===0?(
@@ -9753,6 +9779,8 @@ function SchoolScreen({members=[],toastAdd}){
   );
 }
 
+const DEFAULT_HIDDEN_PAGES='pantry,school,projects,notes,bookmarks,polls,subscriptions,budget,documents,home,pets,contacts,messages,lists,recipes';
+
 function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocery,setGrocery,meals,setMeals,icsSources,setIcsSources,inboxCount,setInboxCount,countdowns,setCountdowns,members,setMembers,photos,setPhotos,clockFormat,setClockFormat,weather,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd,setRefreshMs,parseRefreshMs,goals,setGoals,notes,setNotes,polls,setPolls,bookmarks,setBookmarks,quickActions,setQuickActions,setRotationMs,setWifiQrData,darkMode,onDarkMode,packages,setPackages,messages,setMessages,recipes,setRecipes,bills,setBills,payments,setPayments,vehicles,setVehicles,appliances,setAppliances,consumables,setConsumables,pets,setPets,contacts,setContacts,maintenanceItems,setMaintenanceItems,budget,setBudget,subscriptions,setSubscriptions,projects,setProjects,pantry,setPantry,wishlist,setWishlist,claudeInbox,setClaudeInbox,isAdmin=false}){
   const isMobile=useIsMobile();
   const [screen,setScreen]=useState('dashboard');
@@ -9798,6 +9826,18 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
   },[]);
   const isKidMode=_jwtPayload?.role==='member'&&_jwtPayload?.family_role==='kid';
   const KID_SCREENS=new Set(['dashboard','chores','grocery','calendar']);
+  // Pages switched off in Settings → Pages. Until saved once, the never-used pages start hidden.
+  const [hiddenPages,setHiddenPages]=useState(()=>new Set(DEFAULT_HIDDEN_PAGES.split(',')));
+  useEffect(()=>{
+    api.get('/api/settings').then(s=>{if(s&&typeof s.hidden_pages==='string') setHiddenPages(new Set(s.hidden_pages.split(',').filter(Boolean)));}).catch(()=>{});
+  },[]);
+  const togglePage=(id)=>{
+    const next=new Set(hiddenPages);
+    if(next.has(id)) next.delete(id); else next.add(id);
+    setHiddenPages(next);
+    api.put('/api/settings',{hidden_pages:[...next].join(',')}).then(r=>{if(r?.error)toastAdd(r.error,'red');}).catch(()=>toastAdd('Save failed','red'));
+  };
+  const [moreOpen,setMoreOpen]=useState(false);
 
   const allNav=[
     {id:'dashboard',label:'Dashboard',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="1" y="1" width="6" height="6" rx="2" fill="currentColor" opacity=".9"/><rect x="10" y="1" width="6" height="6" rx="2" fill="currentColor" opacity=".9"/><rect x="1" y="10" width="6" height="6" rx="2" fill="currentColor" opacity=".9"/><rect x="10" y="10" width="6" height="6" rx="2" fill="currentColor" opacity=".9"/></svg>},
@@ -9831,7 +9871,12 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
     {id:'inbox',label:'Inbox',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><rect x="1.5" y="3.5" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M1.5 6.5l7 4 7-4" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>,badge:inboxCount},
     {id:'settings',label:'Settings',icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><circle cx="8.5" cy="8.5" r="2.5" stroke="currentColor" strokeWidth="1.5"/><path d="M8.5 1v2M8.5 14v2M1 8.5h2M14 8.5h2M3.05 3.05l1.42 1.42M12.53 12.53l1.42 1.42M12.53 3.05l-1.42 1.42M4.47 12.53l-1.42 1.42" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
   ];
-  const nav=isKidMode?allNav.filter(item=>KID_SCREENS.has(item.id)):allNav;
+  const nav=(isKidMode?allNav.filter(item=>KID_SCREENS.has(item.id)):allNav).filter(item=>!hiddenPages.has(item.id));
+  const screenLabel=allNav.find(n=>n.id===screen)?.label;
+  const PRIMARY_TABS=['dashboard','calendar','chores','grocery'];
+  const primaryNav=nav.filter(n=>PRIMARY_TABS.includes(n.id));
+  const moreNav=nav.filter(n=>!PRIMARY_TABS.includes(n.id)&&n.id!=='settings');
+  const goScreen=(id)=>{setScreen(id);setMoreOpen(false);};
 
   const screens={
     dashboard:  <DashboardScreen events={events} setEvents={setEvents} chores={chores} grocery={grocery} meals={meals} countdowns={countdowns} weather={weather} clockFormat={clockFormat} quickActions={quickActions} bills={bills} payments={payments} projects={projects} subscriptions={subscriptions} pantry={pantry} toastAdd={toastAdd}/>,
@@ -9863,7 +9908,7 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
     lists:      <ListsScreen toastAdd={toastAdd}/>,
     recipes:    <RecipesScreen recipes={recipes} setRecipes={setRecipes} toastAdd={toastAdd}/>,
     inbox:      <InboxScreen toastAdd={toastAdd} events={events} setEvents={setEvents} setInboxCount={setInboxCount}/>,
-    settings:   <SettingsScreen toastAdd={toastAdd} icsSources={icsSources} setIcsSources={setIcsSources} onDisplay={onDisplay} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} setQuickActions={setQuickActions} setRotationMs={setRotationMs} setWifiQrData={setWifiQrData} darkMode={darkMode} onDarkMode={onDarkMode}/>,
+    settings:   <SettingsScreen pageList={allNav.filter(n=>n.id!=='dashboard'&&n.id!=='settings')} hiddenPages={hiddenPages} onTogglePage={togglePage} toastAdd={toastAdd} icsSources={icsSources} setIcsSources={setIcsSources} onDisplay={onDisplay} photos={photos} setPhotos={setPhotos} clockFormat={clockFormat} setClockFormat={setClockFormat} nightModeStart={nightModeStart} setNightModeStart={setNightModeStart} nightModeEnd={nightModeEnd} setNightModeEnd={setNightModeEnd} setRefreshMs={setRefreshMs} parseRefreshMs={parseRefreshMs} setQuickActions={setQuickActions} setRotationMs={setRotationMs} setWifiQrData={setWifiQrData} darkMode={darkMode} onDarkMode={onDarkMode}/>,
   };
 
   if(isMobile){
@@ -9871,30 +9916,52 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
       <div style={{display:'flex',flexDirection:'column',height:'100vh',overflow:'hidden',background:A.systemBg}}>
         {/* Mobile top bar */}
         <div className="hdr" style={{paddingTop:'max(12px, env(safe-area-inset-top))',background:A.cardBg,borderBottom:`1px solid ${A.sep}`,boxShadow:scrolled?A.shadowSm:'none',display:'flex',alignItems:'center',justifyContent:'space-between',padding:`max(12px, env(safe-area-inset-top)) 16px 12px`,flexShrink:0}}>
-          <span style={{fontSize:17,fontWeight:700,letterSpacing:'-.03em',color:A.label1}}>{nav.find(n=>n.id===screen)?.label}</span>
-          {!isKidMode && <button onClick={()=>setScreen('settings')} style={{width:30,height:30,borderRadius:'50%',background:A.inputBg,border:'none',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',color:A.label3}}>
+          <span style={{fontSize:17,fontWeight:700,letterSpacing:'-.03em',color:A.label1}}>{screenLabel}</span>
+          {!isKidMode && <button onClick={()=>goScreen('settings')} style={{width:30,height:30,borderRadius:'50%',background:A.inputBg,border:'none',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',color:A.label3}}>
             <svg width="15" height="15" viewBox="0 0 17 17" fill="none"><circle cx="8.5" cy="8.5" r="2.5" stroke="currentColor" strokeWidth="1.5"/><path d="M8.5 1v2M8.5 14v2M1 8.5h2M14 8.5h2M3.05 3.05l1.42 1.42M12.53 12.53l1.42 1.42M12.53 3.05l-1.42 1.42M4.47 12.53l-1.42 1.42" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
           </button>}
         </div>
         {/* Content */}
-        <div key={screen} className="screen fade-scroll" onScroll={e=>setScrolled(e.currentTarget.scrollTop>12)} style={{flex:1,overflowY:'auto',padding:screen==='calendar'?0:'16px 20px',paddingBottom:`calc(96px + env(safe-area-inset-bottom))`}}>
+        <div key={screen} className="screen fade-scroll" onScroll={e=>setScrolled(e.currentTarget.scrollTop>12)} style={{flex:1,overflowY:'auto',padding:screen==='calendar'?0:'16px 20px',paddingBottom:`calc(150px + env(safe-area-inset-bottom))`}}>
           {isKidMode && !KID_SCREENS.has(screen) ? screens['dashboard'] : screens[screen]}
         </div>
-        {/* Bottom tab bar */}
-        <div style={{position:'fixed',bottom:'max(12px, env(safe-area-inset-bottom))',left:'50%',transform:'translateX(-50%)',width:'calc(100% - 32px)',maxWidth:560,background:A.cardBg,border:`1px solid ${A.sep}`,borderRadius:28,boxShadow:A.shadowMd,display:'flex',padding:'0 2px',zIndex:50,height:58,alignItems:'center'}}>
-          {nav.map(item=>{
-            const active=screen===item.id;
+        {/* More sheet: every page that isn't one of the four main tabs */}
+        {moreOpen&&(
+          <div onClick={()=>setMoreOpen(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.28)',zIndex:49}}>
+            <div onClick={e=>e.stopPropagation()} style={{position:'absolute',left:0,right:0,bottom:0,background:A.cardBg,borderRadius:'22px 22px 0 0',boxShadow:A.shadowLg,padding:'18px 16px',paddingBottom:'calc(92px + env(safe-area-inset-bottom))',maxHeight:'75vh',overflowY:'auto'}}>
+              <div style={{fontSize:17,fontWeight:700,letterSpacing:'-.03em',color:A.label1,marginBottom:14,paddingLeft:4}}>More</div>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'14px 6px'}}>
+                {moreNav.map(item=>{
+                  const active=screen===item.id;
+                  return(
+                    <button key={item.id} onClick={()=>goScreen(item.id)} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:6,border:'none',background:'none',cursor:'pointer',padding:0,position:'relative'}}>
+                      <div style={{width:48,height:48,borderRadius:14,display:'flex',alignItems:'center',justifyContent:'center',background:active?A.label1:A.inputBg,color:active?A.cardBg:A.label2}}>{item.icon}</div>
+                      <span style={{fontSize:11,fontWeight:active?700:500,color:active?A.label1:A.label3,lineHeight:1.2,textAlign:'center'}}>{item.label}</span>
+                      {item.badge>0&&<span style={{position:'absolute',top:-4,right:'calc(50% - 30px)',background:A.red,color:'#fff',fontSize:10,fontWeight:700,padding:'1px 5px',borderRadius:A.rPill}}>{item.badge}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+        {/* Bottom tab bar: four main tabs + More */}
+        <div className="hide-under-drawer" style={{position:'fixed',bottom:'max(12px, env(safe-area-inset-bottom))',left:'50%',transform:'translateX(-50%)',width:'calc(100% - 32px)',maxWidth:560,background:A.cardBg,border:`1px solid ${A.sep}`,borderRadius:28,boxShadow:A.shadowMd,display:'flex',padding:'0 2px',zIndex:50,height:58,alignItems:'center'}}>
+          {[...primaryNav,...(moreNav.length?[{id:'__more',label:'More',badge:moreNav.some(n=>n.badge>0),icon:<svg width="17" height="17" viewBox="0 0 17 17" fill="none"><circle cx="3.5" cy="8.5" r="1.5" fill="currentColor"/><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor"/><circle cx="13.5" cy="8.5" r="1.5" fill="currentColor"/></svg>}]:[])].map(item=>{
+            const isMore=item.id==='__more';
+            const active=isMore?(moreOpen||moreNav.some(n=>n.id===screen)):(screen===item.id&&!moreOpen);
             return(
-              <button key={item.id} onClick={()=>setScreen(item.id)} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',border:'none',background:'none',cursor:'pointer',gap:2,position:'relative',padding:'4px 0'}}>
-                <div style={{width:active?42:32,height:active?28:28,display:'flex',alignItems:'center',justifyContent:'center',borderRadius:10,background:active?A.inputBg:'transparent',transition:'width .15s,background .15s',color:active?A.label1:A.label4}}>
+              <button key={item.id} onClick={()=>isMore?setMoreOpen(o=>!o):goScreen(item.id)} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',border:'none',background:'none',cursor:'pointer',gap:3,position:'relative',padding:'4px 0'}}>
+                <div style={{width:42,height:26,display:'flex',alignItems:'center',justifyContent:'center',borderRadius:10,background:active?A.inputBg:'transparent',transition:'background .15s',color:active?A.label1:A.label4}}>
                   {item.icon}
                 </div>
-                {active&&<span style={{fontSize:10,fontWeight:700,color:A.label1,letterSpacing:'-.01em',lineHeight:1}}>{item.label}</span>}
+                <span style={{fontSize:10,fontWeight:active?700:500,color:active?A.label1:A.label4,letterSpacing:'-.01em',lineHeight:1}}>{item.label}</span>
+                {isMore&&item.badge&&<span style={{position:'absolute',top:6,right:'calc(50% - 16px)',width:8,height:8,borderRadius:'50%',background:A.red}}/>}
               </button>
             );
           })}
         </div>
-        <QuickAddFAB screen={screen} setGrocery={setGrocery} setChores={setChores} toastAdd={toastAdd} isAdmin={isAdmin}/>
+        {!moreOpen&&<div className="hide-under-drawer"><QuickAddFAB screen={screen} setGrocery={setGrocery} setChores={setChores} toastAdd={toastAdd} isAdmin={isAdmin}/></div>}
         <ToastStack toasts={toasts}/>
       </div>
     );
@@ -9945,7 +10012,7 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
 
       <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
         <div className="hdr" style={{height:54,background:A.cardBg,borderBottom:`1px solid ${A.sep}`,boxShadow:scrolled?A.shadowSm:'none',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 26px',flexShrink:0,position:'relative'}}>
-          <span style={{fontSize:17,fontWeight:700,letterSpacing:'-.03em',color:A.label1}}>{nav.find(n=>n.id===screen)?.label}</span>
+          <span style={{fontSize:17,fontWeight:700,letterSpacing:'-.03em',color:A.label1}}>{screenLabel}</span>
           <div style={{display:'flex',alignItems:'center',gap:14}}>
             <button onClick={()=>{setSearchOpen(s=>!s);setGlobalSearch('');}} style={{width:30,height:30,borderRadius:'50%',background:searchOpen?A.blue:A.inputBg,border:'none',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',color:searchOpen?'#fff':A.label3}}>
               <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" strokeWidth="1.5"/><path d="M10.5 10.5l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>

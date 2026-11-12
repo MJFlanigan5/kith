@@ -5415,6 +5415,7 @@ cron.schedule('0 3 1 1 *', syncUSHolidays, { timezone: getTimezone() }); // re-s
 cron.schedule('0 * * * *', () => {
   try {
     db.prepare("DELETE FROM messages WHERE expires_at <= datetime('now')").run();
+    reconcileDeliveredPackages();
     db.prepare("DELETE FROM packages WHERE delivered=1 AND created_at < datetime('now', '-3 days')").run();
   } catch (e) { console.error('[cleanup]', e?.message || e); }
 }, { timezone: getTimezone() });
@@ -5485,7 +5486,7 @@ function upsertPackage(pkg, subject) {
   } else {
     if (db.prepare('SELECT id FROM packages WHERE source_subject=?').get(subject)) return false;
     // "Out for delivery 1 item: X" after "Shipped 1 item: X" is the same package, not a new one
-    if (undeliveredByKey(packageKey(subject)).length) return false;
+    if (undeliveredMatching(subject).length) return false;
   }
   db.prepare('INSERT INTO packages (carrier,tracking_number,description,expected_date,source_subject) VALUES (?,?,?,?,?)')
     .run(carrier, pkg.tracking_number || '', pkg.description || subject, pkg.expected_date || '', subject);
@@ -5512,18 +5513,19 @@ function insertBill(bill) {
   return true;
 }
 
-// Undelivered packages whose subject carries the same item text (see package-match.js)
-function undeliveredByKey(key) {
-  if (!key) return [];
-  return db.prepare('SELECT id, source_subject FROM packages WHERE delivered=0').all()
-    .filter(r => packageKey(r.source_subject) === key).map(r => r.id);
+// Undelivered packages whose subject shares item text or an order number (see package-match.js)
+// `before` (optional, 'YYYY-MM-DD HH:MM:SS'): only packages added by then, so an old
+// delivery email can't close a newer order of the same item.
+function undeliveredMatching(subject, before) {
+  return db.prepare('SELECT id, source_subject, created_at FROM packages WHERE delivered=0').all()
+    .filter(r => (!before || r.created_at <= before) && samePackage(subject, r.source_subject)).map(r => r.id);
 }
 
 function autoDeliverPackage(pkg, subject) {
   let ids = [];
   if (pkg?.tracking_number) { const r = db.prepare('SELECT id FROM packages WHERE tracking_number=? AND delivered=0').get(pkg.tracking_number); if (r) ids = [r.id]; }
   if (!ids.length) { const r = db.prepare('SELECT id FROM packages WHERE source_subject=? AND delivered=0').get(subject); if (r) ids = [r.id]; }
-  if (!ids.length) ids = undeliveredByKey(packageKey(subject));
+  if (!ids.length) ids = undeliveredMatching(subject);
   if (!ids.length) return false;
   const mark = db.prepare("UPDATE packages SET delivered=1, status='Delivered' WHERE id=?");
   db.transaction(() => ids.forEach(id => mark.run(id)))();
@@ -5531,19 +5533,36 @@ function autoDeliverPackage(pkg, subject) {
   return true;
 }
 
-// One-time repair for rows saved before "Delivered N items: X" was recognised: those rows
-// are themselves delivery notices, so they and their matching "Shipped…" rows are delivered.
-// Idempotent; runs at startup.
+// Repairs open packages; idempotent, runs at startup and daily.
+//  1. Rows that are themselves delivery notices (saved before those subjects were
+//     recognised) close, with their matching shipped rows.
+//  2. Delivery emails Kith logged as unmatched are retried against open packages.
+//  3. Packages that went quiet close as "Assumed delivered": 7 days past the expected
+//     date, or 30 days old with no date. Many carriers never send a delivered email.
 function reconcileDeliveredPackages() {
-  const rows = db.prepare('SELECT id, source_subject FROM packages WHERE delivered=0').all()
-    .filter(r => DELIVERED_RE.test(r.source_subject || ''));
-  let n = 0;
-  for (const r of rows) {
-    const ids = new Set([r.id, ...undeliveredByKey(packageKey(r.source_subject))]);
-    const mark = db.prepare("UPDATE packages SET delivered=1, status='Delivered' WHERE id=? AND delivered=0");
-    db.transaction(() => ids.forEach(id => { n += mark.run(id).changes; }))();
+  const mark = db.prepare("UPDATE packages SET delivered=1, status=? WHERE id=? AND delivered=0");
+  let n = 0, assumed = 0;
+  const close = (ids, status = 'Delivered') => db.transaction(() => ids.forEach(id => { const c = mark.run(status, id).changes; n += c; if (status === 'Assumed delivered') assumed += c; }))();
+  for (const r of db.prepare('SELECT id, source_subject FROM packages WHERE delivered=0').all())
+    if (DELIVERED_RE.test(r.source_subject || '')) close([r.id, ...undeliveredMatching(r.source_subject)]);
+  for (const u of db.prepare("SELECT subject, created_at FROM unmatched_confirmations WHERE type='delivery'").all())
+    close(undeliveredMatching(u.subject, u.created_at));
+  // Duplicates saved before matching existed ("Shipped" + "Delay in shipping" for one
+  // order): keep the newest row, close the older copies.
+  const openRows = db.prepare('SELECT id, source_subject FROM packages WHERE delivered=0 ORDER BY created_at DESC, id DESC').all();
+  const kept = [];
+  for (const r of openRows) {
+    if (kept.some(k => samePackage(k.source_subject, r.source_subject))) close([r.id], 'Duplicate');
+    else kept.push(r);
   }
-  if (n) { console.log(`[packages] reconciled ${n} delivered package(s)`); broadcastSSE('packages', { action: 'reload' }); }
+  const today = localDate();
+  for (const r of db.prepare('SELECT id, expected_date, created_at FROM packages WHERE delivered=0').all()) {
+    const stale = r.expected_date
+      ? (Date.parse(today) - Date.parse(r.expected_date)) / 86400000 > 7
+      : Date.now() - Date.parse(String(r.created_at).replace(' ', 'T') + 'Z') > 30 * 86400000;
+    if (stale) close([r.id], 'Assumed delivered');
+  }
+  if (n) { console.log(`[packages] reconciled ${n} package(s), ${assumed} assumed delivered after going quiet`); broadcastSSE('packages', { action: 'reload' }); }
 }
 
 function autoPayBill(bill) {
@@ -5568,7 +5587,7 @@ function logUnmatched(type, subject, detail) {
   db.prepare('INSERT INTO unmatched_confirmations (type,subject,detail) VALUES (?,?,?)').run(type, subject || '', detail || '');
   broadcastSSE('unmatched', { action: 'reload' });
 }
-const { packageKey, DELIVERED_RE } = require('./package-match');
+const { samePackage, DELIVERED_RE } = require('./package-match');
 const PAID_RE = /\b(payment received|payment confirmed|payment processed|payment accepted|payment successful|we received your payment|your payment.*processed|autopay.*confirmed|auto.?payment.*processed|thank you for your payment)\b/i;
 const SHIPPING_RE = /\b(ship(?:ped|ping|ment)?|track(?:ing)?|deliver(?:y|ed|ing)?|package|dispatch(?:ed)?|arrival|in transit|out for delivery)\b/i;
 const BILL_RE = /\b(bill|statement|invoice|payment due|amount due|minimum payment|your balance|autopay|auto-pay|past due|balance due)\b/i;

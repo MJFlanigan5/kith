@@ -28,15 +28,31 @@ test('startup repair closes delivered Amazon packages and leaves real in-transit
   const delivered = add.run('Amazon', '', 'Memory Cards', '', 'Delivered 2 items: Memory Cards, Electrical').lastInsertRowid;
   const outFor = add.run('Amazon', '', 'Paint', '', 'Out for delivery 1 item: Painting Supplies').lastInsertRowid;
   const paintDone = add.run('Amazon', '', 'Paint', '', 'Delivered 1 item: Painting Supplies').lastInsertRowid;
-  const inTransit = add.run('Amazon', '', 'Arts', '2026-11-12', 'Shipped 1 item: Arts & Crafts').lastInsertRowid;
-  const usps = add.run('USPS', '9400150105798136398140', 'Stamps', '2026-11-13', 'USPS Expected Delivery on Friday').lastInsertRowid;
+  const day = n => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+  const inTransit = add.run('Amazon', '', 'Arts', day(0), 'Shipped 1 item: Arts & Crafts').lastInsertRowid;
+  const usps = add.run('USPS', '9400150105798136398140', 'Stamps', day(1), 'USPS Expected Delivery on Friday').lastInsertRowid;
+  const ebay = add.run('other', '', 'Seagate', '', 'OUT FOR DELIVERY: Seagate SkyHawk 4TB ...').lastInsertRowid;
+  const longPast = add.run('USPS', '9434608106245724946761', 'Old', day(-10), 'USPS Expected Delivery on Friday, October 30').lastInsertRowid;
+  const undatedOld = add.run('UPS', '1Z4337241321871705', 'Debit Card', '', 'Your Debit Card has Shipped').lastInsertRowid;
+  const latexOld = add.run('Amazon', '', 'Latex', '', 'Delay in shipping: Latex Sealants').lastInsertRowid;
+  const latexNew = add.run('Amazon', '', 'Latex', '', 'Shipped 1 item: Latex Sealants').lastInsertRowid;
+  db.prepare("UPDATE packages SET created_at=datetime('now','-1 days') WHERE id=?").run(latexOld);
+  db.prepare("UPDATE packages SET created_at=datetime('now','-40 days') WHERE id=?").run(undatedOld);
+  db.prepare("UPDATE packages SET created_at=datetime('now','-2 days') WHERE id=?").run(ebay);
+  // delivery emails Kith couldn't match when they arrived: one after the eBay row, one before a new order
+  db.prepare("INSERT INTO unmatched_confirmations (type,subject,detail,created_at) VALUES ('delivery','📦PACKAGE DELIVERED: Seagate SkyHawk 4TB ...','other',datetime('now','-1 days'))").run();
+  db.prepare("INSERT INTO unmatched_confirmations (type,subject,detail,created_at) VALUES ('delivery','Delivered 1 item: Arts & Crafts','other',datetime('now','-30 days'))").run();
   db.close();
 
   await boot(); await stop();
   const db2 = new Database(path.join(DATA_DIR, 'kith.db'), { readonly: true });
   const state = id => db2.prepare('SELECT delivered FROM packages WHERE id=?').get(id).delivered;
+  const status = id => db2.prepare('SELECT status FROM packages WHERE id=?').get(id).status;
   assert.deepEqual([shipped, delivered, outFor, paintDone].map(state), [1, 1, 1, 1], 'delivered notices and their shipped rows close');
-  assert.deepEqual([inTransit, usps].map(state), [0, 0], 'packages with no delivery notice stay open');
+  assert.equal(state(ebay), 1, 'an unmatched delivery email received later closes the package');
+  assert.deepEqual([longPast, undatedOld].map(status), ['Assumed delivered', 'Assumed delivered'], 'quiet packages close');
+  assert.deepEqual([status(latexOld), state(latexNew)], ['Duplicate', 0], 'older duplicate closes, newest stays');
+  assert.deepEqual([inTransit, usps].map(state), [0, 0], 'current packages stay open, even with an older delivery email for the same item');
   db2.close();
-  assert.match(log, /reconciled 4 delivered package/);
+  assert.match(log, /reconciled 8 package\(s\), 2 assumed delivered/);
 });

@@ -217,7 +217,10 @@ function ClockDigits({variant,isMobile,isTV}){
     </div>
   );
   return(
-    <span style={{fontFamily:FONT_MONO,fontSize:isMobile?56:isTV?120:92,fontWeight:600,color:'#edecea',lineHeight:1,letterSpacing:'-1px',fontVariantNumeric:'tabular-nums'}}>{h12}:{min}</span>
+    <span style={{display:'inline-flex',alignItems:'baseline',gap:isMobile?6:12}}>
+      <span style={{fontFamily:FONT_MONO,fontSize:isMobile?56:isTV?120:92,fontWeight:600,color:'#edecea',lineHeight:1,letterSpacing:'-1px',fontVariantNumeric:'tabular-nums'}}>{h12}:{min}</span>
+      <span style={{fontFamily:FONT_MONO,fontSize:isMobile?16:isTV?32:26,fontWeight:500,color:'#87868c',letterSpacing:'1px'}}>{ampm}</span>
+    </span>
   );
 }
 function ClockDate({variant,isMobile,isTV,style}){
@@ -227,7 +230,7 @@ function ClockDate({variant,isMobile,isTV,style}){
     <div style={{fontSize:isMobile?15:20,color:'rgba(255,255,255,0.32)',fontWeight:400,letterSpacing:'-.01em',marginTop:10}}>{dateStr}</div>
   );
   return(
-    <span style={{fontFamily:FONT_MONO,fontSize:isMobile?11:isTV?15:13,color:'#87868c',letterSpacing:'1px',textTransform:'uppercase',...style}}>{dateStr} · {now.getHours()>=12?'PM':'AM'}</span>
+    <span style={{fontFamily:FONT_MONO,fontSize:isMobile?11:isTV?15:13,color:'#87868c',letterSpacing:'1px',textTransform:'uppercase',...style}}>{dateStr}</span>
   );
 }
 // Power flow — ported from Foyer's renderFlowDiagram (ha-wall-kiosk pwa-app) so the two
@@ -238,7 +241,8 @@ function FlowDiagram({pw}){
   const charging=battKw<0, battAbs=Math.abs(battKw);
   const dots=(color,d,kw)=>{
     if(!(kw>0)) return null;
-    const dur=Math.max(1.2,Math.min(4,3/kw));
+    // Half-second steps: a small kW change on refresh keeps the same duration, so the dots don't restart and jump.
+    const dur=Math.max(1.5,Math.min(4,Math.round(3/kw*2)/2));
     return [0,1,2].map(k=><circle key={k} r="3.5" fill={color}><animateMotion dur={`${dur.toFixed(2)}s`} begin={`${(-k*dur/3).toFixed(2)}s`} repeatCount="indefinite" path={d}/></circle>);
   };
   const leg=(d,color,kw)=>kw>0
@@ -255,7 +259,8 @@ function FlowDiagram({pw}){
       {leg(gridD,'#ef6b6b',importing||exporting)}
       {leg(battD,'#5fd38a',battAbs)}
       <circle cx="200" cy="95" r="26" fill="rgba(255,255,255,.08)" stroke="rgba(255,255,255,.18)"/>
-      {house>0&&<circle cx="200" cy="95" r="26" fill="none" stroke="rgba(217,160,102,.6)"><animate attributeName="r" values="26;38" dur="2.4s" repeatCount="indefinite"/><animate attributeName="opacity" values=".9;0" dur="2.4s" repeatCount="indefinite"/></circle>}
+      {/* Ring fades in as well as out, so each loop restarts at zero opacity instead of snapping back to full (read as a blink). */}
+      {house>0&&<circle cx="200" cy="95" r="26" fill="none" stroke="rgba(217,160,102,.6)" opacity="0"><animate attributeName="r" values="26;38" dur="2.4s" calcMode="spline" keySplines="0.2 0 0 1" repeatCount="indefinite"/><animate attributeName="opacity" values="0;.9;0" keyTimes="0;.15;1" dur="2.4s" repeatCount="indefinite"/></circle>}
       <text x="200" y="100" textAnchor="middle" fill="#e9e7e2" fontSize="14" fontWeight="700">{house.toFixed(2)}</text>
       <text x="200" y="138" textAnchor="middle" fill="#8b8d94" fontSize="10">House kW</text>
       {lbl(60,30,`Solar ${solar.toFixed(1)}`,solar>0,'#FFD60A')}

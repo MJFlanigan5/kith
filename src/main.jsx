@@ -1154,7 +1154,6 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
     ...(polls.length>0?['w_polls']:[]),
     ...(uncheckedGrocery.length>0?['w_grocery']:[]),
     ...(photos.length>0?['w_photos']:[]),
-    ...(shownPackages.length>0?['w_packages']:[]),
     ...(expiringAppliances.length>0?['w_home_warranty']:[]),
     ...(urgentConsumables.length>0?['w_home_consumables']:[]),
     ...(urgentMaintenance.length>0?['w_home_maintenance']:[]),

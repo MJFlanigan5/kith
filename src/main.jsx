@@ -1,5 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import ReactDOM from 'react-dom/client'
+// Wall display type (Foyer's): bundled so the display never depends on internet fonts
+import '@fontsource/manrope/400.css'
+import '@fontsource/manrope/600.css'
+import '@fontsource/manrope/700.css'
+import '@fontsource/ibm-plex-mono/400.css'
+import '@fontsource/ibm-plex-mono/600.css'
 
 
 /* ── Design tokens — neutral values reference CSS vars, accents stay hardcoded ── */
@@ -185,6 +191,9 @@ function useMinuteClock(){
   },[]);
   return t;
 }
+// Foyer's type: Manrope for text, IBM Plex Mono for clock and figures
+const FONT_SANS="'Manrope',-apple-system,BlinkMacSystemFont,sans-serif";
+const FONT_MONO="'IBM Plex Mono',ui-monospace,monospace";
 // Digital clock digits — isolated so its 1s tick only re-renders this small
 // subtree, not the whole DisplayMode tree (was the root cause of visible
 // flashing across the display on every clock tick).
@@ -200,10 +209,7 @@ function ClockDigits({variant,isMobile,isTV}){
     </div>
   );
   return(
-    <div style={{display:'flex',alignItems:'baseline',gap:8}}>
-      <span style={{fontSize:isMobile?64:isTV?140:108,fontWeight:800,color:'#FFFFFF',lineHeight:1,letterSpacing:'-0.04em',fontVariantNumeric:'tabular-nums'}}>{h12}:{min}</span>
-      <span style={{fontSize:isMobile?18:isTV?36:28,color:'rgba(255,255,255,0.38)',fontWeight:400,marginBottom:isMobile?6:isTV?14:10}}>{ampm}</span>
-    </div>
+    <span style={{fontFamily:FONT_MONO,fontSize:isMobile?56:isTV?120:92,fontWeight:600,color:'#edecea',lineHeight:1,letterSpacing:'-1px',fontVariantNumeric:'tabular-nums'}}>{h12}:{min}</span>
   );
 }
 function ClockDate({variant,isMobile,isTV,style}){
@@ -213,7 +219,42 @@ function ClockDate({variant,isMobile,isTV,style}){
     <div style={{fontSize:isMobile?15:20,color:'rgba(255,255,255,0.32)',fontWeight:400,letterSpacing:'-.01em',marginTop:10}}>{dateStr}</div>
   );
   return(
-    <div style={{fontSize:isMobile?14:isTV?26:20,color:'rgba(255,255,255,0.65)',fontWeight:400,letterSpacing:'-.01em',...style}}>{dateStr}</div>
+    <span style={{fontFamily:FONT_MONO,fontSize:isMobile?11:isTV?15:13,color:'#87868c',letterSpacing:'1px',textTransform:'uppercase',...style}}>{dateStr} · {now.getHours()>=12?'PM':'AM'}</span>
+  );
+}
+// Power flow — ported from Foyer's renderFlowDiagram (ha-wall-kiosk pwa-app) so the two
+// screens draw power the same way: dots travel each live leg, faster with more kW.
+function FlowDiagram({pw}){
+  const solar=Math.max(0,pw.solar_kw||0), gridKw=pw.grid_kw||0, battKw=pw.battery_kw||0;
+  const importing=Math.max(0,gridKw), exporting=Math.max(0,-gridKw);
+  const charging=battKw<0, battAbs=Math.abs(battKw);
+  const dots=(color,d,kw)=>{
+    if(!(kw>0)) return null;
+    const dur=Math.max(1.2,Math.min(4,3/kw));
+    return [0,1,2].map(k=><circle key={k} r="3.5" fill={color}><animateMotion dur={`${dur.toFixed(2)}s`} begin={`${(-k*dur/3).toFixed(2)}s`} repeatCount="indefinite" path={d}/></circle>);
+  };
+  const leg=(d,color,kw)=>kw>0
+    ?<g><path d={d} stroke={color} strokeOpacity=".5" strokeWidth="2" fill="none"/>{dots(color,d,kw)}</g>
+    :<path d={d} stroke="rgba(255,255,255,.1)" strokeWidth="2" fill="none" strokeDasharray="3 6"/>;
+  const solarD="M60 40 Q 200 40 200 95";
+  const gridD=exporting>0?"M200 95 Q 200 150 60 150":"M60 150 Q 200 150 200 95";
+  const battD=charging?"M226 95 L 305 95":"M305 95 L 226 95";
+  const house=pw.load_kw||0;
+  const lbl=(x,y,text,on,color)=><text x={x} y={y} textAnchor="middle" fontSize="11" fill={on?color:'#5d6068'} fontWeight={on?700:400}>{text}</text>;
+  return(
+    <svg viewBox="0 0 400 190" preserveAspectRatio="xMidYMid meet" style={{width:'100%',flex:1,minHeight:0,fontFamily:FONT_SANS}}>
+      {leg(solarD,'#FFD60A',solar)}
+      {leg(gridD,'#ef6b6b',importing||exporting)}
+      {leg(battD,'#5fd38a',battAbs)}
+      <circle cx="200" cy="95" r="26" fill="rgba(255,255,255,.08)" stroke="rgba(255,255,255,.18)"/>
+      {house>0&&<circle cx="200" cy="95" r="26" fill="none" stroke="rgba(217,160,102,.6)"><animate attributeName="r" values="26;38" dur="2.4s" repeatCount="indefinite"/><animate attributeName="opacity" values=".9;0" dur="2.4s" repeatCount="indefinite"/></circle>}
+      <text x="200" y="100" textAnchor="middle" fill="#e9e7e2" fontSize="14" fontWeight="700">{house.toFixed(2)}</text>
+      <text x="200" y="138" textAnchor="middle" fill="#8b8d94" fontSize="10">House kW</text>
+      {lbl(60,30,`Solar ${solar.toFixed(1)}`,solar>0,'#FFD60A')}
+      {lbl(60,172,exporting>0?`Grid export ${exporting.toFixed(2)}`:`Grid ${importing.toFixed(2)}`,importing>0||exporting>0,'#ef6b6b')}
+      {lbl(350,88,'Battery',battAbs>0,'#5fd38a')}
+      <text x="350" y="104" textAnchor="middle" fill="#8b8d94" fontSize="11">{pw.battery_pct}% {charging?'charging':battAbs>0?'in use':'idle'}</text>
+    </svg>
   );
 }
 // Voice-timer countdown text — isolated for the same reason as ClockDigits;
@@ -809,13 +850,6 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
     return()=>clearInterval(id);
   },[]);
 
-  const [memberProgress,setMemberProgress]=useState([]);
-  useEffect(()=>{
-    const load=()=>api.get('/api/members/progress').then(d=>{if(Array.isArray(d))setMemberProgress(d);}).catch(()=>{});
-    load();
-    const id=setInterval(load,5*60*1000);
-    return()=>clearInterval(id);
-  },[]);
 
   const [dispEmergency,setDispEmergency]=useState({});
   useEffect(()=>{
@@ -856,11 +890,12 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
   const [haEvents,setHaEvents]=useState([]);
   const [smEvents,setSmEvents]=useState([]);
   const [widgetData,setWidgetData]=useState({});
+  const [widgetsAt,setWidgetsAt]=useState(0); // last successful widget refresh, for the stale note
   const [online,setOnline]=useState(true);
   useEffect(()=>{
     const loadHA=()=>api.get('/api/ha/events').then(d=>{if(Array.isArray(d))setHaEvents(d);}).catch(()=>{});
     const loadSm=()=>api.get('/api/ha/pull').then(d=>{if(Array.isArray(d))setSmEvents(d);}).catch(()=>{});
-    const loadWidgets=()=>api.get('/api/widgets/data').then(d=>setWidgetData(d||{})).catch(()=>{});
+    const loadWidgets=()=>api.get('/api/widgets/data').then(d=>{setWidgetData(d||{});setWidgetsAt(Date.now());}).catch(()=>{});
     loadHA(); loadSm(); loadWidgets();
     // Fallback polls in case SSE drops
     const fa=setInterval(loadHA,60000);
@@ -906,30 +941,6 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
     const id=setInterval(load,8000);
     return()=>clearInterval(id);
   },[]);
-  const mediaItems=useMemo(()=>{
-    const items=[];
-    if(nowPlaying.playing&&nowPlaying.title) items.push({type:'music',thumb:nowPlaying.thumb,primary:nowPlaying.title,secondary:nowPlaying.artist});
-    liveGames.forEach(g=>items.push({type:'sports',id:g.id,primary:`${g.away?.abbr} ${g.away?.score}–${g.home?.score} ${g.home?.abbr}`,secondary:g.detail}));
-    return items;
-  },[nowPlaying,liveGames]);
-  const [mediaChipIdx,setMediaChipIdx]=useState(0);
-  useEffect(()=>{
-    if(mediaItems.length<=1)return;
-    const id=setInterval(()=>setMediaChipIdx(i=>(i+1)%mediaItems.length),4000);
-    return()=>clearInterval(id);
-  },[mediaItems.length]);
-
-  const [newsIdx,setNewsIdx]=useState(0);
-  const [newsVisible,setNewsVisible]=useState(true);
-  const newsFadeTimer=useRef(null);
-  useEffect(()=>{
-    if(news.length<=1)return;
-    const id=setInterval(()=>{
-      setNewsVisible(false);
-      newsFadeTimer.current=setTimeout(()=>{setNewsIdx(i=>(i+1)%news.length);setNewsVisible(true);},500);
-    },15000);
-    return()=>{clearInterval(id);clearTimeout(newsFadeTimer.current);};
-  },[news.length]);
   const [centerIdx,setCenterIdx]=useState(0);
   const [visiblePanelId,setVisiblePanelId]=useState('dinner');
   const [panelOpacity,setPanelOpacity]=useState(1);
@@ -1073,13 +1084,10 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
     return{label,date:localDate(d)};
   });
   const displayEvents=useMemo(()=>(events||[]).filter(e=>e.source!=='bill'&&e.source!=='vehicle'),[events]);
-  const eventDateSet=useMemo(()=>new Set(displayEvents.map(e=>e.date)),[displayEvents]);
-  const hasUpcomingEvents=agendaDays.some(({date})=>eventDateSet.has(date));
   const dueSoonVehicles=useMemo(()=>(events||[]).filter(e=>e.source==='vehicle'&&daysUntil(e.date)<=14).sort((a,b)=>a.date.localeCompare(b.date)),[events]);
   const dueC=useMemo(()=>chores.filter(c=>(c.status==='due'||c.status==='overdue')&&!c.done),[chores]);
   const upCD=useMemo(()=>(countdowns||[]).filter(c=>daysUntil(c.date)>=0),[countdowns]);
   const uncheckedGrocery=useMemo(()=>(grocery||[]).filter(i=>!i.checked),[grocery]);
-  const progressMembers=useMemo(()=>memberProgress.filter(m=>m.monthly_goal>0),[memberProgress]);
   const pinnedNotes=useMemo(()=>(notes||[]).filter(n=>n.pinned),[notes]);
   const expiringAppliances=useMemo(()=>(appliances||[]).filter(a=>a.warranty_date&&daysUntil(a.warranty_date)<=30).sort((a,b)=>a.warranty_date.localeCompare(b.warranty_date)),[appliances]);
   const urgentConsumables=useMemo(()=>(consumables||[]).filter(c=>c.status==='overdue'||c.status==='due_soon').sort((a,b)=>(a.days_remaining??Infinity)-(b.days_remaining??Infinity)),[consumables]);
@@ -1098,41 +1106,40 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
   },[subscriptions]);
   const lowPantryItems=useMemo(()=>(pantry||[]).filter(p=>p.expiry_status==='expired'||p.expiry_status==='expiring_soon'||(p.low_stock_at>0&&Number(p.quantity)<=Number(p.low_stock_at))),[pantry]);
   const inProgressProjects=useMemo(()=>(projects||[]).filter(p=>p.status==='in_progress'),[projects]);
+  // Panels on the 3F layout's always-on surfaces (chores, sun, thermostat, who's home,
+  // now playing) and the monitoring feeds (bottom-bar alerts) are no longer rotated.
+  // Every panel needs real content to take a turn.
+  const todayDinner=()=>{
+    const dayName=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date().getDay()];
+    return meals.find(m=>m.day===dayName)?.meal||'—';
+  };
+  // Display-only: hide packages that have gone quiet (added 14+ days ago, or expected
+  // more than 3 days ago). They stay in Manage; only the wall stops showing them.
+  const shownPackages=useMemo(()=>(packages||[]).filter(p=>{
+    const added=new Date((p.created_at||'').replace(' ','T')+'Z').getTime();
+    if(added&&Date.now()-added>14*86400000) return false;
+    if(p.expected_date&&daysUntil(p.expected_date)<-3) return false;
+    return true;
+  }),[packages]);
+  const streakChores=useMemo(()=>(chores||[]).filter(c=>(c.streak||0)>=2).sort((a,b)=>(b.streak||0)-(a.streak||0)),[chores]);
+  const pwActive=!!widgetData.powerwall&&(widgetData.powerwall.solar_kw>0||widgetData.powerwall.battery_kw!==0||widgetData.powerwall.grid_kw<0);
   const centerPanels=[
     ...(messages.some(m=>m.expires_at&&new Date(m.expires_at.replace(' ','T')+'Z').getTime()>Date.now())?['w_messages']:[]),
-    'dinner',
-    ...(dueC.length>0?['chores']:[]),
+    ...(todayDinner()!=='—'?['dinner']:[]),
     ...(dueSoonVehicles.length>0?['due_soon']:[]),
     ...(upCD.length>0?['countdowns']:[]),
     ...(goals.length>0?['goals']:[]),
-    ...(progressMembers.length>0?['members']:[]),
+    ...(streakChores.length>0?['members']:[]),
     ...(widgetData.wotd?['w_wotd']:[]),
-    ...(widgetData.sun?['w_sun']:[]),
     ...(widgetData.compliment?['w_compliment']:[]),
     ...(widgetData.quote?.text?['w_quote']:[]),
-    ...(widgetData.stocks?.length?['w_stocks']:[]),
-    ...(widgetData.producthunt?.length?['w_producthunt']:[]),
-    ...(widgetData.github?['w_github']:[]),
-    ...(widgetData.reddit?.posts?.length?['w_reddit']:[]),
-    ...(widgetData.beehiiv?['w_beehiiv']:[]),
-    ...(widgetData.youtube?['w_youtube']:[]),
-    ...(widgetData.etsy?['w_etsy']:[]),
-    ...(widgetData.powerwall?['w_powerwall']:[]),
+    ...(pwActive?['w_powerwall']:[]),
+    ...(widgetData.moen&&widgetData.moen.daily_gal>0?['w_moen']:[]),
     ...(widgetData.flight?['w_flight']:[]),
-    ...(widgetData.uptime?.length?['w_uptime']:[]),
-    ...(widgetData.nextdns?['w_nextdns']:[]),
-    ...(widgetData.beszel?.length?['w_beszel']:[]),
-    ...(widgetData.plex?['w_plex']:[]),
-    ...(widgetData.moen?['w_moen']:[]),
-    ...(widgetData.unifi?['w_unifi']:[]),
-    ...(widgetData.who_home?['w_who_home']:[]),
-    ...(widgetData.thermostat?['w_thermostat']:[]),
-    ...(widgetData.ha_sensors?['w_ha_sensors']:[]),
     ...(polls.length>0?['w_polls']:[]),
     ...(uncheckedGrocery.length>0?['w_grocery']:[]),
     ...(photos.length>0?['w_photos']:[]),
-    ...(packages.length>0?['w_packages']:[]),
-    ...(nowPlaying.playing&&nowPlaying.title?['w_music']:[]),
+    ...(shownPackages.length>0?['w_packages']:[]),
     ...(expiringAppliances.length>0?['w_home_warranty']:[]),
     ...(urgentConsumables.length>0?['w_home_consumables']:[]),
     ...(urgentMaintenance.length>0?['w_home_maintenance']:[]),
@@ -1150,7 +1157,15 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
   // emergencyHasValue and would vanish together, leaving the display stuck
   // on a blank panel with no way back. Auto-release the force in that case.
   useEffect(()=>{if(emergencyForced&&!emergencyHasValue)setEmergencyForced(false);},[emergencyHasValue,emergencyForced]);
-  const activePanelId=emergencyForced?'w_emergency':centerPanels[centerIdx%Math.max(1,centerPanels.length)];
+  // Track the panel by name, not position: when a panel appears or drops out mid-cycle,
+  // index-based picking jumped to a different panel (the flash). Each tick moves to the
+  // panel after the current one in whatever the list is now.
+  const [rotId,setRotId]=useState(null);
+  useEffect(()=>{
+    setRotId(cur=>{if(!centerPanels.length)return null;const i=centerPanels.indexOf(cur);return centerPanels[(i+1)%centerPanels.length];});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[centerIdx]);
+  const activePanelId=emergencyForced?'w_emergency':(centerPanels.includes(rotId)?rotId:centerPanels[0]);
   useEffect(()=>{
     if(panelFirstRender.current){panelFirstRender.current=false;setVisiblePanelId(activePanelId);return;}
     clearTimeout(panelFadeTimer.current);
@@ -1166,7 +1181,7 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
   // overdue chores. These shouldn't have to wait their turn in centerPanels'
   // round-robin rotation, so they get their own always-checked ticker slot.
   const overdueChores=useMemo(()=>chores.filter(c=>c.status==='overdue'&&!c.done),[chores]);
-  const packagesDueToday=useMemo(()=>packages.filter(p=>p.expected_date&&daysUntil(p.expected_date)<=0),[packages]);
+  const packagesDueToday=useMemo(()=>shownPackages.filter(p=>p.expected_date&&daysUntil(p.expected_date)<=0),[shownPackages]);
   const eventsSoon=useMemo(()=>{
     const nowMin=now.getHours()*60+now.getMinutes();
     return events.filter(e=>{
@@ -1188,17 +1203,33 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
     eventsSoon.forEach(e=>items.push(`⏰ ${e.title} at ${e.time}`));
     return items;
   },[overdueChores,packagesDueToday,eventsSoon]);
-  const [urgentIdx,setUrgentIdx]=useState(0);
-  const [urgentVisible,setUrgentVisible]=useState(true);
-  const urgentFadeTimer=useRef(null);
-  useEffect(()=>{
-    if(urgentTickerItems.length<=1)return;
-    const id=setInterval(()=>{
-      setUrgentVisible(false);
-      urgentFadeTimer.current=setTimeout(()=>{setUrgentIdx(i=>(i+1)%urgentTickerItems.length);setUrgentVisible(true);},500);
-    },8000);
-    return()=>{clearInterval(id);clearTimeout(urgentFadeTimer.current);};
-  },[urgentTickerItems.length]);
+
+  // ── 3F layout data ───────────────────────────────────────────────────────
+  const tomorrowStr=agendaDays[1].date;
+  const soonItems=displayEvents.filter(e=>e.date===todayStr||e.date===tomorrowStr)
+    .sort((a,b)=>a.date.localeCompare(b.date)||(eventTimeMinutes(a.time)??-1)-(eventTimeMinutes(b.time)??-1));
+  const choresSoon=chores.filter(c=>!c.done&&c.next_due&&daysUntil(c.next_due)<=3).sort((a,b)=>a.next_due.localeCompare(b.next_due));
+  const choresLater=chores.filter(c=>!c.done&&c.next_due&&daysUntil(c.next_due)>3&&daysUntil(c.next_due)<=7).length;
+  const billsWeek=(events||[]).filter(e=>e.source==='bill'&&daysUntil(e.date)>=0&&daysUntil(e.date)<=7);
+  const eventsLater=displayEvents.filter(e=>e.source!=='package'&&daysUntil(e.date)>=2&&daysUntil(e.date)<=7).length;
+  const whoHome=(widgetData.who_home?.persons||[]).filter(p=>p.state==='home').map(p=>(p.name||'').split(' ')[0]);
+  const dayWord=d=>{const n=daysUntil(d);return n===0?'Today':n===1?'Tomorrow':DAYS[new Date(d+'T00:00:00').getDay()];};
+  // Bottom bar: things that need attention. Power/water/monitors appear only when wrong.
+  const pwW=widgetData.powerwall, moenW=widgetData.moen;
+  const alerts=[];
+  if(pwW&&pwW.grid_status&&pwW.grid_status!=='Active') alerts.push(`Grid down · on battery ${pwW.battery_pct}%`);
+  else if(pwW&&pwW.battery_pct<20) alerts.push(`Battery low · ${pwW.battery_pct}%`);
+  if(moenW?.has_alert) alerts.push('Water leak alert');
+  (widgetData.uptime||[]).filter(m=>m.ok===false).forEach(m=>alerts.push(`${m.name} is down`));
+  (widgetData.beszel||[]).filter(x=>x.status&&x.status!=='up'&&x.status!=='unknown').forEach(x=>alerts.push(`${x.name} is ${x.status}`));
+  if(widgetData.unifi&&!['up','unknown'].includes(widgetData.unifi.status)) alerts.push('Internet down');
+  const tickerItems=[
+    ...alerts.map(t=>({t,alert:true})),
+    ...urgentTickerItems.map(t=>({t:t.replace(/^\S+\s/,''),live:true})),
+    ...shownPackages.filter(p=>p.expected_date&&daysUntil(p.expected_date)===1).map(p=>({t:`${p.description||p.carrier||'Package'} arrives tomorrow`})),
+    ...billsWeek.filter(b=>daysUntil(b.date)<=3).map(b=>({t:`${b.title||'Bill'} bill due ${daysUntil(b.date)<=1?dayWord(b.date).toLowerCase():dayWord(b.date)}`})),
+    ...news.slice(0,3).map(n=>({t:n.title})),
+  ];
 
   const [dmChoreConfetti,setDmChoreConfetti]=useState(false);
   const _choreSubmitting=useRef(new Set());
@@ -1213,23 +1244,21 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
     }catch(e){}finally{_choreSubmitting.current.delete(id);}
   };
 
-  const todayDinner=()=>{
-    const dayName=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date().getDay()];
-    return meals.find(m=>m.day===dayName)?.meal||'—';
-  };
 
   // Dark dashboard tokens
+  // Foyer ambient tokens (ha-wall-kiosk pwa-app :root). Neutral everywhere; D.on
+  // (Foyer's green) only for things that are live right now.
   const D={
-    bg:'#0F1013',card:'#1A1B21',border:'rgba(255,255,255,0.07)',
-    t1:'#FFFFFF',t2:'rgba(255,255,255,0.65)',t3:'rgba(255,255,255,0.38)',t4:'rgba(255,255,255,0.20)',
-    sep:'rgba(255,255,255,0.07)',
+    bg:'#0c0c0e',card:'#18181b',border:'#29292d',
+    t1:'#edecea',t2:'#b9b8bd',t3:'#87868c',t4:'#4f4e54',
+    sep:'#202023',on:'#7fd99a',
   };
   const isTV=window.innerWidth>=1440;
   const Widget=({children,style:s={},onClick})=>(
-    <div onClick={onClick} style={{background:D.card,borderRadius:16,border:`1px solid ${D.border}`,padding:isTV?'18px 22px':'16px 18px',overflow:'hidden',...s}}>{children}</div>
+    <div onClick={onClick} style={{background:D.card,borderRadius:14,border:`1px solid ${D.border}`,padding:isTV?'18px 22px':'14px 16px',overflow:'hidden',...s}}>{children}</div>
   );
   const WLabel=({children})=>(
-    <div style={{fontSize:isTV?12:10,fontWeight:700,color:D.t3,textTransform:'uppercase',letterSpacing:'.10em',marginBottom:isTV?14:12}}>{children}</div>
+    <div style={{fontSize:isTV?13:11,fontWeight:600,color:D.t3,marginBottom:isTV?14:12}}>{children}</div>
   );
 
   if(isNightMode) return(
@@ -1242,7 +1271,7 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
   );
 
   return(
-    <div style={{width:'100vw',height:'100vh',background:D.bg,overflow:'hidden',padding:isMobile?'16px 16px':isTV?'28px 36px':'24px 28px',display:'flex',flexDirection:'column',gap:isMobile?10:isTV?18:14,position:'relative'}}>
+    <div style={{width:'100vw',height:'100vh',background:`linear-gradient(180deg,#1a1c1f 0%,${D.bg} 65%)`,fontFamily:FONT_SANS,color:D.t1,overflow:'hidden',padding:isMobile?'16px 16px':isTV?'24px 36px':'18px 28px',display:'flex',flexDirection:'column',gap:isMobile?10:isTV?16:12,position:'relative'}}>
       <Confetti active={dmChoreConfetti} count={14}/>
 
       {/* Presence notification — bottom-right corner card */}
@@ -1268,14 +1297,18 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
           )}
         </div>
       )}
-      {/* Header — clock + date */}
-      <div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-between',flexShrink:0}}>
+      {/* Header — Foyer's centred mono clock; date line carries who's home */}
+      <div style={{display:'flex',flexDirection:'column',alignItems:'center',flexShrink:0}}>
         <ClockDigits variant="main" isMobile={isMobile} isTV={isTV}/>
-        <div style={{textAlign:'right',paddingBottom:8}}>
+        <div style={{marginTop:6,display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',justifyContent:'center'}}>
           <ClockDate variant="main" isMobile={isMobile} isTV={isTV}/>
-          <div style={{fontSize:isTV?14:12,color:D.t4,marginTop:5,display:'flex',alignItems:'center',gap:5,justifyContent:'flex-end',fontFamily:'JetBrains Mono,monospace'}}>
-            <div style={{width:5,height:5,borderRadius:'50%',background:online?A.green:A.red}}/>{online?'synced':'offline'}
-          </div>
+          {whoHome.length>0&&(
+            <span style={{fontFamily:FONT_MONO,fontSize:isTV?15:13,color:D.t3,letterSpacing:'1px',textTransform:'uppercase',display:'flex',alignItems:'center',gap:6}}>
+              <span style={{width:6,height:6,borderRadius:'50%',background:D.on}}/>{whoHome.join(', ')} home
+            </span>
+          )}
+          {!online&&<span style={{fontFamily:FONT_MONO,fontSize:isTV?15:13,color:A.red,letterSpacing:'1px',textTransform:'uppercase'}}>· offline</span>}
+          {online&&widgetsAt>0&&now-widgetsAt>15*60000&&<span style={{fontFamily:FONT_MONO,fontSize:isTV?15:13,color:D.t4,letterSpacing:'1px',textTransform:'uppercase'}}>· updated {Math.round((now-widgetsAt)/60000)} min ago</span>}
         </div>
       </div>
 
@@ -1356,52 +1389,39 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
         <div style={{flex:1,display:'flex',flexDirection:'column',gap:12,minHeight:0}}>
 
           {/* Main 3-col grid */}
-          <div style={{flex:1,display:'grid',gridTemplateColumns:'1fr 1.6fr 1fr',gap:isTV?16:12,minHeight:0,zoom:isTV?1.1:undefined}}>
+          <div style={{flex:1,display:'grid',gridTemplateColumns:'1.05fr 1.35fr 1fr',gap:isTV?16:12,minHeight:0,zoom:isTV?1.1:undefined}}>
 
-            {/* LEFT: scrollable events + QR */}
+            {/* LEFT: today and tomorrow, chores due in the next 3 days, counts for later */}
             <Widget style={{display:'flex',flexDirection:'column',overflow:'hidden'}}>
-              {hasUpcomingEvents?(
-                <>
-                  <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:isTV?14:12,flexShrink:0}}>
-                    <div style={{fontSize:isTV?12:10,fontWeight:700,color:D.t3,textTransform:'uppercase',letterSpacing:'.10em'}}>Upcoming</div>
-                    {wifiQrData&&(
-                      <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:3,marginTop:-2}}>
-                        <img src={wifiQrData.dataUrl} alt="WiFi QR" style={{width:isTV?64:52,height:isTV?64:52,objectFit:'contain',borderRadius:7,display:'block'}}/>
-                        <div style={{fontSize:8,fontWeight:600,color:D.t3,maxWidth:isTV?64:52,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',textAlign:'center'}}>{wifiQrData.ssid}</div>
-                      </div>
-                    )}
+              <WLabel>Today and tomorrow</WLabel>
+              <div ref={calScrollRef} style={{flex:1,minHeight:0,overflowY:'auto',WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 20px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 20px),transparent 100%)'}}>
+                {soonItems.map(ev=>{
+                  const isToday=ev.date===todayStr;
+                  const liveDelivery=isToday&&ev.source==='package';
+                  return(
+                    <div key={ev.id} style={{display:'flex',alignItems:'baseline',gap:10,padding:'8px 0',borderBottom:`1px solid ${D.sep}`}}>
+                      <span style={{flex:1,minWidth:0,fontSize:isTV?18:15,fontWeight:700,color:liveDelivery?D.on:D.t1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ev.source==='package'?displayEventTitle(ev).replace(/^Delivery:\s*/,'')+(isToday?' arrives':''):displayEventTitle(ev)}</span>
+                      <span style={{fontSize:11,color:D.t3,whiteSpace:'nowrap',flexShrink:0}}>{isToday?'Today':'Tomorrow'}{ev.time&&ev.time!=='All day'?` · ${fmtTime(ev.time,clockFormat)}`:ev.source==='package'?' · delivery':''}</span>
+                    </div>
+                  );
+                })}
+                {choresSoon.map(c=>(
+                  <div key={c.id} onClick={()=>toggleChore(c.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:`1px solid ${D.sep}`,cursor:'pointer'}}>
+                    <span style={{width:14,height:14,borderRadius:'50%',border:`1.5px solid ${D.t4}`,flexShrink:0}}/>
+                    <span style={{flex:1,minWidth:0,fontSize:isTV?18:15,fontWeight:700,color:D.t1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</span>
+                    <span style={{fontSize:11,color:D.t3,whiteSpace:'nowrap',flexShrink:0}}>{daysUntil(c.next_due)<0?'Overdue':dayWord(c.next_due)}</span>
                   </div>
-                  <div ref={calScrollRef} style={{flex:1,overflowY:'auto',minHeight:0,display:'flex',flexDirection:'column',gap:14,WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
-                    {agendaDays.filter(({date})=>eventDateSet.has(date)).map(({label,date})=>{
-                      const evs=displayEvents.filter(e=>e.date===date);
-                      return(
-                        <div key={date}>
-                          <div style={{fontSize:10,fontWeight:700,color:D.t3,marginBottom:6,textTransform:'uppercase',letterSpacing:'.08em'}}>{label}</div>
-                          {evs.map(ev=>{const c=ev.color||'#34C759';return(
-                            <div key={ev.id} style={{background:c+'18',borderRadius:8,padding:'8px 11px',marginBottom:4,borderLeft:`3px solid ${c}`}}>
-                              <div style={{fontSize:14,color:D.t1,fontWeight:600}}>{displayEventTitle(ev)}</div>
-                              <div style={{fontSize:12,color:D.t3,fontVariantNumeric:'tabular-nums',marginTop:1}}>{fmtTime(ev.time,clockFormat)}</div>
-                            </div>
-                          );})}
-                        </div>
-                      );
-                    })}
+                ))}
+                {soonItems.length===0&&choresSoon.length===0&&<div style={{fontSize:13,color:D.t3,paddingTop:4}}>Nothing today or tomorrow</div>}
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:6,marginTop:10,flexShrink:0}}>
+                {[[choresLater,'chores later'],[billsWeek.length,billsWeek.length===1?'bill':'bills'],[eventsLater,eventsLater===1?'event':'events']].map(([n,l])=>(
+                  <div key={l} style={{border:`1px solid ${D.border}`,borderRadius:10,padding:'7px 8px'}}>
+                    <div style={{fontSize:16,fontWeight:700,color:D.t1}}>{n}</div>
+                    <div style={{fontSize:10.5,color:D.t3}}>{l}</div>
                   </div>
-                </>
-              ):(
-                wifiQrData?(
-                  <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:8}}>
-                    <WLabel>Guest WiFi</WLabel>
-                    <img src={wifiQrData.dataUrl} alt="WiFi QR" style={{width:isTV?160:130,height:isTV?160:130,objectFit:'contain',borderRadius:10,display:'block'}}/>
-                    <div style={{fontSize:14,fontWeight:600,color:D.t2,letterSpacing:'.02em'}}>{wifiQrData.ssid}</div>
-                    <div style={{fontSize:11,color:D.t4}}>Scan to connect</div>
-                  </div>
-                ):(
-                  <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center'}}>
-                    <div style={{fontSize:13,color:D.t4,textAlign:'center'}}>Nothing scheduled</div>
-                  </div>
-                )
-              )}
+                ))}
+              </div>
             </Widget>
 
             {/* CENTER: rotating panel + dinner */}
@@ -1412,12 +1432,12 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
                     {centerPanels.length>1&&(
                       <div style={{display:'flex',gap:5,marginBottom:12,justifyContent:'center',alignItems:'center'}}>
                         {centerPanels.map((p,i)=>{
-                          const active=i===centerIdx%centerPanels.length;
+                          const active=p===activePanelId;
                           return <div key={p} style={{width:active?7:5,height:active?7:5,borderRadius:'50%',background:active?D.t2:D.t4,transition:'all .3s ease',flexShrink:0}}/>;
                         })}
                       </div>
                     )}
-                    <div style={{flex:1,display:'flex',flexDirection:'column',minHeight:0,opacity:panelOpacity,transition:'opacity 0.35s ease'}}>
+                    <div style={{flex:1,display:'flex',flexDirection:'column',minHeight:0,opacity:panelOpacity,transform:panelOpacity?'none':'translateX(-18px)',transition:'opacity 0.35s ease,transform 0.35s ease'}}>
                     {visiblePanelId==='due_soon'&&(
                       <>
                         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
@@ -1488,10 +1508,10 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
                               <div key={g.id}>
                                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:8}}>
                                   <span style={{fontSize:15,fontWeight:600,color:D.t1}}>{g.name}</span>
-                                  <span style={{fontSize:14,fontWeight:700,color:done?A.green:D.t3}}>{isCounter?`${g.unit||''}${g.progress_current}/${g.unit||''}${g.progress_target}`:`${pct}%`}</span>
+                                  <span style={{fontSize:14,fontWeight:700,color:done?D.on:D.t3,fontFamily:FONT_MONO}}>{isCounter?`${g.unit||''}${g.progress_current}/${g.unit||''}${g.progress_target}`:`${pct}%`}</span>
                                 </div>
                                 <div style={{height:6,borderRadius:3,background:'rgba(255,255,255,0.08)',overflow:'hidden'}}>
-                                  <div style={{height:'100%',borderRadius:3,width:`${pct}%`,background:done?A.green:pct>60?A.amber:'rgba(255,255,255,0.35)',transition:'width .6s'}}/>
+                                  <div style={{height:'100%',borderRadius:3,width:`${pct}%`,background:done?D.on:D.t1,transition:'width .6s'}}/>
                                 </div>
                                 {g.description&&<div style={{fontSize:11,color:D.t4,marginTop:5}}>{g.description}</div>}
                               </div>
@@ -1502,26 +1522,14 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
                     )}
                     {visiblePanelId==='members'&&(
                       <>
-                        <WLabel>Family Progress</WLabel>
-                        <div style={{flex:1,display:'flex',flexDirection:'column',gap:14,overflowY:'auto',minHeight:0,marginTop:2,WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 24px),transparent 100%)'}}>
-                          {progressMembers.map(m=>{
-                            const pct=m.monthly_goal>0?Math.min(100,Math.round((m.points/m.monthly_goal)*100)):0;
-                            const hit=m.points>=m.monthly_goal;
-                            return(
-                              <div key={m.id} style={{display:'flex',alignItems:'center',gap:12}}>
-                                <div style={{width:42,height:42,borderRadius:'50%',background:m.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,fontWeight:700,color:'#fff',flexShrink:0}}>{m.initials}</div>
-                                <div style={{flex:1,minWidth:0}}>
-                                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:7}}>
-                                    <span style={{fontSize:15,fontWeight:600,color:D.t1}}>{m.name}</span>
-                                    <span style={{fontSize:14,fontWeight:700,color:hit?A.green:D.t2}}>{m.points}{m.monthly_goal>0?`/${m.monthly_goal} pts`:' pts'}</span>
-                                  </div>
-                                  <div style={{height:6,borderRadius:3,background:'rgba(255,255,255,0.08)',overflow:'hidden'}}>
-                                    <div style={{height:'100%',borderRadius:3,width:`${pct}%`,background:hit?A.green:pct>60?A.amber:'rgba(255,255,255,0.35)',transition:'width .6s'}}/>
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
+                        <WLabel>Streaks</WLabel>
+                        <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',gap:4,minHeight:0}}>
+                          {streakChores.slice(0,5).map((c,i)=>(
+                            <div key={c.id} style={{display:'flex',alignItems:'baseline',gap:10,padding:'9px 0',borderBottom:`1px solid ${D.sep}`}}>
+                              <span style={{fontSize:i===0?(isTV?26:22):(isTV?17:15),fontWeight:700,color:D.t1,flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</span>
+                              <span style={{fontFamily:FONT_MONO,fontSize:i===0?(isTV?18:16):13,fontWeight:600,color:i===0?D.on:D.t2,flexShrink:0}}>{c.streak} in a row</span>
+                            </div>
+                          ))}
                         </div>
                       </>
                     )}
@@ -1691,35 +1699,12 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
                         </div>
                       </>
                     )}
-                    {visiblePanelId==='w_powerwall'&&(()=>{
-                      const pw=widgetData.powerwall;if(!pw)return null;
-                      const gridExport=pw.grid_kw<0;
-                      const batCharging=pw.battery_kw<0;
-                      return(
-                        <>
-                          <WLabel>Powerwall</WLabel>
-                          <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',gap:10}}>
-                            <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:4}}>
-                              <div style={{fontSize:38,fontWeight:800,color:D.t1,letterSpacing:'-.03em',lineHeight:1}}>{pw.battery_pct}%</div>
-                              <div style={{flex:1,height:10,borderRadius:5,background:'rgba(255,255,255,0.08)',overflow:'hidden'}}>
-                                <div style={{height:'100%',borderRadius:5,width:`${pw.battery_pct}%`,background:pw.battery_pct>20?A.green:A.red,transition:'width .6s'}}/>
-                              </div>
-                            </div>
-                            {[
-                              {label:'Solar',kw:pw.solar_kw,note:pw.solar_kw>0?`${pw.solar_kw} kW`:null,color:A.amber},
-                              {label:'Home', kw:pw.load_kw, note:`${pw.load_kw} kW`,color:D.t2},
-                              {label:'Grid', kw:Math.abs(pw.grid_kw),note:`${Math.abs(pw.grid_kw)} kW ${gridExport?'export':'import'}`,color:gridExport?A.green:D.t3},
-                              {label:'Battery',kw:Math.abs(pw.battery_kw),note:pw.battery_kw===0?'Idle':`${Math.abs(pw.battery_kw)} kW ${batCharging?'charging':'discharging'}`,color:A.green},
-                            ].map(row=>(
-                              <div key={row.label} style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                                <span style={{fontSize:13,color:D.t3,width:56}}>{row.label}</span>
-                                <span style={{fontSize:14,fontWeight:600,color:row.color||D.t1}}>{row.note||'—'}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </>
-                      );
-                    })()}
+                    {visiblePanelId==='w_powerwall'&&widgetData.powerwall&&(
+                      <>
+                        <div style={{display:'flex',justifyContent:'space-between'}}><WLabel>Power</WLabel><span style={{fontSize:11,color:D.t3}}>Battery {widgetData.powerwall.battery_pct}%</span></div>
+                        <FlowDiagram pw={widgetData.powerwall}/>
+                      </>
+                    )}
                     {visiblePanelId==='w_flight'&&(()=>{
                       const f=widgetData.flight;if(!f)return null;
                       const statusColor={active:A.green,landed:A.green,scheduled:D.t3,cancelled:A.red,incident:A.red,diverted:A.amber}[f.status]||D.t3;
@@ -1885,34 +1870,18 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
                         </>
                       );
                     })()}
-                    {visiblePanelId==='w_moen'&&(()=>{
-                      const m=widgetData.moen;if(!m)return null;
-                      const modeColor={home:A.green,away:A.amber,sleep:A.indigo}[m.system_mode]||D.t3;
+                    {visiblePanelId==='w_moen'&&widgetData.moen&&(()=>{
+                      const m=widgetData.moen;
                       return(
                         <>
-                          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
-                            <WLabel>Moen Flo</WLabel>
-                            {m.has_alert&&<span style={{fontSize:11,fontWeight:700,color:A.red}}>LEAK ALERT</span>}
-                          </div>
-                          <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',gap:14}}>
-                            <div style={{display:'flex',gap:10,alignItems:'stretch'}}>
-                              <div style={{flex:1,background:'rgba(255,255,255,0.06)',borderRadius:10,padding:'12px',textAlign:'center'}}>
-                                <div style={{fontSize:36,fontWeight:800,color:D.t1,letterSpacing:'-.03em',lineHeight:1}}>{m.daily_gal}</div>
-                                <div style={{fontSize:11,color:D.t4,marginTop:4}}>gal today</div>
-                              </div>
-                              <div style={{flex:1,background:'rgba(255,255,255,0.06)',borderRadius:10,padding:'12px',textAlign:'center'}}>
-                                <div style={{fontSize:36,fontWeight:800,color:m.flow_gpm>0?A.blue:D.t1,letterSpacing:'-.03em',lineHeight:1}}>{m.flow_gpm}</div>
-                                <div style={{fontSize:11,color:D.t4,marginTop:4}}>gpm now</div>
-                              </div>
-                            </div>
-                            {[
-                              {label:'Pressure',val:`${m.psi} psi`,color:D.t2},
-                              {label:'Mode',val:m.system_mode,color:modeColor},
-                              {label:'Status',val:m.connected?'Connected':'Offline',color:m.connected?A.green:A.red},
-                            ].map(row=>(
-                              <div key={row.label} style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                                <span style={{fontSize:13,color:D.t3}}>{row.label}</span>
-                                <span style={{fontSize:14,fontWeight:600,color:row.color,textTransform:'capitalize'}}>{row.val}</span>
+                          <div style={{display:'flex',justifyContent:'space-between'}}><WLabel>Water</WLabel>{m.has_alert&&<span style={{fontSize:11,fontWeight:700,color:A.red}}>Leak alert</span>}</div>
+                          <div style={{fontSize:isTV?40:32,fontWeight:700,color:D.t1,lineHeight:1.1}}>{m.daily_gal} gal</div>
+                          <div style={{fontSize:12,color:D.t3,marginTop:2}}>Used today</div>
+                          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,marginTop:16}}>
+                            {[[m.flow_gpm,'gal/min now',m.flow_gpm>0],[m.psi,'psi',false],[m.system_mode,'mode',false]].map(([v,l,live])=>(
+                              <div key={l} style={{border:`1px solid ${D.border}`,borderRadius:10,padding:'8px 10px'}}>
+                                <div style={{fontSize:16,fontWeight:700,color:live?D.on:D.t1,textTransform:'capitalize'}}>{v??'—'}</div>
+                                <div style={{fontSize:11,color:D.t3}}>{l}</div>
                               </div>
                             ))}
                           </div>
@@ -2142,13 +2111,13 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
                         </div>
                       );
                     })()}
-                    {visiblePanelId==='w_packages'&&packages.length>0&&(()=>{
+                    {visiblePanelId==='w_packages'&&shownPackages.length>0&&(()=>{
                       const carrierColor={UPS:'#FFB500',FedEx:'#4D148C',USPS:'#004B97',Amazon:'#FF9900',DHL:'#FFCC00',OnTrac:'#E8231A',LaserShip:'#00A3E0'};
                       return(
                         <>
                           <WLabel>Packages</WLabel>
                           <div style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:10,marginTop:4}}>
-                            {packages.map(pkg=>{
+                            {shownPackages.map(pkg=>{
                               const color=carrierColor[pkg.carrier]||D.t3;
                               return(
                                 <div key={pkg.id} style={{background:'rgba(255,255,255,0.05)',borderRadius:10,padding:'12px 14px',display:'flex',flexDirection:'column',gap:4}}>
@@ -2382,33 +2351,59 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
               )}
             </div>
 
-            {/* RIGHT: weather + dynamic extras */}
+            {/* RIGHT: weather, live music/scores (only while live), Wi-Fi QR */}
             <div style={{display:'flex',flexDirection:'column',gap:12,minHeight:0,overflow:'hidden'}}>
-              {/* Weather */}
-              <Widget style={{flexShrink:0}}>
+              <Widget style={{flex:1,display:'flex',flexDirection:'column',minHeight:0}}>
                 <WLabel>Weather</WLabel>
                 {weather?(
                   <>
-                    <div style={{display:'flex',alignItems:'baseline',gap:10,marginBottom:6}}>
-                      <span style={{fontSize:48,fontWeight:800,color:D.t1,lineHeight:1,letterSpacing:'-.05em',fontVariantNumeric:'tabular-nums'}}>{weather.temp}°</span>
-                      <div>
-                        <div style={{fontSize:13,color:D.t2,fontWeight:500}}>{weather.condition}</div>
-                        <div style={{fontSize:11,color:D.t3,marginTop:1}}>H:{weather.hi}° · L:{weather.lo}°</div>
-                      </div>
+                    <div style={{fontSize:isTV?34:28,fontWeight:700,color:D.t1,lineHeight:1.1,fontVariantNumeric:'tabular-nums'}}>{weather.temp}°</div>
+                    <div style={{fontSize:12,color:D.t3,marginTop:3}}>
+                      {weather.condition} · high {weather.hi}°{widgetData.thermostat&&widgetData.thermostat.current_temp!=null&&!widgetData.thermostat.unavailable?` · inside ${Math.round(widgetData.thermostat.current_temp)}°`:''}
                     </div>
-                    <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:2,borderTop:`1px solid ${D.sep}`,paddingTop:8}}>
-                      {(weather.forecast||[]).map(f=>(
-                        <div key={f.day} style={{textAlign:'center'}}>
-                          <div style={{fontSize:9,color:D.t3,fontWeight:600,marginBottom:2}}>{f.day}</div>
-                          <div style={{fontSize:15,marginBottom:2}}>{f.icon}</div>
-                          <div style={{fontSize:11,color:D.t1,fontWeight:700}}>{f.hi}°</div>
-                          <div style={{fontSize:10,color:D.t4}}>{f.lo}°</div>
+                    {widgetData.sun&&<div style={{fontSize:12,color:D.t3,marginTop:2}}>Sunrise {widgetData.sun.sunrise} · sunset {widgetData.sun.sunset}</div>}
+                    <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:2,borderTop:`1px solid ${D.sep}`,paddingTop:8,marginTop:10,textAlign:'center'}}>
+                      {(weather.forecast||[]).slice(0,5).map(f=>(
+                        <div key={f.day} style={{fontFamily:FONT_MONO,fontSize:10.5,color:D.t3}}>
+                          {f.day.slice(0,3)}
+                          <div style={{fontFamily:FONT_SANS,fontSize:12,fontWeight:700,color:D.t1}}>{f.hi}°</div>
+                          {f.lo}°
                         </div>
                       ))}
                     </div>
                   </>
-                ):(
-                  <div style={{fontSize:13,color:D.t4}}>Loading…</div>
+                ):<div style={{fontSize:13,color:D.t4}}>Loading…</div>}
+                {(nowPlaying.playing&&nowPlaying.title||liveGames.length>0)&&(
+                  <div style={{borderTop:`1px solid ${D.sep}`,marginTop:10,paddingTop:4,flexShrink:0}}>
+                    {nowPlaying.playing&&nowPlaying.title&&(
+                      <div style={{display:'flex',alignItems:'center',gap:10,padding:'6px 0'}}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={D.on} strokeWidth="1.8" strokeLinecap="round" style={{flexShrink:0}}><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:13,fontWeight:700,color:D.t1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nowPlaying.title}</div>
+                          {nowPlaying.artist&&<div style={{fontSize:11,color:D.t3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nowPlaying.artist}</div>}
+                        </div>
+                        <div style={{display:'flex',gap:2,alignItems:'flex-end',height:12,flexShrink:0}}>
+                          {[0,1,2].map(i=><span key={i} style={{width:3,background:D.on,borderRadius:1,animation:`kithEq 1s ease-in-out ${-i*0.3}s infinite`}}/>)}
+                        </div>
+                      </div>
+                    )}
+                    {liveGames.slice(0,2).map(g=>(
+                      <div key={g.id} style={{display:'flex',alignItems:'center',gap:10,padding:'6px 0'}}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={D.on} strokeWidth="1.8" style={{flexShrink:0}}><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:13,fontWeight:700,color:D.t1}}>{g.away?.abbr} {g.away?.score} · {g.home?.abbr} {g.home?.score}</div>
+                          {g.detail&&<div style={{fontSize:11,color:D.t3}}>{g.detail}</div>}
+                        </div>
+                        <span style={{fontFamily:FONT_MONO,fontSize:9.5,letterSpacing:'1px',color:D.on,flexShrink:0}}>LIVE</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {wifiQrData&&(
+                  <div style={{marginTop:'auto',display:'flex',gap:12,alignItems:'center',borderTop:`1px solid ${D.sep}`,paddingTop:10,flexShrink:0}}>
+                    <img src={wifiQrData.dataUrl} alt="Wi-Fi QR" style={{width:isTV?84:72,height:isTV?84:72,objectFit:'contain',borderRadius:8,background:'#edecea',padding:4,display:'block'}}/>
+                    <div><div style={{fontSize:13,fontWeight:700,color:D.t1}}>Guest Wi-Fi</div><div style={{fontSize:11,color:D.t3}}>{wifiQrData.ssid} · scan to join</div></div>
+                  </div>
                 )}
               </Widget>
               {/* Emergency info — always-visible, rotates through configured
@@ -2418,34 +2413,18 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
                   poke around to see it. */}
               {emergencyHasValue&&(
                 <Widget onClick={()=>setEmergencyForced(f=>!f)} style={{flexShrink:0,cursor:'pointer',border:`1px solid ${emergencyForced?A.indigo:D.border}`,background:emergencyForced?'rgba(88,86,214,0.12)':undefined}}>
-                  <div style={{fontSize:10,fontWeight:700,color:D.t3,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:3}}>{EMERGENCY_LABELS[emergencyFilled[emergencyChipIdx%emergencyFilled.length]?.[0]]}</div>
+                  <div style={{fontSize:11,fontWeight:600,color:D.t3,marginBottom:3}}>{EMERGENCY_LABELS[emergencyFilled[emergencyChipIdx%emergencyFilled.length]?.[0]]}</div>
                   <div style={{fontSize:14,color:D.t1,fontWeight:600,lineHeight:1.3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{emergencyFilled[emergencyChipIdx%emergencyFilled.length]?.[1]}</div>
                 </Widget>
               )}
-              {/* Grocery — if items exist */}
-              {(()=>{const unchecked=(grocery||[]).filter(g=>!g.checked);return unchecked.length>0&&(
-                <Widget style={{flexShrink:0}}>
-                  <WLabel>Grocery</WLabel>
-                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'2px 12px'}}>
-                    {unchecked.slice(0,6).map(item=>(
-                      <div key={item.id} style={{display:'flex',alignItems:'center',gap:7,padding:'4px 0'}}>
-                        <div style={{width:4,height:4,borderRadius:'50%',background:'rgba(255,255,255,0.35)',flexShrink:0}}/>
-                        <span style={{fontSize:13,color:D.t2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{item.name}</span>
-                      </div>
-                    ))}
-                  </div>
-                  {unchecked.length>6&&<div style={{fontSize:11,color:D.t4,marginTop:6}}>+{unchecked.length-6} more</div>}
-                </Widget>
-              );})()}
-              {/* Pinned notes — fills remaining space below weather */}
               {pinnedNotes.length>0&&(
-                <Widget style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minHeight:100}}>
+                <Widget style={{flexShrink:0,maxHeight:'30%',display:'flex',flexDirection:'column',overflow:'hidden'}}>
                   <WLabel>Notes</WLabel>
                   <div style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:8}}>
                     {pinnedNotes.map(n=>(
-                      <div key={n.id} style={{background:n.color&&n.color!=='#FAFAF5'?n.color+'28':'rgba(255,255,255,0.07)',borderRadius:8,padding:'10px 12px',borderLeft:`3px solid ${n.color&&n.color!=='#FAFAF5'?n.color:'rgba(255,255,255,0.25)'}`}}>
-                        <div style={{fontSize:13,fontWeight:700,color:D.t2,marginBottom:n.content?6:0,lineHeight:1.3,textTransform:'uppercase',letterSpacing:'.04em'}}>{n.title}</div>
-                        {n.content&&<div style={{fontSize:16,fontWeight:600,color:D.t1,lineHeight:1.6,whiteSpace:'pre-wrap',fontFamily:'JetBrains Mono,monospace',letterSpacing:'.06em',wordBreak:'break-all'}}>{n.content}</div>}
+                      <div key={n.id} style={{borderBottom:`1px solid ${D.sep}`,paddingBottom:6}}>
+                        <div style={{fontSize:13,fontWeight:700,color:D.t1,lineHeight:1.3}}>{n.title}</div>
+                        {n.content&&<div style={{fontSize:13,color:D.t2,lineHeight:1.5,whiteSpace:'pre-wrap',fontFamily:FONT_MONO,wordBreak:'break-all'}}>{n.content}</div>}
                       </div>
                     ))}
                   </div>
@@ -2459,54 +2438,29 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
         </div>
       )}
 
-      {/* Activity bar — news ticker + smart home events + live scores + manage */}
-      <div style={{flexShrink:0,display:'flex',alignItems:'center',gap:12}}>
-        <div style={{flex:1,minWidth:0,display:'flex',alignItems:'center',gap:10,overflow:'hidden'}}>
-          {urgentTickerItems.length>0&&(
-            <>
-              <div style={{width:6,height:6,borderRadius:'50%',background:A.red,animation:'pulse 1.2s ease infinite',flexShrink:0}}/>
-              <span style={{fontSize:15,color:A.red,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flexShrink:0,minWidth:0,maxWidth:'32%',transition:'opacity .5s',opacity:urgentVisible?1:0}}>
-                {urgentTickerItems[urgentIdx%urgentTickerItems.length]}
+      {/* Bottom bar — floats, no border; alerts first, then today's items, bills, news */}
+      <div style={{flexShrink:0,display:'flex',alignItems:'center',gap:12,height:isTV?34:28}}>
+        {voiceTimer.active&&<div style={{flexShrink:0,fontFamily:FONT_MONO}}><TimerCountdown voiceTimer={voiceTimer}/></div>}
+        <div style={{flex:1,minWidth:0,overflow:'hidden',WebkitMaskImage:'linear-gradient(90deg,transparent,#000 5%,#000 95%,transparent)',maskImage:'linear-gradient(90deg,transparent,#000 5%,#000 95%,transparent)'}}>
+          {tickerItems.length>0&&(()=>{
+            const chars=tickerItems.reduce((n,x)=>n+x.t.length+6,0);
+            const run=k=>(
+              <span key={k} style={{display:'inline-flex',alignItems:'center',paddingRight:40}}>
+                {tickerItems.map((x,i)=>(
+                  <span key={i} style={{display:'inline-flex',alignItems:'center'}}>
+                    {i>0&&<span style={{color:D.t4,margin:'0 12px'}}>·</span>}
+                    {(x.alert||x.live)&&<span style={{width:6,height:6,borderRadius:'50%',background:x.alert?A.red:D.on,marginRight:7,animation:'pulse 1.6s ease-in-out infinite'}}/>}
+                    <span style={{color:x.alert?A.red:x.live?D.t1:D.t3}}>{x.t}</span>
+                  </span>
+                ))}
               </span>
-            </>
-          )}
-          {news.length>0&&(
-            <>
-              {urgentTickerItems.length>0&&<span style={{color:D.sep,flexShrink:0}}>·</span>}
-              <div style={{width:5,height:5,borderRadius:'50%',background:D.t4,flexShrink:0}}/>
-              <span style={{fontSize:15,color:D.t3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0,maxWidth:'30%',transition:'opacity .5s',opacity:newsVisible?1:0}}>
-                {news[newsIdx%news.length]?.title}
-              </span>
-            </>
-          )}
-          {allSmartEvents.length>0&&(
-            <>
-              {(urgentTickerItems.length>0||news.length>0)&&<span style={{color:D.sep,flexShrink:0}}>·</span>}
-              <div style={{width:6,height:6,borderRadius:'50%',background:A.blue,flexShrink:0}}/>
-              <span style={{fontSize:15,color:D.t2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flexShrink:0,minWidth:0,maxWidth:'30%'}}>
-                {allSmartEvents[0].icon} {allSmartEvents[0].title}{allSmartEvents[0].message?` · ${allSmartEvents[0].message}`:''}
-              </span>
-            </>
-          )}
-          {mediaItems.length>0&&(
-            <>
-              {(urgentTickerItems.length>0||news.length>0||allSmartEvents.length>0)&&<span style={{color:D.sep,flexShrink:0}}>·</span>}
-              {mediaItems[mediaChipIdx%mediaItems.length].type==='music'?(
-                <svg width="10" height="10" viewBox="0 0 24 24" fill={A.amber} style={{flexShrink:0}}><path d="M12 3v10.55A4 4 0 1014 17V7h4V3h-6z"/></svg>
-              ):(
-                <div style={{width:6,height:6,borderRadius:'50%',background:A.red,animation:'pulse 1.2s ease infinite',flexShrink:0}}/>
-              )}
-              <span style={{fontSize:15,color:mediaItems[mediaChipIdx%mediaItems.length].type==='music'?A.amber:D.t2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flexShrink:0,minWidth:0,maxWidth:'30%'}}>
-                {mediaItems[mediaChipIdx%mediaItems.length].primary}{mediaItems[mediaChipIdx%mediaItems.length].secondary?` · ${mediaItems[mediaChipIdx%mediaItems.length].secondary}`:''}
-              </span>
-            </>
-          )}
-          {voiceTimer.active&&(
-            <>
-              {(urgentTickerItems.length>0||news.length>0||allSmartEvents.length>0||mediaItems.length>0)&&<span style={{color:D.sep,flexShrink:0}}>·</span>}
-              <TimerCountdown voiceTimer={voiceTimer}/>
-            </>
-          )}
+            );
+            return(
+              <div style={{display:'inline-flex',whiteSpace:'nowrap',fontFamily:FONT_MONO,fontSize:isTV?14:12,letterSpacing:'.5px',textTransform:'uppercase',animation:`kithTick ${Math.max(30,Math.round(chars*0.28))}s linear infinite`}}>
+                {run('a')}{run('b')}
+              </div>
+            );
+          })()}
         </div>
         {quickActions.length>0&&quickActions.map(action=>{
           const st=qaState[action.id]||'idle';
@@ -4724,6 +4678,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
       if(st.uptime_kuma_url) setKumaUrl(st.uptime_kuma_url);
       if(st.uptime_kuma_slug) setKumaSlug(st.uptime_kuma_slug);
       if(st.custom_sport_paths) setCustomSportPath(st.custom_sport_paths);
+      if(st.sports_teams) setSportsTeams(st.sports_teams);
       if(st.wifi_ssid) setWifiSsid(st.wifi_ssid);
       if(st.ics_export_token) setIcsExportToken(st.ics_export_token);
       if(st.imap_host) setImapHost(st.imap_host);
@@ -4787,6 +4742,7 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
   const [icsEditForm,setIcsEditForm]=useState({name:'',url:'',color:'#3B82F6'});
   const [icsEditLoading,setIcsEditLoading]=useState(false);
   const [customSportPath,setCustomSportPath]=useState('');
+  const [sportsTeams,setSportsTeams]=useState('');
   const [icsExportToken,setIcsExportToken]=useState('');
 
   const addIcsSource=async()=>{
@@ -5318,6 +5274,12 @@ function SettingsScreen({toastAdd,icsSources,setIcsSources,onDisplay,photos,setP
           <div style={{display:'flex',gap:10,flex:1}}>
             <Inp value={customSportPath} onChange={e=>setCustomSportPath(e.target.value)} placeholder="e.g. soccer/fifa.world" style={{flex:1}}/>
             <Btn sm onClick={()=>saveSetting('custom_sport_paths',customSportPath.trim())}>Save</Btn>
+          </div>
+        </FormRow>
+        <FormRow label="Teams" footer="Only these teams' live games show on the display. ESPN abbreviations, comma separated; prefix the league to be exact (NBA:ATL, MLB:ATL, MLS:ATL, NCAAF:GT). Leave empty for every live game. F1, golf, NASCAR and tennis always show.">
+          <div style={{display:'flex',gap:10,flex:1}}>
+            <Inp value={sportsTeams} onChange={e=>setSportsTeams(e.target.value)} placeholder="NBA:ATL, MLB:ATL, MLS:ATL, NCAAF:GT, NBA:LAL" style={{flex:1}}/>
+            <Btn sm onClick={()=>saveSetting('sports_teams',sportsTeams.trim())}>Save</Btn>
           </div>
         </FormRow>
         <FormRow label="Live sports">

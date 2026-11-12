@@ -1608,7 +1608,11 @@ app.get('/api/sports', requireAuth, async (req, res) => {
       results.push(...games);
     } catch { if (_sportsCache[league]) results.push(..._sportsCache[league]); }
   }));
-  res.json(results);
+  // Optional team filter: "ATL" matches any league, "NBA:ATL" only that league.
+  const teams = (getSetting('sports_teams') || '').split(',').map(t => t.trim().toUpperCase()).filter(Boolean);
+  const TEAMLESS = new Set(['F1', 'PGA', 'NASCAR', 'ATP']);
+  const matches = (g, abbr) => abbr && (teams.includes(abbr.toUpperCase()) || teams.includes(`${g.league}:${abbr.toUpperCase()}`));
+  res.json(teams.length ? results.filter(g => TEAMLESS.has(g.league) || matches(g, g.home?.abbr) || matches(g, g.away?.abbr)) : results);
 });
 
 // ── News (RSS) ─────────────────────────────────────────────────────────────────

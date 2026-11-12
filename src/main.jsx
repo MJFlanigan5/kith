@@ -1113,13 +1113,13 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
     const dayName=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date().getDay()];
     return meals.find(m=>m.day===dayName)?.meal||'—';
   };
-  // Display-only: hide packages that have gone quiet (added 14+ days ago, or expected
-  // more than 3 days ago). They stay in Manage; only the wall stops showing them.
+  // Display-only: hide packages that have gone quiet. With an expected date, show until
+  // 3 days past it; without one, show for 14 days after it was added. They stay in
+  // Manage; only the wall stops showing them.
   const shownPackages=useMemo(()=>(packages||[]).filter(p=>{
+    if(p.expected_date) return daysUntil(p.expected_date)>=-3;
     const added=new Date((p.created_at||'').replace(' ','T')+'Z').getTime();
-    if(added&&Date.now()-added>14*86400000) return false;
-    if(p.expected_date&&daysUntil(p.expected_date)<-3) return false;
-    return true;
+    return !added||Date.now()-added<=14*86400000;
   }),[packages]);
   const streakChores=useMemo(()=>(chores||[]).filter(c=>(c.streak||0)>=2).sort((a,b)=>(b.streak||0)-(a.streak||0)),[chores]);
   const pwActive=!!widgetData.powerwall&&(widgetData.powerwall.solar_kw>0||widgetData.powerwall.battery_kw!==0||widgetData.powerwall.grid_kw<0);

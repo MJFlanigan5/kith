@@ -3777,7 +3777,7 @@ app.post('/api/email/inbound', inboundRateLimit, async (req, res) => {
 
   if (DELIVERED_RE.test(subject || '')) autoDeliverPackage(pkg, subject || '');
   else if (pkg?.is_shipping) upsertPackage(pkg, subject || '');
-  if (PAID_RE.test(subject || '')) autoPayBill(bill);
+  if (PAID_RE.test(subject || '')) autoPayBill(bill) || payNamedBill(`${subject || ''} ${bill?.payee || ''}`);
   else insertBill(bill);
 
   res.json({ ok: true });
@@ -3863,19 +3863,21 @@ app.get('/api/bills', requireAuth, (req, res) => {
 });
 
 app.post('/api/bills', requireAdmin, (req, res) => {
-  const { name, amount=0, due_day=1, due_date='', recurrence='monthly', category='Other', color='#3B82F6', notes='' } = req.body || {};
+  const { name, amount=0, due_day=1, due_date='', recurrence='monthly', category='Other', color='#3B82F6', notes='', autopay=0 } = req.body || {};
   if (!name?.trim()) return res.status(400).json({ error: 'Name required' });
-  const row = db.prepare('INSERT INTO bills (name,amount,due_day,due_date,recurrence,category,color,notes) VALUES (?,?,?,?,?,?,?,?) RETURNING *')
-    .get(name.trim(), Number(amount)||0, Number(due_day)||1, due_date, recurrence, category, color, notes);
+  const row = db.prepare('INSERT INTO bills (name,amount,due_day,due_date,recurrence,category,color,notes,autopay) VALUES (?,?,?,?,?,?,?,?,?) RETURNING *')
+    .get(name.trim(), Number(amount)||0, Number(due_day)||1, due_date, recurrence, category, color, notes, autopay?1:0);
+  reconcileBillPayments();
   res.json(row);
 });
 
 app.put('/api/bills/:id', requireAdmin, (req, res) => {
-  const { name, amount=0, due_day=1, due_date='', recurrence='monthly', category='Other', color='#3B82F6', notes='' } = req.body || {};
+  const { name, amount=0, due_day=1, due_date='', recurrence='monthly', category='Other', color='#3B82F6', notes='', autopay } = req.body || {};
   if (!name?.trim()) return res.status(400).json({ error: 'Name required' });
-  const row = db.prepare('UPDATE bills SET name=?,amount=?,due_day=?,due_date=?,recurrence=?,category=?,color=?,notes=? WHERE id=? RETURNING *')
-    .get(name.trim(), Number(amount)||0, Number(due_day)||1, due_date, recurrence, category, color, notes, Number(req.params.id));
+  const row = db.prepare('UPDATE bills SET name=?,amount=?,due_day=?,due_date=?,recurrence=?,category=?,color=?,notes=?,autopay=COALESCE(?,autopay) WHERE id=? RETURNING *')
+    .get(name.trim(), Number(amount)||0, Number(due_day)||1, due_date, recurrence, category, color, notes, autopay===undefined?null:(autopay?1:0), Number(req.params.id));
   if (!row) return res.status(404).json({ error: 'Not found' });
+  reconcileBillPayments();
   res.json(row);
 });
 
@@ -5439,6 +5441,7 @@ cron.schedule('0 * * * *', () => {
   try {
     db.prepare("DELETE FROM messages WHERE expires_at <= datetime('now')").run();
     reconcileDeliveredPackages();
+    reconcileBillPayments();
     db.prepare("DELETE FROM packages WHERE delivered=1 AND created_at < datetime('now', '-3 days')").run();
   } catch (e) { console.error('[cleanup]', e?.message || e); }
 }, { timezone: getTimezone() });
@@ -5561,7 +5564,7 @@ function autoDeliverPackage(pkg, subject) {
 //     recognised) close, with their matching shipped rows.
 //  2. Delivery emails Kith logged as unmatched are retried against open packages.
 //  3. Packages that went quiet close as "Assumed delivered": 7 days past the expected
-//     date, or 30 days old with no date. Many carriers never send a delivered email.
+//     date, or 14 days old with no date. Many carriers never send a delivered email.
 function reconcileDeliveredPackages() {
   const mark = db.prepare("UPDATE packages SET delivered=1, status=? WHERE id=? AND delivered=0");
   let n = 0, assumed = 0;
@@ -5582,7 +5585,7 @@ function reconcileDeliveredPackages() {
   for (const r of db.prepare('SELECT id, expected_date, created_at FROM packages WHERE delivered=0').all()) {
     const stale = r.expected_date
       ? (Date.parse(today) - Date.parse(r.expected_date)) / 86400000 > 7
-      : Date.now() - Date.parse(String(r.created_at).replace(' ', 'T') + 'Z') > 30 * 86400000;
+      : Date.now() - Date.parse(String(r.created_at).replace(' ', 'T') + 'Z') > 14 * 86400000;
     if (stale) close([r.id], 'Assumed delivered');
   }
   if (n) { console.log(`[packages] reconciled ${n} package(s), ${assumed} assumed delivered after going quiet`); broadcastSSE('packages', { action: 'reload' }); }
@@ -5601,6 +5604,55 @@ function autoPayBill(bill) {
   db.prepare('INSERT OR IGNORE INTO bill_payments (bill_id, period) VALUES (?, ?)').run(existing.id, period);
   broadcastSSE('bills', { action: 'reload' });
   return true;
+}
+
+// The period a payment counts for, matching the Bills screen: monthly = YYYY-MM,
+// annual = YYYY, one-time = its due date.
+function billPeriod(bill, when = new Date()) {
+  const ym = `${when.getFullYear()}-${String(when.getMonth() + 1).padStart(2, '0')}`;
+  return bill.recurrence === 'monthly' ? ym : bill.recurrence === 'annual' ? String(when.getFullYear()) : (bill.due_date || ym);
+}
+
+// Payment emails often arrive without a payee the AI could pull out ("Payment Processed
+// for Georgia Natural Gas"). Fall back to finding a known bill's name in the text.
+const billKey = s => ' ' + String(s || '').toLowerCase().replace(/&amp;/g, '&')
+  .replace(/\.(com|net|org|io)\b/g, ' ').replace(/\b(llc|inc|corp|ltd)\b\.?/g, ' ')
+  .replace(/[^a-z0-9&]+/g, ' ').trim() + ' ';
+function billNamedIn(text) {
+  const t = billKey(text);
+  return db.prepare('SELECT * FROM bills WHERE active=1').all()
+    .filter(b => billKey(b.name).trim().length >= 3 && t.includes(billKey(b.name)))
+    .sort((a, b) => billKey(b.name).length - billKey(a.name).length)[0] || null;
+}
+// `when`: when the payment email arrived (a Date), so late retries land in the right month.
+function payNamedBill(text, when = new Date()) {
+  const bill = billNamedIn(text);
+  if (!bill) return false;
+  db.prepare('INSERT OR IGNORE INTO bill_payments (bill_id, period) VALUES (?, ?)').run(bill.id, billPeriod(bill, when));
+  broadcastSSE('bills', { action: 'reload' });
+  return true;
+}
+
+// Hourly + at startup:
+//  1. Payment emails Kith couldn't match are retried by bill name, and cleared once matched.
+//  2. Bills set to autopay count as paid once their due day has passed this month.
+function reconcileBillPayments() {
+  let n = 0;
+  const sqlDate = s => new Date(String(s).replace(' ', 'T') + (String(s).includes('Z') ? '' : 'Z'));
+  for (const u of db.prepare("SELECT id, subject, detail, created_at FROM unmatched_confirmations WHERE type='payment'").all()) {
+    if (payNamedBill(`${u.subject} ${u.detail}`, sqlDate(u.created_at))) {
+      db.prepare('DELETE FROM unmatched_confirmations WHERE id=?').run(u.id); n++;
+    }
+  }
+  const now = new Date();
+  const today = localDate();
+  const add = db.prepare('INSERT OR IGNORE INTO bill_payments (bill_id, period) VALUES (?, ?)');
+  for (const b of db.prepare('SELECT * FROM bills WHERE active=1 AND autopay=1').all()) {
+    const due = b.recurrence === 'one-time' ? b.due_date
+      : b.recurrence === 'monthly' ? `${today.slice(0, 7)}-${String(Math.min(b.due_day || 1, 28)).padStart(2, '0')}` : '';
+    if (due && due <= today) n += add.run(b.id, billPeriod(b, now)).changes;
+  }
+  if (n) { console.log(`[bills] reconciled ${n} payment(s)`); broadcastSSE('bills', { action: 'reload' }); }
 }
 
 // A payment/delivery confirmation email was detected but couldn't be matched to an
@@ -5661,7 +5713,7 @@ async function pollImap() {
           if (!resolved) logUnmatched('delivery', subject, pkg?.is_shipping ? `${pkg.carrier || 'Unknown carrier'} ${pkg.tracking_number || ''}`.trim() : subject);
         } else if (isPaid) {
           const bill = await callAiForBill(subject, body).catch(() => null);
-          const resolved = autoPayBill(bill);
+          const resolved = autoPayBill(bill) || payNamedBill(`${subject} ${bill?.payee || ''}`);
           console.log(`[imap] payment confirmation: ${resolved ? `marked paid — ${bill?.payee}` : 'no matching bill found'}`);
           if (!resolved) logUnmatched('payment', subject, bill?.payee ? `${bill.payee}${bill.amount ? ' — $' + Number(bill.amount).toFixed(2) : ''}` : subject);
         } else if (isShipping) {
@@ -5786,7 +5838,7 @@ async function scanImap30Days() {
         else logUnmatched('delivery', subject, pkg?.is_shipping ? `${pkg.carrier || 'Unknown carrier'} ${pkg.tracking_number || ''}`.trim() : subject);
       } else if (isPaid) {
         const bill = await callAiForBill(subject, body).catch(() => null);
-        const resolved = autoPayBill(bill);
+        const resolved = autoPayBill(bill) || payNamedBill(`${subject} ${bill?.payee || ''}`);
         if (resolved) summary.bills++;
         else logUnmatched('payment', subject, bill?.payee ? `${bill.payee}${bill.amount ? ' — $' + Number(bill.amount).toFixed(2) : ''}` : subject);
       } else if (isShipping) {
@@ -5950,6 +6002,7 @@ app.use((err, req, res, next) => {
 });
 
 try { reconcileDeliveredPackages(); } catch (err) { console.error('[packages] reconcile failed:', err.message); }
+try { reconcileBillPayments(); } catch (err) { console.error('[bills] reconcile failed:', err.message); }
 // Names saved from web pages and emails sometimes kept HTML codes ("Trap &amp; Bucket").
 try {
   let fixed = 0;

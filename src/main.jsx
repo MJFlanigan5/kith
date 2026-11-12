@@ -7068,7 +7068,7 @@ function BillsScreen({bills,setBills,payments,setPayments,toastAdd}){
   const isMobile=useIsMobile();
   const [drawerOpen,setDrawerOpen]=useState(false);
   const [editBill,setEditBill]=useState(null);
-  const blankForm={name:'',amount:'',due_day:1,due_date:'',recurrence:'monthly',category:'Other',color:'#3B82F6',notes:''};
+  const blankForm={name:'',amount:'',due_day:1,due_date:'',recurrence:'monthly',category:'Other',color:'#3B82F6',notes:'',autopay:false};
   const [form,setForm]=useState(blankForm);
 
   const now=new Date();
@@ -7103,11 +7103,11 @@ function BillsScreen({bills,setBills,payments,setPayments,toastAdd}){
   };
 
   const openNew=()=>{setEditBill(null);setForm(blankForm);setDrawerOpen(true);};
-  const openEdit=b=>{setEditBill(b);setForm({name:b.name,amount:b.amount>0?String(b.amount):'',due_day:b.due_day||1,due_date:b.due_date||'',recurrence:b.recurrence||'monthly',category:b.category||'Other',color:b.color||'#3B82F6',notes:b.notes||''});setDrawerOpen(true);};
+  const openEdit=b=>{setEditBill(b);setForm({name:b.name,amount:b.amount>0?String(b.amount):'',due_day:b.due_day||1,due_date:b.due_date||'',recurrence:b.recurrence||'monthly',category:b.category||'Other',color:b.color||'#3B82F6',notes:b.notes||'',autopay:!!b.autopay});setDrawerOpen(true);};
 
   const save=async()=>{
     if(!form.name.trim()){toastAdd('Name required','red');return;}
-    const payload={name:form.name.trim(),amount:parseFloat(form.amount)||0,due_day:parseInt(form.due_day)||1,due_date:form.due_date,recurrence:form.recurrence,category:form.category,color:form.color,notes:form.notes};
+    const payload={name:form.name.trim(),amount:parseFloat(form.amount)||0,due_day:parseInt(form.due_day)||1,due_date:form.due_date,recurrence:form.recurrence,category:form.category,color:form.color,notes:form.notes,autopay:form.autopay?1:0};
     if(editBill){
       const r=await api.put(`/api/bills/${editBill.id}`,payload).catch(()=>null);
       if(!r?.id){toastAdd('Failed to save','red');return;}
@@ -7119,6 +7119,8 @@ function BillsScreen({bills,setBills,payments,setPayments,toastAdd}){
     }
     setDrawerOpen(false);setEditBill(null);
     toastAdd(editBill?'Bill updated':'Bill added');
+    // the server may have just marked an autopay bill paid
+    api.get('/api/bills').then(d=>{if(Array.isArray(d?.payments))setPayments(d.payments);}).catch(()=>{});
   };
 
   const del=async id=>{
@@ -7130,7 +7132,7 @@ function BillsScreen({bills,setBills,payments,setPayments,toastAdd}){
 
   const grouped=BILL_CATEGORIES.map(cat=>({cat,items:bills.filter(b=>b.category===cat)})).filter(g=>g.items.length>0);
 
-  const dueLabel=b=>b.recurrence==='monthly'?`Due the ${ordinal(b.due_day||1)}`:b.recurrence==='annual'?`Annual · ${b.due_date}`:`One-time · ${b.due_date}`;
+  const dueLabel=b=>(b.recurrence==='monthly'?`Due the ${ordinal(b.due_day||1)}`:b.recurrence==='annual'?`Annual · ${b.due_date}`:`One-time · ${b.due_date}`)+(b.autopay?' · Autopay':'');
 
   return(
     <div>
@@ -7193,6 +7195,7 @@ function BillsScreen({bills,setBills,payments,setPayments,toastAdd}){
             </select>
           </div></FormGroup>
         )}
+        <FormGroup footer="Autopay bills mark themselves paid once the due day passes."><div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px'}}><span style={{fontSize:15,color:A.label1}}>Autopay</span><Toggle checked={!!form.autopay} onChange={v=>setForm(f=>({...f,autopay:v}))}/></div></FormGroup>
         {(form.recurrence==='annual'||form.recurrence==='one-time')&&(
           <FormGroup label="Due date"><div style={{padding:'12px 16px'}}><Inp type="date" value={form.due_date} onChange={e=>setForm(f=>({...f,due_date:e.target.value}))}/></div></FormGroup>
         )}

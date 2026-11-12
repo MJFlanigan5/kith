@@ -280,6 +280,7 @@ CREATE TABLE IF NOT EXISTS vehicle_services (
 
 // migrations — safe to run on every boot
 try { db.exec('ALTER TABLE events ADD COLUMN member_id INTEGER'); } catch {}
+try { db.exec('ALTER TABLE bills ADD COLUMN autopay INTEGER DEFAULT 0'); } catch {}
 try { db.exec("ALTER TABLE family_members ADD COLUMN birthday TEXT DEFAULT ''"); } catch {}
 try { db.exec(`ALTER TABLE events ADD COLUMN end_time TEXT DEFAULT ''`); } catch {}
 try { db.exec(`ALTER TABLE events ADD COLUMN recurring_rule TEXT DEFAULT ''`); } catch {}

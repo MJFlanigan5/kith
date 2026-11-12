@@ -2622,7 +2622,9 @@ app.get('/api/widgets/data', requireAuth, async (req, res) => {
         const beats = hb.heartbeatList?.[String(m.id)] || [];
         const latest = beats[beats.length - 1];
         const uptime = hb.uptimeList?.[`${m.id}_24`] ?? null;
-        return { name: m.name, ok: latest?.status === 1, ms: latest?.ping ?? null, uptime };
+        // Down with under 5% uptime over 24h = down for about a day: known, not news.
+        const ok = latest?.status === 1;
+        return { name: m.name, ok, ms: latest?.ping ?? null, uptime, long_down: !ok && uptime != null && uptime < 0.05 };
       });
     }).then(d => { if (d?.length) result.uptime = d; }));
   else if (uptimeUrls)
@@ -2781,6 +2783,26 @@ app.get('/api/widgets/data', requireAuth, async (req, res) => {
     return d;
   };
   const haNum = (s) => { const n = parseFloat(s?.state); return isNaN(n) ? 0 : n; };
+  // Gallons per day for the last 7 full days: the daily counter resets at midnight, so
+  // each day's total is the highest reading seen that day.
+  const moenWeek = async (entityId) => {
+    if (!entityId || !haBaseUrl || !haAuthToken) return [];
+    const start = new Date(Date.now() - 8 * 86400000).toISOString();
+    const r = await fetch(`${haBaseUrl}/api/history/period/${start}?filter_entity_id=${encodeURIComponent(entityId)}&end_time=${encodeURIComponent(new Date().toISOString())}&minimal_response&no_attributes`, {
+      headers: { 'Authorization': `Bearer ${haAuthToken}` }, signal: AbortSignal.timeout(8000),
+    });
+    if (!r.ok) return [];
+    const rows = (await r.json())[0] || [];
+    const byDay = {};
+    for (const s of rows) {
+      const v = parseFloat(s.state); if (isNaN(v)) continue;
+      const day = localDate(new Date(s.last_changed));
+      byDay[day] = Math.max(byDay[day] || 0, v);
+    }
+    const out = [];
+    for (let i = 7; i >= 1; i--) { const d = localDate(new Date(Date.now() - i * 86400000)); out.push({ date: d, gal: Math.round(byDay[d] || 0) }); }
+    return out;
+  };
 
   // ── Homey fetch helper ──────────────────────────────────────────────────────
   const homeyBaseUrl = (gs('homey_url') || '').replace(/\/$/, '');
@@ -2832,6 +2854,7 @@ app.get('/api/widgets/data', requireAuth, async (req, res) => {
           has_alert:   alert?.state === 'on',
           connected:   true,
           source:      'ha',
+          week:        await moenWeek(gs('ha_moen_daily')).catch(() => []),
         };
       }
       // Direct Moen API fallback

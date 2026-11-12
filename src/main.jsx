@@ -1136,6 +1136,10 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
   }),[packages]);
   const streakChores=useMemo(()=>(chores||[]).filter(c=>(c.streak||0)>=2).sort((a,b)=>(b.streak||0)-(a.streak||0)),[chores]);
   const pwActive=!!widgetData.powerwall&&(widgetData.powerwall.solar_kw>0||widgetData.powerwall.battery_kw!==0||widgetData.powerwall.grid_kw<0);
+  // Quote and affirmation share one card: quote on even days, affirmation on odd (whichever exists).
+  const _quote=widgetData.quote?.text?{text:widgetData.quote.text,author:widgetData.quote.author}:null;
+  const _affirm=widgetData.compliment?.text?{text:widgetData.compliment.text}:null;
+  const thought=(new Date().getDate()%2===0?(_quote||_affirm):(_affirm||_quote));
   const centerPanels=[
     ...(messages.some(m=>m.expires_at&&new Date(m.expires_at.replace(' ','T')+'Z').getTime()>Date.now())?['w_messages']:[]),
     ...(todayDinner()!=='—'?['dinner']:[]),
@@ -1144,8 +1148,7 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
     ...(goals.length>0?['goals']:[]),
     ...(streakChores.length>0?['members']:[]),
     ...(widgetData.wotd?['w_wotd']:[]),
-    ...(widgetData.compliment?['w_compliment']:[]),
-    ...(widgetData.quote?.text?['w_quote']:[]),
+    ...(thought?['w_thought']:[]),
     ...(pwActive?['w_powerwall']:[]),
     ...(widgetData.moen&&widgetData.moen.daily_gal>0?['w_moen']:[]),
     ...(widgetData.flight?['w_flight']:[]),
@@ -1234,6 +1237,8 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
   if(pwW&&pwW.grid_status&&pwW.grid_status!=='Active') alerts.push(`Grid down · on battery ${pwW.battery_pct}%`);
   else if(pwW&&pwW.battery_pct<20) alerts.push(`Battery low · ${pwW.battery_pct}%`);
   if(moenW?.has_alert) alerts.push('Water leak alert');
+  // Only services that just went down; ones down for a day show grey on the Services card.
+  (widgetData.uptime||[]).filter(m=>m.ok===false&&!m.long_down).forEach(m=>alerts.push(`${m.name} is down`));
   if(widgetData.unifi&&!['up','unknown'].includes(widgetData.unifi.status)) alerts.push('Internet down');
   const tickerItems=[
     ...alerts.map(t=>({t,alert:true})),
@@ -1540,17 +1545,12 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
                     )}
                     {visiblePanelId==='w_wotd'&&(()=>{const w=widgetData.wotd;if(!w)return null;return(
                       <>
-                        <WLabel>Word of the Day</WLabel>
-                        <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',gap:10}}>
-                          <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
-                            <span style={{fontSize:isTV?38:30,fontWeight:800,color:D.t1,letterSpacing:'-.02em',lineHeight:1}}>{w.word}</span>
-                          </div>
-                          <div style={{display:'flex',alignItems:'center',gap:10}}>
-                            {w.phonetic&&<span style={{fontSize:13,color:D.t4}}>{w.phonetic}</span>}
-                            {w.partOfSpeech&&<span style={{fontSize:13,color:D.t4,fontStyle:'italic'}}>{w.partOfSpeech}</span>}
-                          </div>
-                          <div style={{fontSize:15,color:D.t2,lineHeight:1.55}}>{w.definition}</div>
-                          {w.example&&<div style={{fontSize:13,color:D.t3,fontStyle:'italic',lineHeight:1.4,borderLeft:`3px solid ${D.sep}`,paddingLeft:10}}>"{w.example}"</div>}
+                        <WLabel>Word of the day</WLabel>
+                        <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',alignItems:'center',textAlign:'center',padding:'0 6%'}}>
+                          <div style={{fontSize:isTV?68:54,fontWeight:800,color:D.t1,letterSpacing:'-.04em',lineHeight:1}}>{w.word}</div>
+                          {(w.phonetic||w.partOfSpeech)&&<div style={{fontFamily:FONT_MONO,fontSize:14,color:D.t3,marginTop:14}}>{[w.phonetic,w.partOfSpeech].filter(Boolean).join(' · ')}</div>}
+                          <div style={{fontSize:isTV?20:17,color:D.t2,lineHeight:1.45,marginTop:18,maxWidth:600,textWrap:'balance'}}>{w.definition}</div>
+                          {w.example&&<div style={{fontSize:14,color:D.t3,lineHeight:1.4,marginTop:12,maxWidth:560}}>“{w.example}”</div>}
                         </div>
                       </>
                     );})()}
@@ -1584,20 +1584,12 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
                         </div>
                       </>
                     );})()}
-                    {visiblePanelId==='w_compliment'&&(()=>{const c=widgetData.compliment;if(!c)return null;return(
+                    {visiblePanelId==='w_thought'&&thought&&(
                       <>
-                        <WLabel>Daily Affirmation</WLabel>
-                        <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center'}}>
-                          <div style={{fontSize:isTV?20:17,color:D.t1,fontWeight:500,lineHeight:1.55,fontStyle:'italic'}}>"{c.text}"</div>
-                        </div>
-                      </>
-                    );})()}
-                    {visiblePanelId==='w_quote'&&(
-                      <>
-                        <WLabel>Quote</WLabel>
-                        <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center'}}>
-                          <div style={{fontSize:17,color:D.t1,fontWeight:500,lineHeight:1.5,fontStyle:'italic',marginBottom:10}}>"{widgetData.quote?.text}"</div>
-                          <div style={{fontSize:13,color:D.t3}}>— {widgetData.quote?.author}</div>
+                        <WLabel>Today's thought</WLabel>
+                        <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',alignItems:'center',textAlign:'center',padding:'0 6%'}}>
+                          <div style={{fontSize:thought.text.length>110?(isTV?26:22):(isTV?32:26),fontWeight:600,color:D.t1,lineHeight:1.3,letterSpacing:'-.01em',maxWidth:640,textWrap:'balance'}}>“{thought.text.replace(/^["“]|["”]$/g,'')}”</div>
+                          {thought.author&&<div style={{fontFamily:FONT_MONO,fontSize:13,color:D.t3,marginTop:18,letterSpacing:'.08em',textTransform:'uppercase'}}>— {thought.author}</div>}
                         </div>
                       </>
                     )}
@@ -1747,19 +1739,30 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
                     })()}
                     {visiblePanelId==='w_uptime'&&(
                       <>
-                        <WLabel>Services</WLabel>
-                        <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',gap:8}}>
-                          {(widgetData.uptime||[]).map((s,i)=>(
-                            <div key={i} style={{display:'flex',alignItems:'center',gap:10}}>
-                              <div style={{width:8,height:8,borderRadius:'50%',background:s.ok?A.green:A.red,flexShrink:0}}/>
-                              <div style={{flex:1,fontSize:13,fontWeight:500,color:D.t2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name}</div>
-                              <div style={{textAlign:'right',flexShrink:0}}>
-                                <div style={{fontSize:12,color:s.ok?A.green:A.red,fontWeight:600}}>{s.ok?(s.ms!=null?`${s.ms}ms`:'ok'):'down'}</div>
-                                {s.uptime!=null&&<div style={{fontSize:10,color:D.t4}}>{(s.uptime*100).toFixed(1)}%</div>}
-                              </div>
+                        {(()=>{
+                          const list=widgetData.uptime||[];
+                          const rank=s=>s.ok?1:s.long_down?2:0; // just-down first, known-down last
+                          const sorted=[...list].sort((a,b)=>rank(a)-rank(b));
+                          const fmtMs=ms=>ms==null?'':ms<1?`${ms.toFixed(1)} ms`:`${Math.round(ms)} ms`;
+                          const fmtUp=u=>u==null?'':u>=0.9995?'100%':`${(u*100).toFixed(1)}%`;
+                          return(<>
+                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}><WLabel>Services</WLabel><span style={{fontFamily:FONT_MONO,fontSize:12,color:D.t4}}>{list.filter(s=>s.ok).length} of {list.length} up</span></div>
+                            <div style={{display:'flex',flexDirection:'column'}}>
+                              {sorted.map((s,i)=>{
+                                const fresh=!s.ok&&!s.long_down;
+                                return(
+                                  <div key={s.name} style={{display:'grid',gridTemplateColumns:'14px 1fr auto',alignItems:'center',gap:14,padding:isTV?'12px 0':'9px 0',borderTop:i?`1px solid ${D.sep}`:'none'}}>
+                                    <span style={{width:8,height:8,borderRadius:'50%',background:s.ok?D.on:fresh?A.red:D.t4}}/>
+                                    <span style={{fontSize:isTV?17:15,fontWeight:600,color:s.ok?D.t1:fresh?D.t1:D.t4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name}</span>
+                                    <span style={{fontFamily:FONT_MONO,fontSize:13,color:s.ok?D.t2:fresh?A.red:D.t4,textAlign:'right'}}>
+                                      {s.ok?[fmtMs(s.ms),fmtUp(s.uptime)].filter(Boolean).join(' · '):fresh?'down now':'down over a day'}
+                                    </span>
+                                  </div>
+                                );
+                              })}
                             </div>
-                          ))}
-                        </div>
+                          </>);
+                        })()}
                       </>
                     )}
                     {visiblePanelId==='w_nextdns'&&(()=>{
@@ -1788,40 +1791,39 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
                     })()}
                     {visiblePanelId==='w_beszel'&&(
                       <>
-                        <WLabel>Servers</WLabel>
-                        <div style={{flex:1,display:'flex',flexWrap:'wrap',gap:8,alignContent:'flex-start'}}>
-                          {(widgetData.beszel||[]).map((srv,i)=>(
-                            <div key={i} style={{flex:'1 1 45%',minWidth:0,background:'rgba(255,255,255,0.05)',borderRadius:10,padding:'10px 12px',display:'flex',flexDirection:'column',gap:7}}>
-                              <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:2}}>
-                                <div style={{width:7,height:7,borderRadius:'50%',background:srv.status==='up'?A.green:A.red,flexShrink:0}}/>
-                                <div style={{fontSize:12,fontWeight:700,color:D.t1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{srv.name}</div>
-                              </div>
-                              {srv.cpu!=null&&(
-                                <div>
-                                  <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:D.t3,marginBottom:3}}><span>CPU</span><span style={{fontWeight:600,color:D.t2}}>{srv.cpu}%</span></div>
-                                  <div style={{height:4,borderRadius:2,background:'rgba(255,255,255,0.08)'}}><div style={{width:`${Math.min(100,srv.cpu)}%`,height:'100%',borderRadius:2,background:A.blue}}/></div>
-                                </div>
-                              )}
-                              {srv.memPct!=null&&(
-                                <div>
-                                  <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:D.t3,marginBottom:3}}><span>RAM</span><span style={{fontWeight:600,color:D.t2}}>{srv.memPct}%</span></div>
-                                  <div style={{height:4,borderRadius:2,background:'rgba(255,255,255,0.08)'}}><div style={{width:`${Math.min(100,srv.memPct)}%`,height:'100%',borderRadius:2,background:'#BF5AF2'}}/></div>
-                                </div>
-                              )}
-                              {srv.diskPct!=null&&(
-                                <div>
-                                  <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:D.t3,marginBottom:3}}><span>Disk</span><span style={{fontWeight:600,color:D.t2}}>{srv.diskPct}%</span></div>
-                                  <div style={{height:4,borderRadius:2,background:'rgba(255,255,255,0.08)'}}><div style={{width:`${Math.min(100,srv.diskPct)}%`,height:'100%',borderRadius:2,background:A.amber}}/></div>
-                                </div>
-                              )}
-                              {srv.temp!=null&&(
-                                <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:D.t3,marginTop:1}}>
-                                  <span>Temp</span><span style={{fontWeight:600,color:srv.temp>70?A.red:srv.temp>55?A.amber:D.t2}}>{srv.temp}°C</span>
-                                </div>
-                              )}
+                        {(()=>{
+                          const list=widgetData.beszel||[];
+                          const up=list.filter(s=>s.status==='up'), off=list.filter(s=>s.status!=='up');
+                          const meter=v=>(
+                            <div style={{display:'flex',flexDirection:'column',gap:5}}>
+                              <span style={{fontFamily:FONT_MONO,fontSize:13,color:D.t2}}>{v==null?'—':`${Math.round(v)}%`}</span>
+                              <div style={{height:3,borderRadius:2,background:'#2a2a2e'}}>{v!=null&&<div style={{width:`${Math.max(2,Math.min(100,v))}%`,height:'100%',borderRadius:2,background:v>=90?A.amber:D.t2}}/>}</div>
                             </div>
-                          ))}
-                        </div>
+                          );
+                          const cols='14px minmax(0,1fr) 104px 104px 52px';
+                          const hdr={fontFamily:FONT_MONO,fontSize:10.5,letterSpacing:'.1em',color:D.t4,textTransform:'uppercase'};
+                          return(<>
+                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}><WLabel>Servers</WLabel><span style={{fontFamily:FONT_MONO,fontSize:12,color:D.t4}}>{up.length} up{off.length?` · ${off.length} off`:''}</span></div>
+                            <div style={{display:'grid',gridTemplateColumns:cols,gap:16,paddingBottom:6}}><span/><span style={hdr}>Machine</span><span style={hdr}>CPU</span><span style={hdr}>RAM</span><span style={{...hdr,textAlign:'right'}}>Temp</span></div>
+                            <div style={{display:'flex',flexDirection:'column'}}>
+                              {up.map((s,i)=>(
+                                <div key={s.name} style={{display:'grid',gridTemplateColumns:cols,alignItems:'center',gap:16,padding:isTV?'11px 0':'8px 0',borderTop:`1px solid ${D.sep}`}}>
+                                  <span style={{width:8,height:8,borderRadius:'50%',background:D.on}}/>
+                                  <span style={{fontSize:isTV?17:15,fontWeight:600,color:D.t1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name}</span>
+                                  {meter(s.cpu)}{meter(s.memPct)}
+                                  <span style={{fontFamily:FONT_MONO,fontSize:13,color:s.temp>75?A.amber:D.t2,textAlign:'right'}}>{s.temp!=null?`${Math.round(s.temp)}°`:'—'}</span>
+                                </div>
+                              ))}
+                              {off.map(s=>(
+                                <div key={s.name} style={{display:'grid',gridTemplateColumns:'14px minmax(0,1fr) auto',alignItems:'center',gap:16,padding:isTV?'11px 0':'8px 0',borderTop:`1px solid ${D.sep}`}}>
+                                  <span style={{width:8,height:8,borderRadius:'50%',background:D.t4}}/>
+                                  <span style={{fontSize:isTV?17:15,fontWeight:600,color:D.t4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name}</span>
+                                  <span style={{fontFamily:FONT_MONO,fontSize:13,color:D.t4}}>off</span>
+                                </div>
+                              ))}
+                            </div>
+                          </>);
+                        })()}
                       </>
                     )}
                     {visiblePanelId==='w_plex'&&(()=>{
@@ -1879,17 +1881,38 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
                       const m=widgetData.moen;
                       return(
                         <>
-                          <div style={{display:'flex',justifyContent:'space-between'}}><WLabel>Water</WLabel>{m.has_alert&&<span style={{fontSize:11,fontWeight:700,color:A.red}}>Leak alert</span>}</div>
-                          <div style={{fontSize:isTV?40:32,fontWeight:700,color:D.t1,lineHeight:1.1}}>{m.daily_gal} gal</div>
-                          <div style={{fontSize:12,color:D.t3,marginTop:2}}>Used today</div>
-                          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,marginTop:16}}>
-                            {[[m.flow_gpm,'gal/min now',m.flow_gpm>0],[m.psi,'psi',false],[m.system_mode,'mode',false]].map(([v,l,live])=>(
-                              <div key={l} style={{border:`1px solid ${D.border}`,borderRadius:10,padding:'8px 10px'}}>
-                                <div style={{fontSize:16,fontWeight:700,color:live?D.on:D.t1,textTransform:'capitalize'}}>{v??'—'}</div>
-                                <div style={{fontSize:11,color:D.t3}}>{l}</div>
+                          {(()=>{
+                            const week=(m.week||[]).filter(d=>d.gal>0);
+                            const avg=week.length?Math.round(week.reduce((a,d)=>a+d.gal,0)/week.length):null;
+                            const bars=[...week.map(d=>({label:DAYS[new Date(d.date+'T12:00:00').getDay()].slice(0,3),gal:d.gal})),{label:'Today',gal:m.daily_gal,today:true}];
+                            const max=Math.max(1,...bars.map(b=>b.gal),avg||0);
+                            const H=isTV?220:170;
+                            return(<>
+                              <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}>
+                                <WLabel>Water</WLabel>
+                                {m.has_alert?<span style={{fontSize:12,fontWeight:700,color:A.red}}>Leak alert</span>
+                                  :<span style={{fontFamily:FONT_MONO,fontSize:12,color:m.flow_gpm>0?D.on:D.t4}}>{m.flow_gpm>0?`${m.flow_gpm} gal/min now`:'not running'} · {m.psi} psi</span>}
                               </div>
-                            ))}
-                          </div>
+                              <div style={{display:'flex',alignItems:'baseline',gap:12,flexWrap:'wrap'}}>
+                                <span style={{fontSize:isTV?52:42,fontWeight:800,color:D.t1,letterSpacing:'-.03em',lineHeight:1}}>{m.daily_gal}</span>
+                                <span style={{fontSize:15,color:D.t3}}>gal today{avg!=null?` · ${week.length}-day average ${avg}`:''}</span>
+                              </div>
+                              {week.length>0&&(
+                                <div style={{flex:1,display:'flex',alignItems:'flex-end',minHeight:0,marginTop:16}}>
+                                  <div style={{position:'relative',flex:1,display:'grid',gridTemplateColumns:`repeat(${bars.length},1fr)`,gap:isTV?14:10,alignItems:'end'}}>
+                                    {avg!=null&&<div style={{position:'absolute',left:0,right:0,bottom:22+avg/max*H,borderTop:`1px dashed ${D.t4}`}}/>}
+                                    {bars.map(b=>(
+                                      <div key={b.label} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:6}}>
+                                        <span style={{fontFamily:FONT_MONO,fontSize:12,color:b.today?D.t1:D.t3}}>{b.gal}</span>
+                                        <div style={{width:'100%',height:Math.max(3,b.gal/max*H),borderRadius:5,background:b.today?D.on:'#3a3a3f'}}/>
+                                        <span style={{fontFamily:FONT_MONO,fontSize:11,height:16,color:b.today?D.t1:D.t3}}>{b.label}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </>);
+                          })()}
                         </>
                       );
                     })()}

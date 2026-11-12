@@ -3748,10 +3748,8 @@ app.post('/api/email/inbound', inboundRateLimit, async (req, res) => {
     }
   })();
 
-  if (pkg?.is_shipping) {
-    if (DELIVERED_RE.test(subject || '')) autoDeliverPackage(pkg, subject || '');
-    else upsertPackage(pkg, subject || '');
-  }
+  if (DELIVERED_RE.test(subject || '')) autoDeliverPackage(pkg, subject || '');
+  else if (pkg?.is_shipping) upsertPackage(pkg, subject || '');
   if (PAID_RE.test(subject || '')) autoPayBill(bill);
   else insertBill(bill);
 
@@ -5482,6 +5480,8 @@ function upsertPackage(pkg, subject) {
     }
   } else {
     if (db.prepare('SELECT id FROM packages WHERE source_subject=?').get(subject)) return false;
+    // "Out for delivery 1 item: X" after "Shipped 1 item: X" is the same package, not a new one
+    if (undeliveredByKey(packageKey(subject)).length) return false;
   }
   db.prepare('INSERT INTO packages (carrier,tracking_number,description,expected_date,source_subject) VALUES (?,?,?,?,?)')
     .run(carrier, pkg.tracking_number || '', pkg.description || subject, pkg.expected_date || '', subject);
@@ -5508,14 +5508,38 @@ function insertBill(bill) {
   return true;
 }
 
+// Undelivered packages whose subject carries the same item text (see package-match.js)
+function undeliveredByKey(key) {
+  if (!key) return [];
+  return db.prepare('SELECT id, source_subject FROM packages WHERE delivered=0').all()
+    .filter(r => packageKey(r.source_subject) === key).map(r => r.id);
+}
+
 function autoDeliverPackage(pkg, subject) {
-  let row;
-  if (pkg?.tracking_number) row = db.prepare('SELECT id FROM packages WHERE tracking_number=? AND delivered=0').get(pkg.tracking_number);
-  if (!row) row = db.prepare('SELECT id FROM packages WHERE source_subject=? AND delivered=0').get(subject);
-  if (!row) return false;
-  db.prepare("UPDATE packages SET delivered=1, status='Delivered' WHERE id=?").run(row.id);
+  let ids = [];
+  if (pkg?.tracking_number) { const r = db.prepare('SELECT id FROM packages WHERE tracking_number=? AND delivered=0').get(pkg.tracking_number); if (r) ids = [r.id]; }
+  if (!ids.length) { const r = db.prepare('SELECT id FROM packages WHERE source_subject=? AND delivered=0').get(subject); if (r) ids = [r.id]; }
+  if (!ids.length) ids = undeliveredByKey(packageKey(subject));
+  if (!ids.length) return false;
+  const mark = db.prepare("UPDATE packages SET delivered=1, status='Delivered' WHERE id=?");
+  db.transaction(() => ids.forEach(id => mark.run(id)))();
   broadcastSSE('packages', { action: 'reload' });
   return true;
+}
+
+// One-time repair for rows saved before "Delivered N items: X" was recognised: those rows
+// are themselves delivery notices, so they and their matching "Shipped…" rows are delivered.
+// Idempotent; runs at startup.
+function reconcileDeliveredPackages() {
+  const rows = db.prepare('SELECT id, source_subject FROM packages WHERE delivered=0').all()
+    .filter(r => DELIVERED_RE.test(r.source_subject || ''));
+  let n = 0;
+  for (const r of rows) {
+    const ids = new Set([r.id, ...undeliveredByKey(packageKey(r.source_subject))]);
+    const mark = db.prepare("UPDATE packages SET delivered=1, status='Delivered' WHERE id=? AND delivered=0");
+    db.transaction(() => ids.forEach(id => { n += mark.run(id).changes; }))();
+  }
+  if (n) { console.log(`[packages] reconciled ${n} delivered package(s)`); broadcastSSE('packages', { action: 'reload' }); }
 }
 
 function autoPayBill(bill) {
@@ -5540,7 +5564,7 @@ function logUnmatched(type, subject, detail) {
   db.prepare('INSERT INTO unmatched_confirmations (type,subject,detail) VALUES (?,?,?)').run(type, subject || '', detail || '');
   broadcastSSE('unmatched', { action: 'reload' });
 }
-const DELIVERED_RE = /\b(has been delivered|was delivered|delivery complete|successfully delivered|your delivery is complete|package.*delivered|item.*delivered|delivered to your)\b/i;
+const { packageKey, DELIVERED_RE } = require('./package-match');
 const PAID_RE = /\b(payment received|payment confirmed|payment processed|payment accepted|payment successful|we received your payment|your payment.*processed|autopay.*confirmed|auto.?payment.*processed|thank you for your payment)\b/i;
 const SHIPPING_RE = /\b(ship(?:ped|ping|ment)?|track(?:ing)?|deliver(?:y|ed|ing)?|package|dispatch(?:ed)?|arrival|in transit|out for delivery)\b/i;
 const BILL_RE = /\b(bill|statement|invoice|payment due|amount due|minimum payment|your balance|autopay|auto-pay|past due|balance due)\b/i;
@@ -5586,7 +5610,7 @@ async function pollImap() {
 
         if (isDelivered) {
           const pkg = await callAiForPackage(subject, body).catch(() => null);
-          const resolved = pkg?.is_shipping ? autoDeliverPackage(pkg, subject) : false;
+          const resolved = autoDeliverPackage(pkg, subject); // subject alone can match (Amazon has no tracking #)
           console.log(`[imap] delivery confirmation: ${resolved ? 'marked delivered' : 'no matching package found'}`);
           if (!resolved) logUnmatched('delivery', subject, pkg?.is_shipping ? `${pkg.carrier || 'Unknown carrier'} ${pkg.tracking_number || ''}`.trim() : subject);
         } else if (isPaid) {
@@ -5711,7 +5735,7 @@ async function scanImap30Days() {
     for (const { subject, isDelivered, isPaid, isShipping, isBill, isAppt, body } of batch) {
       if (isDelivered) {
         const pkg = await callAiForPackage(subject, body).catch(() => null);
-        const resolved = pkg?.is_shipping && autoDeliverPackage(pkg, subject);
+        const resolved = autoDeliverPackage(pkg, subject);
         if (resolved) summary.packages++;
         else logUnmatched('delivery', subject, pkg?.is_shipping ? `${pkg.carrier || 'Unknown carrier'} ${pkg.tracking_number || ''}`.trim() : subject);
       } else if (isPaid) {
@@ -5879,4 +5903,5 @@ app.use((err, req, res, next) => {
   res.status(status).json({ error: status === 500 ? 'Internal server error' : err.message });
 });
 
+try { reconcileDeliveredPackages(); } catch (err) { console.error('[packages] reconcile failed:', err.message); }
 app.listen(PORT, () => console.log(`Kith running → http://localhost:${PORT}`));

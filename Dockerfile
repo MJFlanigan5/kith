@@ -9,7 +9,7 @@ FROM node:20-slim
 WORKDIR /app
 COPY package*.json ./
 RUN npm install --production
-COPY server.js db.js ./
+COPY server.js db.js package-match.js ./
 COPY --from=build /app/dist ./dist
 EXPOSE 7400
 ENV NODE_ENV=production

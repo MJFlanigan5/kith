@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import ReactDOM from 'react-dom/client'
+import { Toaster, toast } from 'sonner'
+import NumberFlow from '@number-flow/react'
 // Wall display type (Foyer's): bundled so the display never depends on internet fonts
 import '@fontsource/manrope/400.css'
 import '@fontsource/manrope/600.css'
@@ -261,7 +263,7 @@ function FlowDiagram({pw}){
       <circle cx="200" cy="95" r="26" fill="rgba(255,255,255,.08)" stroke="rgba(255,255,255,.18)"/>
       {/* Ring fades in as well as out, so each loop restarts at zero opacity instead of snapping back to full (read as a blink). */}
       {house>0&&<circle cx="200" cy="95" r="26" fill="none" stroke="rgba(217,160,102,.6)" opacity="0"><animate attributeName="r" values="26;38" dur="2.4s" calcMode="spline" keySplines="0.2 0 0 1" repeatCount="indefinite"/><animate attributeName="opacity" values="0;.9;0" keyTimes="0;.15;1" dur="2.4s" repeatCount="indefinite"/></circle>}
-      <text x="200" y="100" textAnchor="middle" fill="#e9e7e2" fontSize="14" fontWeight="700">{house.toFixed(2)}</text>
+      <foreignObject x="170" y="85" width="60" height="20"><div style={{textAlign:'center',color:'#e9e7e2',fontSize:14,fontWeight:700,lineHeight:'20px'}}><NumberFlow value={house} format={{minimumFractionDigits:2,maximumFractionDigits:2}}/></div></foreignObject>
       <text x="200" y="138" textAnchor="middle" fill="#8b8d94" fontSize="10">House kW</text>
       {lbl(60,30,`Solar ${solar.toFixed(1)}`,solar>0,'#FFD60A')}
       {lbl(60,172,exporting>0?`Grid export ${exporting.toFixed(2)}`:`Grid ${importing.toFixed(2)}`,importing>0||exporting>0,'#ef6b6b')}
@@ -295,15 +297,13 @@ function TimerCountdown({voiceTimer}){
     </>
   );
 }
+const TOAST_TINT={green:A.green,blue:A.blue,red:A.red,amber:A.amber};
 function useToast(){
-  const [toasts,setToasts]=useState([]);
   const add=useCallback((msg,type='green')=>{
-    const id=Date.now();
-    setToasts(p=>[...p,{id,msg,type}]);
-    const t=setTimeout(()=>setToasts(p=>p.filter(x=>x.id!==id)),3000);
-    return ()=>clearTimeout(t);
+    const id=toast(msg,{icon:<div style={{width:8,height:8,borderRadius:'50%',background:TOAST_TINT[type]||A.green}}/>});
+    return ()=>toast.dismiss(id);
   },[]);
-  return{toasts,add};
+  return{add};
 }
 
 function useIsMobile(){
@@ -332,17 +332,10 @@ async function subscribePush(){
 }
 
 /* ── Base UI components ──────────────────────────────────────────────── */
-function ToastStack({toasts}){
-  const tint={green:A.green,blue:A.blue,red:A.red,amber:A.amber};
+function ToastStack(){
   return(
-    <div style={{position:'fixed',bottom:28,right:28,zIndex:9999,display:'flex',flexDirection:'column',gap:8,pointerEvents:'none'}}>
-      {toasts.map(t=>(
-        <div key={t.id} style={{background:'rgba(28,28,30,0.92)',backdropFilter:'blur(20px)',color:'#F5F5F7',border:'1px solid rgba(255,255,255,0.10)',padding:'12px 18px',borderRadius:13,fontSize:14,fontWeight:500,boxShadow:A.shadowLg,animation:'toastIn .22s cubic-bezier(.4,0,.2,1)',display:'flex',alignItems:'center',gap:10,minWidth:200}}>
-          <div style={{width:8,height:8,borderRadius:'50%',background:tint[t.type]||A.green,flexShrink:0}}/>
-          {t.msg}
-        </div>
-      ))}
-    </div>
+    <Toaster position="bottom-right" offset={28} gap={8} duration={3000} theme="dark"
+      toastOptions={{unstyled:true,style:{background:'rgba(28,28,30,0.92)',backdropFilter:'blur(20px)',color:'#F5F5F7',border:'1px solid rgba(255,255,255,0.10)',padding:'12px 18px',borderRadius:13,fontSize:14,fontWeight:500,fontFamily:'inherit',boxShadow:A.shadowLg,display:'flex',alignItems:'center',gap:10,minWidth:200}}}/>
   );
 }
 
@@ -1351,7 +1344,7 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
               <WLabel>Weather</WLabel>
               {weather?(
                 <>
-                  <div style={{fontSize:44,fontWeight:800,color:D.t1,lineHeight:1,letterSpacing:'-.05em',fontVariantNumeric:'tabular-nums'}}>{weather.temp}°</div>
+                  <div style={{fontSize:44,fontWeight:800,color:D.t1,lineHeight:1,letterSpacing:'-.05em',fontVariantNumeric:'tabular-nums'}}><NumberFlow value={Number(weather.temp)} suffix="°"/></div>
                   <div style={{fontSize:13,color:D.t2,fontWeight:500,marginTop:4}}>{weather.condition}</div>
                   <div style={{fontSize:11,color:D.t3,marginTop:2,marginBottom:10}}>H:{weather.hi}° · L:{weather.lo}°</div>
                   <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:2,borderTop:`1px solid ${D.sep}`,paddingTop:8}}>
@@ -2006,7 +1999,7 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
                           <WLabel>{t.name||'Thermostat'}</WLabel>
                           <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',gap:6}}>
                             <div style={{display:'flex',alignItems:'baseline',gap:8,marginBottom:4}}>
-                              <span style={{fontSize:52,fontWeight:800,color:D.t1,lineHeight:1,letterSpacing:'-.04em'}}>{t.current_temp!=null?Math.round(t.current_temp):'--'}</span>
+                              <span style={{fontSize:52,fontWeight:800,color:D.t1,lineHeight:1,letterSpacing:'-.04em'}}>{t.current_temp!=null?<NumberFlow value={Math.round(t.current_temp)}/>:'--'}</span>
                               <span style={{fontSize:22,color:D.t3,fontWeight:400}}>°{t.unit}</span>
                             </div>
                             {[
@@ -2405,7 +2398,7 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
                 <WLabel>Weather</WLabel>
                 {weather?(
                   <>
-                    <div style={{fontSize:isTV?34:28,fontWeight:700,color:D.t1,lineHeight:1.1,fontVariantNumeric:'tabular-nums'}}>{weather.temp}°</div>
+                    <div style={{fontSize:isTV?34:28,fontWeight:700,color:D.t1,lineHeight:1.1,fontVariantNumeric:'tabular-nums'}}><NumberFlow value={Number(weather.temp)} suffix="°"/></div>
                     <div style={{fontSize:12,color:D.t3,marginTop:3}}>
                       {weather.condition} · high {weather.hi}°{widgetData.thermostat&&widgetData.thermostat.current_temp!=null&&!widgetData.thermostat.unavailable?` · inside ${Math.round(widgetData.thermostat.current_temp)}°`:''}
                     </div>
@@ -9792,7 +9785,7 @@ const DEFAULT_HIDDEN_PAGES='pantry,school,projects,notes,bookmarks,polls,subscri
 function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocery,setGrocery,meals,setMeals,icsSources,setIcsSources,inboxCount,setInboxCount,countdowns,setCountdowns,members,setMembers,photos,setPhotos,clockFormat,setClockFormat,weather,nightModeStart,setNightModeStart,nightModeEnd,setNightModeEnd,setRefreshMs,parseRefreshMs,goals,setGoals,notes,setNotes,polls,setPolls,bookmarks,setBookmarks,quickActions,setQuickActions,setRotationMs,setWifiQrData,darkMode,onDarkMode,packages,setPackages,messages,setMessages,recipes,setRecipes,bills,setBills,payments,setPayments,vehicles,setVehicles,appliances,setAppliances,consumables,setConsumables,pets,setPets,contacts,setContacts,maintenanceItems,setMaintenanceItems,budget,setBudget,subscriptions,setSubscriptions,projects,setProjects,pantry,setPantry,wishlist,setWishlist,claudeInbox,setClaudeInbox,isAdmin=false}){
   const isMobile=useIsMobile();
   const [screen,setScreen]=useState('dashboard');
-  const {toasts,add:toastAdd}=useToast();
+  const {add:toastAdd}=useToast();
   const [scrolled,setScrolled]=useState(false);
   const [serverUp,setServerUp]=useState(null);
   const [globalSearch,setGlobalSearch]=useState('');
@@ -9970,7 +9963,7 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
           })}
         </div>
         {!moreOpen&&<div className="hide-under-drawer"><QuickAddFAB screen={screen} setGrocery={setGrocery} setChores={setChores} toastAdd={toastAdd} isAdmin={isAdmin}/></div>}
-        <ToastStack toasts={toasts}/>
+        <ToastStack/>
       </div>
     );
   }
@@ -10063,7 +10056,7 @@ function ManageMode({onDisplay,onLogout,events,setEvents,chores,setChores,grocer
           {isKidMode && !KID_SCREENS.has(screen) ? screens['dashboard'] : screens[screen]}
         </div>
       </div>
-      <ToastStack toasts={toasts}/>
+      <ToastStack/>
     </div>
   );
 }

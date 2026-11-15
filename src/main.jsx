@@ -857,6 +857,27 @@ function DisplayWLabel({children}){
   const D=DISPLAY_D, isTV=window.innerWidth>=1440;
   return <div style={{fontSize:isTV?13:11,fontWeight:600,color:D.t3,marginBottom:isTV?14:12}}>{children}</div>;
 }
+// Bottom-bar ticker: one item at a time, fading to the next every 6s. Replaces a
+// long strip scrolled forever, which kept the 1.4 GB kitchen TV redrawing nonstop
+// and ran its WebView out of graphics memory. Own component so the tick only
+// re-renders this line, not the whole display.
+function FadeTicker({items}){
+  const D=DISPLAY_D, isTV=window.innerWidth>=1440;
+  const [idx,setIdx]=useState(0);
+  useEffect(()=>{
+    if(items.length<=1) return;
+    const id=setInterval(()=>setIdx(i=>i+1),6000);
+    return()=>clearInterval(id);
+  },[items.length]);
+  if(!items.length) return null;
+  const x=items[idx%items.length];
+  return(
+    <div key={idx} style={{display:'flex',alignItems:'center',whiteSpace:'nowrap',overflow:'hidden',fontFamily:FONT_MONO,fontSize:isTV?14:12,letterSpacing:'.5px',textTransform:'uppercase',animation:'fadeIn .6s ease'}}>
+      {(x.alert||x.live)&&<span style={{width:6,height:6,borderRadius:'50%',background:x.alert?A.red:D.on,marginRight:7,flexShrink:0}}/>}
+      <span style={{color:x.alert?A.red:x.live?D.t1:D.t3,overflow:'hidden',textOverflow:'ellipsis'}}>{x.t}</span>
+    </div>
+  );
+}
 function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGrocery,countdowns,photos=[],weather,clockFormat='12h',nightModeStart='23:00',nightModeEnd='06:00',goals=[],notes=[],polls=[],rotationMs=10000,wifiQrData=null,quickActions=[],members=[],packages=[],setPackages,messages=[],setMessages,appliances=[],consumables=[],maintenanceItems=[],pets=[],subscriptions=[],pantry=[],projects=[]}){
   const isMobile=useIsMobile();
   const now=useMinuteClock();
@@ -999,29 +1020,23 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
     return()=>{window.removeEventListener('mousemove',show);window.removeEventListener('touchstart',show);window.removeEventListener('click',show);clearTimeout(hideTimer.current);};
   },[]);
   const calScrollRef=useRef(null);
-  const _calScroll=useRef({timer:null,pauseT:null,unPauseT:null,pausing:false});
+  // Today/tomorrow list pages instead of scrolling: every 8s, if it overflows, fade
+  // and jump to the first row that wasn't fully visible (back to the top after the
+  // last page). The old 60 Hz scroll redrew the list every frame.
   useEffect(()=>{
     const el=calScrollRef.current;
-    const s=_calScroll.current;
-    clearInterval(s.timer);clearTimeout(s.pauseT);clearTimeout(s.unPauseT);
-    s.pausing=false;
     if(!el) return;
     el.scrollTop=0;
-    const t=setTimeout(()=>{
-      if(el.scrollHeight<=el.clientHeight+20) return;
-      s.timer=setInterval(()=>{
-        if(s.pausing) return;
-        el.scrollTop+=0.4;
-        if(el.scrollTop+el.clientHeight>=el.scrollHeight-4){
-          s.pausing=true;
-          s.pauseT=setTimeout(()=>{
-            el.scrollTop=0;
-            s.unPauseT=setTimeout(()=>{s.pausing=false;},1500);
-          },3000);
-        }
-      },16);
-    },200);
-    return()=>{clearTimeout(t);clearInterval(s.timer);clearTimeout(s.pauseT);clearTimeout(s.unPauseT);};
+    let fadeT=null;
+    const id=setInterval(()=>{
+      if(el.scrollHeight<=el.clientHeight+20){el.scrollTop=0;return;}
+      const bottom=el.scrollTop+el.clientHeight-20;
+      const next=[...el.children].find(r=>r.offsetTop+r.offsetHeight>bottom);
+      const atEnd=el.scrollTop+el.clientHeight>=el.scrollHeight-4||!next||next.offsetTop<=el.scrollTop;
+      el.style.opacity='0';
+      fadeT=setTimeout(()=>{el.scrollTop=atEnd?0:next.offsetTop;el.style.opacity='1';},400);
+    },8000);
+    return()=>{clearInterval(id);clearTimeout(fadeT);el.style.opacity='1';};
   },[events]);
 
   // Photo frame — cycles every 12s when photos are present
@@ -1417,7 +1432,7 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
             {/* LEFT: today and tomorrow, chores due in the next 3 days, counts for later */}
             <Widget style={{display:'flex',flexDirection:'column',overflow:'hidden'}}>
               <WLabel>Today and tomorrow</WLabel>
-              <div ref={calScrollRef} style={{flex:1,minHeight:0,overflowY:'auto',WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 20px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 20px),transparent 100%)'}}>
+              <div ref={calScrollRef} style={{flex:1,minHeight:0,overflowY:'auto',position:'relative',transition:'opacity .4s ease',WebkitMaskImage:'linear-gradient(to bottom,black calc(100% - 20px),transparent 100%)',maskImage:'linear-gradient(to bottom,black calc(100% - 20px),transparent 100%)'}}>
                 {soonItems.map(ev=>{
                   const isToday=ev.date===todayStr;
                   const liveDelivery=isToday&&ev.source==='package';
@@ -1970,7 +1985,7 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
                           <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',gap:10}}>
                             {persons.map(p=>(
                               <div key={p.entity_id} style={{display:'flex',alignItems:'center',gap:12}}>
-                                <div style={{width:34,height:34,borderRadius:'50%',background:stateColor(p.state),opacity:isHome(p.state)?1:0.35,filter:p.state==='not_home'?'grayscale(1)':'none',animation:isHome(p.state)?'presenceGlow 2.4s ease-out infinite':'none',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                                <div style={{width:34,height:34,borderRadius:'50%',background:stateColor(p.state),opacity:isHome(p.state)?1:0.35,filter:p.state==='not_home'?'grayscale(1)':'none',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
                                   <span style={{fontSize:13,fontWeight:700,color:'#fff'}}>{initials(p.name)}</span>
                                 </div>
                                 <span style={{fontSize:15,fontWeight:600,color:D.t1,flex:1}}>{p.name}</span>
@@ -2424,7 +2439,7 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
                           {nowPlaying.artist&&<div style={{fontSize:11,color:D.t3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nowPlaying.artist}</div>}
                         </div>
                         <div style={{display:'flex',gap:2,alignItems:'flex-end',height:12,flexShrink:0}}>
-                          {[0,1,2].map(i=><span key={i} style={{width:3,background:D.on,borderRadius:1,animation:`kithEq 1s ease-in-out ${-i*0.3}s infinite`}}/>)}
+                          {[0,1,2].map(i=><span key={i} style={{width:3,height:12,background:D.on,borderRadius:1,transformOrigin:'bottom',animation:`kithEq 1s ease-in-out ${-i*0.3}s infinite`}}/>)}
                         </div>
                       </div>
                     )}
@@ -2466,25 +2481,7 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
       <div style={{flexShrink:0,display:'flex',alignItems:'center',gap:12,height:isTV?34:28}}>
         {voiceTimer.active&&<div style={{flexShrink:0,fontFamily:FONT_MONO}}><TimerCountdown voiceTimer={voiceTimer}/></div>}
         <div style={{flex:1,minWidth:0,overflow:'hidden',WebkitMaskImage:'linear-gradient(90deg,transparent,#000 5%,#000 95%,transparent)',maskImage:'linear-gradient(90deg,transparent,#000 5%,#000 95%,transparent)'}}>
-          {tickerItems.length>0&&(()=>{
-            const chars=tickerItems.reduce((n,x)=>n+x.t.length+6,0);
-            const run=k=>(
-              <span key={k} style={{display:'inline-flex',alignItems:'center',paddingRight:40}}>
-                {tickerItems.map((x,i)=>(
-                  <span key={i} style={{display:'inline-flex',alignItems:'center'}}>
-                    {i>0&&<span style={{color:D.t4,margin:'0 12px'}}>·</span>}
-                    {(x.alert||x.live)&&<span style={{width:6,height:6,borderRadius:'50%',background:x.alert?A.red:D.on,marginRight:7,animation:'pulse 1.6s ease-in-out infinite'}}/>}
-                    <span style={{color:x.alert?A.red:x.live?D.t1:D.t3}}>{x.t}</span>
-                  </span>
-                ))}
-              </span>
-            );
-            return(
-              <div style={{display:'inline-flex',whiteSpace:'nowrap',fontFamily:FONT_MONO,fontSize:isTV?14:12,letterSpacing:'.5px',textTransform:'uppercase',animation:`kithTick ${Math.max(30,Math.round(chars*0.28))}s linear infinite`}}>
-                {run('a')}{run('b')}
-              </div>
-            );
-          })()}
+          <FadeTicker items={tickerItems}/>
         </div>
         {quickActions.length>0&&quickActions.map(action=>{
           const st=qaState[action.id]||'idle';

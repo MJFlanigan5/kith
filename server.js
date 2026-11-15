@@ -3312,8 +3312,9 @@ app.get('/api/plex/thumb', async (req, res) => {
   if (thumbPath.includes('..') || thumbPath.includes('?') || thumbPath.includes('#')) return res.status(400).end();
   try {
     const base = plexUrl.replace(/\/$/, '');
-    const sep = thumbPath.includes('?') ? '&' : '?';
-    const r = await fetch(`${base}${thumbPath}${sep}X-Plex-Token=${plexToken}`, {
+    // Ask Plex for a 320x480 copy: originals are up to 1920x2880 (~22 MB decoded each),
+    // which exhausts the kitchen TV's WebView tile memory. Cards draw them at 72-160 px.
+    const r = await fetch(`${base}/photo/:/transcode?width=320&height=480&minSize=1&upscale=0&url=${encodeURIComponent(thumbPath)}&X-Plex-Token=${plexToken}`, {
       headers: { 'X-Plex-Token': plexToken, Accept: 'image/*' },
       signal: AbortSignal.timeout(8000),
     });

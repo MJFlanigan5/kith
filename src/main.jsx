@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import ReactDOM from 'react-dom/client'
 import { Toaster, toast } from 'sonner'
-import NumberFlow from '@number-flow/react'
 // Wall display type (Foyer's): bundled so the display never depends on internet fonts
 import '@fontsource/manrope/400.css'
 import '@fontsource/manrope/600.css'
@@ -233,43 +232,6 @@ function ClockDate({variant,isMobile,isTV,style}){
   );
   return(
     <span style={{fontFamily:FONT_MONO,fontSize:isMobile?11:isTV?15:13,color:'#87868c',letterSpacing:'1px',textTransform:'uppercase',...style}}>{dateStr}</span>
-  );
-}
-// Power flow — ported from Foyer's renderFlowDiagram (ha-wall-kiosk pwa-app) so the two
-// screens draw power the same way: dots travel each live leg, faster with more kW.
-function FlowDiagram({pw}){
-  const solar=Math.max(0,pw.solar_kw||0), gridKw=pw.grid_kw||0, battKw=pw.battery_kw||0;
-  const importing=Math.max(0,gridKw), exporting=Math.max(0,-gridKw);
-  const charging=battKw<0, battAbs=Math.abs(battKw);
-  const dots=(color,d,kw)=>{
-    if(!(kw>0)) return null;
-    // Half-second steps: a small kW change on refresh keeps the same duration, so the dots don't restart and jump.
-    const dur=Math.max(1.5,Math.min(4,Math.round(3/kw*2)/2));
-    return [0,1,2].map(k=><circle key={k} r="3.5" fill={color}><animateMotion dur={`${dur.toFixed(2)}s`} begin={`${(-k*dur/3).toFixed(2)}s`} repeatCount="indefinite" path={d}/></circle>);
-  };
-  const leg=(d,color,kw)=>kw>0
-    ?<g><path d={d} stroke={color} strokeOpacity=".5" strokeWidth="2" fill="none"/>{dots(color,d,kw)}</g>
-    :<path d={d} stroke="rgba(255,255,255,.1)" strokeWidth="2" fill="none" strokeDasharray="3 6"/>;
-  const solarD="M60 40 Q 200 40 200 95";
-  const gridD=exporting>0?"M200 95 Q 200 150 60 150":"M60 150 Q 200 150 200 95";
-  const battD=charging?"M226 95 L 305 95":"M305 95 L 226 95";
-  const house=pw.load_kw||0;
-  const lbl=(x,y,text,on,color)=><text x={x} y={y} textAnchor="middle" fontSize="11" fill={on?color:'#5d6068'} fontWeight={on?700:400}>{text}</text>;
-  return(
-    <svg viewBox="0 0 400 190" preserveAspectRatio="xMidYMid meet" style={{width:'100%',flex:1,minHeight:0,fontFamily:FONT_SANS}}>
-      {leg(solarD,'#FFD60A',solar)}
-      {leg(gridD,'#ef6b6b',importing||exporting)}
-      {leg(battD,'#5fd38a',battAbs)}
-      <circle cx="200" cy="95" r="26" fill="rgba(255,255,255,.08)" stroke="rgba(255,255,255,.18)"/>
-      {/* Ring fades in as well as out, so each loop restarts at zero opacity instead of snapping back to full (read as a blink). */}
-      {house>0&&<circle cx="200" cy="95" r="26" fill="none" stroke="rgba(217,160,102,.6)" opacity="0"><animate attributeName="r" values="26;38" dur="2.4s" calcMode="spline" keySplines="0.2 0 0 1" repeatCount="indefinite"/><animate attributeName="opacity" values="0;.9;0" keyTimes="0;.15;1" dur="2.4s" repeatCount="indefinite"/></circle>}
-      <foreignObject x="170" y="85" width="60" height="20"><div style={{textAlign:'center',color:'#e9e7e2',fontSize:14,fontWeight:700,lineHeight:'20px'}}><NumberFlow value={house} format={{minimumFractionDigits:2,maximumFractionDigits:2}}/></div></foreignObject>
-      <text x="200" y="138" textAnchor="middle" fill="#8b8d94" fontSize="10">House kW</text>
-      {lbl(60,30,`Solar ${solar.toFixed(1)}`,solar>0,'#FFD60A')}
-      {lbl(60,172,exporting>0?`Grid export ${exporting.toFixed(2)}`:`Grid ${importing.toFixed(2)}`,importing>0||exporting>0,'#ef6b6b')}
-      {lbl(350,88,'Battery',battAbs>0,'#5fd38a')}
-      <text x="350" y="104" textAnchor="middle" fill="#8b8d94" fontSize="11">{pw.battery_pct}% {charging?'charging':battAbs>0?'in use':'idle'}</text>
-    </svg>
   );
 }
 // Voice-timer countdown text — isolated for the same reason as ClockDigits;
@@ -872,7 +834,7 @@ function FadeTicker({items}){
   if(!items.length) return null;
   const x=items[idx%items.length];
   return(
-    <div key={idx} style={{display:'flex',alignItems:'center',whiteSpace:'nowrap',overflow:'hidden',fontFamily:FONT_MONO,fontSize:isTV?14:12,letterSpacing:'.5px',textTransform:'uppercase',animation:'fadeIn .6s ease'}}>
+    <div key={idx} style={{display:'flex',alignItems:'center',justifyContent:'center',maxWidth:'100%',whiteSpace:'nowrap',overflow:'hidden',fontFamily:FONT_MONO,fontSize:isTV?14:12,letterSpacing:'.5px',textTransform:'uppercase',animation:'fadeIn .6s ease'}}>
       {(x.alert||x.live)&&<span style={{width:6,height:6,borderRadius:'50%',background:x.alert?A.red:D.on,marginRight:7,flexShrink:0}}/>}
       <span style={{color:x.alert?A.red:x.live?D.t1:D.t3,overflow:'hidden',textOverflow:'ellipsis'}}>{x.t}</span>
     </div>
@@ -1359,7 +1321,7 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
               <WLabel>Weather</WLabel>
               {weather?(
                 <>
-                  <div style={{fontSize:44,fontWeight:800,color:D.t1,lineHeight:1,letterSpacing:'-.05em',fontVariantNumeric:'tabular-nums'}}><NumberFlow value={Number(weather.temp)} suffix="°"/></div>
+                  <div style={{fontSize:44,fontWeight:800,color:D.t1,lineHeight:1,letterSpacing:'-.05em',fontVariantNumeric:'tabular-nums'}}>{Math.round(Number(weather.temp))}°</div>
                   <div style={{fontSize:13,color:D.t2,fontWeight:500,marginTop:4}}>{weather.condition}</div>
                   <div style={{fontSize:11,color:D.t3,marginTop:2,marginBottom:10}}>H:{weather.hi}° · L:{weather.lo}°</div>
                   <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:2,borderTop:`1px solid ${D.sep}`,paddingTop:8}}>
@@ -1724,12 +1686,45 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
                         </div>
                       </>
                     )}
-                    {visiblePanelId==='w_powerwall'&&widgetData.powerwall&&(
-                      <>
-                        <div style={{display:'flex',justifyContent:'space-between'}}><WLabel>Power</WLabel><span style={{fontSize:11,color:D.t3}}>Battery {widgetData.powerwall.battery_pct}%</span></div>
-                        <FlowDiagram pw={widgetData.powerwall}/>
-                      </>
-                    )}
+                    {visiblePanelId==='w_powerwall'&&widgetData.powerwall&&(()=>{
+                      // Same layout as the water page: today's total, live use, last 7 days. No animation (kitchen TV WebView).
+                      const pw=widgetData.powerwall;
+                      const week=(pw.week||[]).filter(d=>d.kwh>0);
+                      const avg=week.length?Math.round(week.reduce((a,d)=>a+d.kwh,0)/week.length):null;
+                      const bars=[...week.map(d=>({label:DAYS[new Date(d.date+'T12:00:00').getDay()].slice(0,3),kwh:d.kwh})),...(pw.daily_kwh!=null?[{label:'Today',kwh:Math.round(pw.daily_kwh),today:true}]:[])];
+                      const max=Math.max(1,...bars.map(b=>b.kwh),avg||0);
+                      const H=isTV?220:170;
+                      return(<>
+                        <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}>
+                          <WLabel>Electricity</WLabel>
+                          <span style={{fontFamily:FONT_MONO,fontSize:12,color:D.t3}}><span style={{color:D.on}}>{(pw.load_kw||0).toFixed(1)} kW now</span> · battery {pw.battery_pct}%</span>
+                        </div>
+                        <div style={{display:'flex',alignItems:'baseline',gap:12,flexWrap:'wrap'}}>
+                          {pw.daily_kwh!=null
+                            ?<><span style={{fontSize:isTV?52:42,fontWeight:800,color:D.t1,letterSpacing:'-.03em',lineHeight:1}}>{Math.round(pw.daily_kwh)}</span>
+                              <span style={{fontSize:15,color:D.t3}}>kWh today{avg!=null?` · ${week.length}-day average ${avg}`:''}</span></>
+                            :<><span style={{fontSize:isTV?52:42,fontWeight:800,color:D.t1,letterSpacing:'-.03em',lineHeight:1}}>{(pw.load_kw||0).toFixed(1)}</span>
+                              <span style={{fontSize:15,color:D.t3}}>kW now</span></>}
+                        </div>
+                        <div style={{fontFamily:FONT_MONO,fontSize:12,color:D.t3,marginTop:6}}>
+                          {pw.solar_kw>0?`Solar ${pw.solar_kw.toFixed(1)} kW · `:''}{pw.grid_kw<0?`Exporting ${(-pw.grid_kw).toFixed(1)} kW`:`Grid ${(pw.grid_kw||0).toFixed(1)} kW`}{pw.battery_kw?` · Battery ${pw.battery_kw<0?'charging':'in use'} ${Math.abs(pw.battery_kw).toFixed(1)} kW`:''}
+                        </div>
+                        {bars.length>1&&(
+                          <div style={{flex:1,display:'flex',alignItems:'flex-end',minHeight:0,marginTop:16}}>
+                            <div style={{position:'relative',flex:1,display:'grid',gridTemplateColumns:`repeat(${bars.length},1fr)`,gap:isTV?14:10,alignItems:'end'}}>
+                              {avg!=null&&<div style={{position:'absolute',left:0,right:0,bottom:22+avg/max*H,borderTop:`1px dashed ${D.t4}`}}/>}
+                              {bars.map(b=>(
+                                <div key={b.label} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:6}}>
+                                  <span style={{fontFamily:FONT_MONO,fontSize:12,color:b.today?D.t1:D.t3}}>{b.kwh}</span>
+                                  <div style={{width:'100%',height:Math.max(3,b.kwh/max*H),borderRadius:5,background:b.today?D.on:'#3a3a3f'}}/>
+                                  <span style={{fontFamily:FONT_MONO,fontSize:11,height:16,color:b.today?D.t1:D.t3}}>{b.label}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </>);
+                    })()}
                     {visiblePanelId==='w_flight'&&(()=>{
                       const f=widgetData.flight;if(!f)return null;
                       const statusColor={active:A.green,landed:A.green,scheduled:D.t3,cancelled:A.red,incident:A.red,diverted:A.amber}[f.status]||D.t3;
@@ -2014,7 +2009,7 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
                           <WLabel>{t.name||'Thermostat'}</WLabel>
                           <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',gap:6}}>
                             <div style={{display:'flex',alignItems:'baseline',gap:8,marginBottom:4}}>
-                              <span style={{fontSize:52,fontWeight:800,color:D.t1,lineHeight:1,letterSpacing:'-.04em'}}>{t.current_temp!=null?<NumberFlow value={Math.round(t.current_temp)}/>:'--'}</span>
+                              <span style={{fontSize:52,fontWeight:800,color:D.t1,lineHeight:1,letterSpacing:'-.04em'}}>{t.current_temp!=null?Math.round(t.current_temp):'--'}</span>
                               <span style={{fontSize:22,color:D.t3,fontWeight:400}}>°{t.unit}</span>
                             </div>
                             {[
@@ -2413,7 +2408,7 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
                 <WLabel>Weather</WLabel>
                 {weather?(
                   <>
-                    <div style={{fontSize:isTV?34:28,fontWeight:700,color:D.t1,lineHeight:1.1,fontVariantNumeric:'tabular-nums'}}><NumberFlow value={Number(weather.temp)} suffix="°"/></div>
+                    <div style={{fontSize:isTV?34:28,fontWeight:700,color:D.t1,lineHeight:1.1,fontVariantNumeric:'tabular-nums'}}>{Math.round(Number(weather.temp))}°</div>
                     <div style={{fontSize:12,color:D.t3,marginTop:3}}>
                       {weather.condition} · high {weather.hi}°{widgetData.thermostat&&widgetData.thermostat.current_temp!=null&&!widgetData.thermostat.unavailable?` · inside ${Math.round(widgetData.thermostat.current_temp)}°`:''}
                     </div>
@@ -2439,7 +2434,7 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
                           {nowPlaying.artist&&<div style={{fontSize:11,color:D.t3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nowPlaying.artist}</div>}
                         </div>
                         <div style={{display:'flex',gap:2,alignItems:'flex-end',height:12,flexShrink:0}}>
-                          {[0,1,2].map(i=><span key={i} style={{width:3,height:12,background:D.on,borderRadius:1,transformOrigin:'bottom',animation:`kithEq 1s ease-in-out ${-i*0.3}s infinite`}}/>)}
+                          {[6,12,9].map((h,i)=><span key={i} style={{width:3,height:h,background:D.on,borderRadius:1}}/>)}
                         </div>
                       </div>
                     )}
@@ -2480,7 +2475,7 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
       {/* Bottom bar — floats, no border; alerts first, then today's items, bills, news */}
       <div style={{flexShrink:0,display:'flex',alignItems:'center',gap:12,height:isTV?34:28}}>
         {voiceTimer.active&&<div style={{flexShrink:0,fontFamily:FONT_MONO}}><TimerCountdown voiceTimer={voiceTimer}/></div>}
-        <div style={{flex:1,minWidth:0,overflow:'hidden',WebkitMaskImage:'linear-gradient(90deg,transparent,#000 5%,#000 95%,transparent)',maskImage:'linear-gradient(90deg,transparent,#000 5%,#000 95%,transparent)'}}>
+        <div style={{flex:1,minWidth:0,overflow:'hidden',display:'flex',justifyContent:'center'}}>
           <FadeTicker items={tickerItems}/>
         </div>
         {quickActions.length>0&&quickActions.map(action=>{

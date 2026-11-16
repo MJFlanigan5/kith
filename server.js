@@ -1435,6 +1435,7 @@ app.get('/api/settings/integrations', requireAdmin, (req, res) => {
     ha_moen_flow:      get('ha_moen_flow'),
     ha_moen_pressure:  get('ha_moen_pressure'),
     ha_moen_daily:     get('ha_moen_daily'),
+    ha_power_daily:    get('ha_power_daily'),
     ha_moen_mode:      get('ha_moen_mode'),
     ha_moen_alert:     get('ha_moen_alert'),
     ha_unifi_clients:  get('ha_unifi_clients'),
@@ -1480,6 +1481,7 @@ app.put('/api/settings/integrations', requireAdmin, (req, res) => {
   if (req.body.ha_moen_flow     !== undefined) { upd.run('ha_moen_flow',     String(req.body.ha_moen_flow));     clearMoenCache = true; }
   if (req.body.ha_moen_pressure !== undefined) { upd.run('ha_moen_pressure', String(req.body.ha_moen_pressure)); clearMoenCache = true; }
   if (req.body.ha_moen_daily    !== undefined) { upd.run('ha_moen_daily',    String(req.body.ha_moen_daily));    clearMoenCache = true; }
+  if (req.body.ha_power_daily   !== undefined) upd.run('ha_power_daily',   String(req.body.ha_power_daily));
   if (req.body.ha_moen_mode     !== undefined) { upd.run('ha_moen_mode',     String(req.body.ha_moen_mode));     clearMoenCache = true; }
   if (req.body.ha_moen_alert    !== undefined) { upd.run('ha_moen_alert',    String(req.body.ha_moen_alert));    clearMoenCache = true; }
   if (req.body.ha_unifi_clients   !== undefined) { upd.run('ha_unifi_clients',   String(req.body.ha_unifi_clients));   clearUnifiCache = true; }
@@ -2804,6 +2806,16 @@ app.get('/api/widgets/data', requireAuth, async (req, res) => {
     return out;
   };
 
+  // Electricity page: today's kWh and the last 7 days from an HA daily-energy sensor
+  // (same shape as the water page). Merged into result.powerwall after all fetches finish.
+  let powerDaily = null;
+  const powerDailyEntity = gs('ha_power_daily');
+  if (powerDailyEntity && haBaseUrl && haAuthToken)
+    p.push(_wFetch(`power_daily:${powerDailyEntity}`, 300000, async () => {
+      const [today, week] = await Promise.all([haGet(powerDailyEntity), moenWeek(powerDailyEntity).catch(() => [])]);
+      return { daily_kwh: today && today.state !== 'unavailable' ? +haNum(today).toFixed(1) : null, week: week.map(d => ({ date: d.date, kwh: d.gal })) };
+    }).then(d => { if (d) powerDaily = d; }));
+
   // ── Homey fetch helper ──────────────────────────────────────────────────────
   const homeyBaseUrl = (gs('homey_url') || '').replace(/\/$/, '');
   const homeyAuthToken = gs('homey_token');
@@ -3265,6 +3277,7 @@ app.get('/api/widgets/data', requireAuth, async (req, res) => {
   }).then(d => { if (d) result.compliment = d; }));
 
   await Promise.allSettled(p);
+  if (result.powerwall && powerDaily) result.powerwall = { ...result.powerwall, ...powerDaily };
   res.json(result);
 });
 

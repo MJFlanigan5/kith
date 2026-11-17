@@ -1217,7 +1217,6 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
     .sort((a,b)=>a.date.localeCompare(b.date)||(eventTimeMinutes(a.time)??-1)-(eventTimeMinutes(b.time)??-1));
   const choresSoon=chores.filter(c=>!c.done&&c.next_due&&daysUntil(c.next_due)<=3).sort((a,b)=>a.next_due.localeCompare(b.next_due));
   const choresLater=chores.filter(c=>!c.done&&c.next_due&&daysUntil(c.next_due)>3&&daysUntil(c.next_due)<=7).length;
-  const billsWeek=(events||[]).filter(e=>e.source==='bill'&&daysUntil(e.date)>=0&&daysUntil(e.date)<=7);
   const eventsLater=displayEvents.filter(e=>e.source!=='package'&&daysUntil(e.date)>=2&&daysUntil(e.date)<=7).length;
   const whoHome=(widgetData.who_home?.persons||[]).filter(p=>p.state==='home').map(p=>(p.name||'').split(' ')[0]);
   const dayWord=d=>{const n=daysUntil(d);return n===0?'Today':n===1?'Tomorrow':DAYS[new Date(d+'T00:00:00').getDay()];};
@@ -1413,8 +1412,8 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
                 ))}
                 {soonItems.length===0&&choresSoon.length===0&&<div style={{fontSize:13,color:D.t3,paddingTop:4}}>Nothing today or tomorrow</div>}
               </div>
-              <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:6,marginTop:10,flexShrink:0}}>
-                {[[choresLater,'chores later'],[billsWeek.length,billsWeek.length===1?'bill':'bills'],[eventsLater,eventsLater===1?'event':'events']].map(([n,l])=>(
+              <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:6,marginTop:10,flexShrink:0}}>
+                {[[choresLater,'chores later'],[eventsLater,eventsLater===1?'event':'events']].map(([n,l])=>(
                   <div key={l} style={{border:`1px solid ${D.border}`,borderRadius:10,padding:'7px 8px'}}>
                     <div style={{fontSize:16,fontWeight:700,color:D.t1}}>{n}</div>
                     <div style={{fontSize:10.5,color:D.t3}}>{l}</div>

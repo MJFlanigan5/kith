@@ -1234,7 +1234,6 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
     ...alerts.map(t=>({t,alert:true})),
     ...urgentTickerItems.map(t=>({t:t.replace(/^\S+\s/,''),live:true})),
     ...shownPackages.filter(p=>p.expected_date&&daysUntil(p.expected_date)===1).map(p=>({t:`${p.description||p.carrier||'Package'} arrives tomorrow`})),
-    ...billsWeek.filter(b=>daysUntil(b.date)<=3).map(b=>({t:`${b.title||'Bill'} bill due ${daysUntil(b.date)<=1?dayWord(b.date).toLowerCase():dayWord(b.date)}`})),
     ...news.slice(0,3).map(n=>({t:n.title})),
   ];
 

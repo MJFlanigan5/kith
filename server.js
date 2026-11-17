@@ -1630,13 +1630,14 @@ function parseRSS(xml) {
   const items = [];
   const re = /<item>([\s\S]*?)<\/item>/g;
   let m;
-  while ((m = re.exec(xml)) !== null && items.length < 5) {
+  while ((m = re.exec(xml)) !== null && items.length < 10) {
     const block = m[1];
     const rawTitle = (/<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>/s.exec(block)||[])[1]?.trim();
     const title = rawTitle ? decodeXmlEntities(rawTitle) : undefined;
     const link = (/<link>\s*(https?:\/\/[^<]+)\s*<\/link>/s.exec(block)||[])[1]?.trim() ||
                  (/<guid[^>]*>\s*(https?:\/\/[^<]+)\s*<\/guid>/s.exec(block)||[])[1]?.trim();
-    if (title && link) items.push({ title, link });
+    const pub = Date.parse((/<pubDate>([^<]+)<\/pubDate>/.exec(block)||[])[1] || '') || 0;
+    if (title && link) items.push({ title, link, pub });
   }
   return items;
 }
@@ -1653,7 +1654,8 @@ app.get('/api/news', requireAuth, async (req, res) => {
         return parseRSS(xml);
       } catch { return []; }
     }));
-    const flat = results.flat();
+    // Newest first across all feeds; drop anything over two days old (dead feeds keep serving old items).
+    const flat = results.flat().filter(n => !n.pub || Date.now() - n.pub < 2 * 86400000).sort((x, y) => y.pub - x.pub);
     _newsCache = flat.slice(0, 20);
     _newsCacheAt = Date.now();
     res.json(_newsCache);
@@ -2553,37 +2555,6 @@ app.get('/api/widgets/data', requireAuth, async (req, res) => {
       return { name: d.shop_name, sales: d.transaction_sold_count ?? 0, listings: d.listing_active_count ?? 0 };
     }).then(d => { if (d) result.etsy = d; }));
 
-  const teslaKey = gs('teslemetry_api_key');
-  if (teslaKey)
-    p.push(_wFetch(`teslemetry`, 60000, async () => {
-      // Auto-discover energy site ID
-      const _sid = _wCache['teslemetry:site_id'];
-      let siteId = (_sid && Date.now() - _sid.at < 86400000) ? _sid.data : null;
-      if (!siteId) {
-        const pr = await fetch('https://api.teslemetry.com/api/1/products', {
-          headers: { 'Authorization': `Bearer ${teslaKey}` }, signal: AbortSignal.timeout(8000),
-        });
-        const pd = await pr.json();
-        siteId = pd.response?.find(p => p.energy_site_id)?.energy_site_id;
-        if (!siteId) return null;
-        _wCache['teslemetry:site_id'] = { data: siteId, at: Date.now() };
-      }
-      const r = await fetch(`https://api.teslemetry.com/api/1/energy_sites/${siteId}/live_status`, {
-        headers: { 'Authorization': `Bearer ${teslaKey}` }, signal: AbortSignal.timeout(8000),
-      });
-      const d = await r.json();
-      const s = d.response;
-      if (!s) return null;
-      return {
-        battery_pct:  Math.round(s.percentage_charged ?? 0),
-        solar_kw:     Math.round((s.solar_power ?? 0) / 100) / 10,
-        grid_kw:      Math.round((s.grid_power  ?? 0) / 100) / 10,
-        load_kw:      Math.round((s.load_power  ?? 0) / 100) / 10,
-        battery_kw:   Math.round((s.battery_power ?? 0) / 100) / 10,
-        grid_status:  s.grid_status ?? 'Active',
-      };
-    }).then(d => { if (d) result.powerwall = d; }));
-
   const aviationKey = gs('aviationstack_api_key');
   const flightNum = gs('widget_flight_number').toUpperCase().replace(/\s/g, '');
   if (aviationKey && flightNum)
@@ -2815,6 +2786,21 @@ app.get('/api/widgets/data', requireAuth, async (req, res) => {
       const [today, week] = await Promise.all([haGet(powerDailyEntity), moenWeek(powerDailyEntity).catch(() => [])]);
       return { daily_kwh: today && today.state !== 'unavailable' ? +haNum(today).toFixed(1) : null, week: week.map(d => ({ date: d.date, kwh: d.gal })) };
     }).then(d => { if (d) powerDaily = d; }));
+
+  // Live Powerwall from HA's Teslemetry integration (the same sensors the Foyer kiosk reads).
+  const pwSite = gs('ha_powerwall_site') || 'my_home';
+  if (haBaseUrl && haAuthToken)
+    p.push(_wFetch(`powerwall:${pwSite}`, 60000, async () => {
+      const [pct, solar, grid, load, batt, gridOn] = await Promise.all(
+        ['sensor.%s_percentage_charged', 'sensor.%s_solar_power', 'sensor.%s_grid_power', 'sensor.%s_load_power', 'sensor.%s_battery_power', 'binary_sensor.%s_grid_status']
+          .map(e => haGet(e.replace('%s', pwSite)).catch(() => null)));
+      if (!load || load.state === 'unavailable') return null;
+      const kw = (s) => Math.round(haNum(s) * 10) / 10;
+      return {
+        battery_pct: Math.round(haNum(pct)), solar_kw: kw(solar), grid_kw: kw(grid), load_kw: kw(load), battery_kw: kw(batt),
+        grid_status: gridOn && gridOn.state === 'off' ? 'Islanded' : 'Active',
+      };
+    }).then(d => { if (d) result.powerwall = d; }));
 
   // ── Homey fetch helper ──────────────────────────────────────────────────────
   const homeyBaseUrl = (gs('homey_url') || '').replace(/\/$/, '');

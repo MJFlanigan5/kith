@@ -1821,14 +1821,14 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
                               <div style={{height:3,borderRadius:2,background:'#2a2a2e'}}>{v!=null&&<div style={{width:`${Math.max(2,Math.min(100,v))}%`,height:'100%',borderRadius:2,background:v>=90?A.amber:D.t2}}/>}</div>
                             </div>
                           );
-                          const cols='14px minmax(0,1fr) 104px 104px 52px';
+                          const cols='12px minmax(0,1fr) 64px 64px 40px';
                           const hdr={fontFamily:FONT_MONO,fontSize:10.5,letterSpacing:'.1em',color:D.t4,textTransform:'uppercase'};
                           return(<>
                             <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}><WLabel>Servers</WLabel><span style={{fontFamily:FONT_MONO,fontSize:12,color:D.t4}}>{up.length} up{off.length?` · ${off.length} off`:''}</span></div>
-                            <div style={{display:'grid',gridTemplateColumns:cols,gap:16,paddingBottom:6}}><span/><span style={hdr}>Machine</span><span style={hdr}>CPU</span><span style={hdr}>RAM</span><span style={{...hdr,textAlign:'right'}}>Temp</span></div>
+                            <div style={{display:'grid',gridTemplateColumns:cols,gap:10,paddingBottom:6}}><span/><span style={hdr}>Machine</span><span style={hdr}>CPU</span><span style={hdr}>RAM</span><span style={{...hdr,textAlign:'right'}}>Temp</span></div>
                             <div style={{display:'flex',flexDirection:'column'}}>
                               {up.map((s,i)=>(
-                                <div key={s.name} style={{display:'grid',gridTemplateColumns:cols,alignItems:'center',gap:16,padding:isTV?'11px 0':'8px 0',borderTop:`1px solid ${D.sep}`}}>
+                                <div key={s.name} style={{display:'grid',gridTemplateColumns:cols,alignItems:'center',gap:10,padding:isTV?'11px 0':'8px 0',borderTop:`1px solid ${D.sep}`}}>
                                   <span style={{width:8,height:8,borderRadius:'50%',background:D.on}}/>
                                   <span style={{fontSize:isTV?17:15,fontWeight:600,color:D.t1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name}</span>
                                   {meter(s.cpu)}{meter(s.memPct)}

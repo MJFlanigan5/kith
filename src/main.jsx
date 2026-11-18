@@ -1435,7 +1435,7 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
                         })}
                       </div>
                     )}
-                    <div style={{flex:1,display:'flex',flexDirection:'column',minHeight:0,opacity:panelOpacity,transform:panelOpacity?'none':'translateX(-18px)',transition:'opacity 0.35s ease,transform 0.35s ease'}}>
+                    <div style={{flex:1,display:'flex',flexDirection:'column',minHeight:0,minWidth:0,width:'100%',overflow:'hidden',opacity:panelOpacity,transition:'opacity 0.35s ease'}}>
                     {visiblePanelId==='due_soon'&&(
                       <>
                         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>

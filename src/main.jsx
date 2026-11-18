@@ -1423,10 +1423,10 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
             </Widget>
 
             {/* CENTER: rotating panel + dinner */}
-            <div style={{display:'flex',flexDirection:'column',gap:12,minHeight:0}}>
+            <div style={{display:'flex',flexDirection:'column',gap:12,minHeight:0,minWidth:0}}>
               {centerPanels.length>0&&(
-                <div style={{flex:1,display:'flex',flexDirection:'column',minHeight:0}}>
-                  <Widget style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+                <div style={{flex:1,display:'flex',flexDirection:'column',minHeight:0,minWidth:0}}>
+                  <Widget style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minWidth:0}}>
                     {centerPanels.length>1&&(
                       <div style={{display:'flex',gap:5,marginBottom:12,justifyContent:'center',alignItems:'center'}}>
                         {centerPanels.map((p,i)=>{

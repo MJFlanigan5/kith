@@ -1125,7 +1125,7 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
     return !added||Date.now()-added<=14*86400000;
   }),[packages]);
   const streakChores=useMemo(()=>(chores||[]).filter(c=>(c.streak||0)>=2).sort((a,b)=>(b.streak||0)-(a.streak||0)),[chores]);
-  const pwActive=!!widgetData.powerwall&&(widgetData.powerwall.solar_kw>0||widgetData.powerwall.battery_kw!==0||widgetData.powerwall.grid_kw<0);
+  const pwActive=!!widgetData.powerwall; // always in the rotation when live data exists, like water
   // Quote and affirmation share one card: quote on even days, affirmation on odd (whichever exists).
   const _quote=widgetData.quote?.text?{text:widgetData.quote.text,author:widgetData.quote.author}:null;
   const _affirm=widgetData.compliment?.text?{text:widgetData.compliment.text}:null;

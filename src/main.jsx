@@ -1224,7 +1224,8 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
   const pwW=widgetData.powerwall, moenW=widgetData.moen;
   const alerts=[];
   if(pwW&&pwW.grid_status&&pwW.grid_status!=='Active') alerts.push(`Grid down · on battery ${pwW.battery_pct}%`);
-  else if(pwW&&pwW.battery_pct<20) alerts.push(`Battery low · ${pwW.battery_pct}%`);
+  // 2026-11-18: <20 fired most evenings (normal overnight drain) and repeated every few items; only warn when it is really low.
+  else if(pwW&&pwW.battery_pct<10) alerts.push(`Battery low · ${pwW.battery_pct}%`);
   if(moenW?.has_alert) alerts.push('Water leak alert');
   // Only services that just went down; ones down for a day show grey on the Services card.
   (widgetData.uptime||[]).filter(m=>m.ok===false&&!m.long_down).forEach(m=>alerts.push(`${m.name} is down`));
@@ -1233,7 +1234,8 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
     ...alerts.map(t=>({t,alert:true})),
     ...urgentTickerItems.map(t=>({t:t.replace(/^\S+\s/,''),live:true})),
     ...shownPackages.filter(p=>p.expected_date&&daysUntil(p.expected_date)===1).map(p=>({t:`${p.description||p.carrier||'Package'} arrives tomorrow`})),
-    ...news.slice(0,3).map(n=>({t:n.title})),
+    // 2026-11-18: was 3 headlines, so the ticker repeated the same three every ~24 s.
+    ...news.slice(0,12).map(n=>({t:n.title})),
   ];
 
   const [dmChoreConfetti,setDmChoreConfetti]=useState(false);

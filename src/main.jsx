@@ -1124,7 +1124,7 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
     const added=new Date((p.created_at||'').replace(' ','T')+'Z').getTime();
     return !added||Date.now()-added<=14*86400000;
   }),[packages]);
-  const streakChores=useMemo(()=>(chores||[]).filter(c=>(c.streak||0)>=2).sort((a,b)=>(b.streak||0)-(a.streak||0)),[chores]);
+  const streakChores=useMemo(()=>(chores||[]).filter(c=>(c.streak||0)>=2&&!(!c.done&&c.next_due&&daysUntil(c.next_due)<=3)).sort((a,b)=>(b.streak||0)-(a.streak||0)),[chores]);
   const pwActive=!!widgetData.powerwall; // always in the rotation when live data exists, like water
   // Quote and affirmation share one card: quote on even days, affirmation on odd (whichever exists).
   const _quote=widgetData.quote?.text?{text:widgetData.quote.text,author:widgetData.quote.author}:null;
@@ -1142,7 +1142,7 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
     ...(pwActive?['w_powerwall']:[]),
     ...(widgetData.moen&&widgetData.moen.daily_gal>0?['w_moen']:[]),
     ...(widgetData.flight?['w_flight']:[]),
-    ...((widgetData.uptime||[]).length>0?['w_uptime']:[]),
+    ...((widgetData.uptime||[]).length>0&&!(widgetData.beszel||[]).length?['w_uptime']:[]),
     ...((widgetData.beszel||[]).length>0?['w_beszel']:[]),
     ...(polls.length>0?['w_polls']:[]),
     ...(uncheckedGrocery.length>0?['w_grocery']:[]),
@@ -1815,6 +1815,7 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
                         {(()=>{
                           const list=widgetData.beszel||[];
                           const up=list.filter(s=>s.status==='up'), off=list.filter(s=>s.status!=='up');
+                          const svc=widgetData.uptime||[], svcDown=svc.filter(x=>!x.ok&&!x.long_down);
                           const meter=v=>(
                             <div style={{display:'flex',flexDirection:'column',gap:5}}>
                               <span style={{fontFamily:FONT_MONO,fontSize:13,color:D.t2}}>{v==null?'—':`${Math.round(v)}%`}</span>
@@ -1824,7 +1825,7 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
                           const cols='12px minmax(0,1fr) 64px 64px 40px';
                           const hdr={fontFamily:FONT_MONO,fontSize:10.5,letterSpacing:'.1em',color:D.t4,textTransform:'uppercase'};
                           return(<>
-                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}><WLabel>Servers</WLabel><span style={{fontFamily:FONT_MONO,fontSize:12,color:D.t4}}>{up.length} up{off.length?` · ${off.length} off`:''}</span></div>
+                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}><WLabel>Servers</WLabel><span style={{fontFamily:FONT_MONO,fontSize:12,color:D.t4}}>{up.length} up{off.length?` · ${off.length} off`:''}{svc.length?` · services ${svc.filter(x=>x.ok).length} of ${svc.length} up`:''}</span></div>
                             <div style={{display:'grid',gridTemplateColumns:cols,gap:10,paddingBottom:6}}><span/><span style={hdr}>Machine</span><span style={hdr}>CPU</span><span style={hdr}>RAM</span><span style={{...hdr,textAlign:'right'}}>Temp</span></div>
                             <div style={{display:'flex',flexDirection:'column'}}>
                               {up.map((s,i)=>(
@@ -1840,6 +1841,13 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
                                   <span style={{width:8,height:8,borderRadius:'50%',background:D.t4}}/>
                                   <span style={{fontSize:isTV?17:15,fontWeight:600,color:D.t4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name}</span>
                                   <span style={{fontFamily:FONT_MONO,fontSize:13,color:D.t4}}>off</span>
+                                </div>
+                              ))}
+                              {svcDown.map(x=>(
+                                <div key={'svc-'+x.name} style={{display:'grid',gridTemplateColumns:'14px minmax(0,1fr) auto',alignItems:'center',gap:16,padding:isTV?'11px 0':'8px 0',borderTop:`1px solid ${D.sep}`}}>
+                                  <span style={{width:8,height:8,borderRadius:'50%',background:A.red}}/>
+                                  <span style={{fontSize:isTV?17:15,fontWeight:600,color:D.t1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.name}</span>
+                                  <span style={{fontFamily:FONT_MONO,fontSize:13,color:A.red}}>down now</span>
                                 </div>
                               ))}
                             </div>

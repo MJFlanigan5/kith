@@ -3787,7 +3787,29 @@ app.post('/api/email/inbound', inboundRateLimit, async (req, res) => {
 
 app.get('/api/packages', requireAuth, (req, res) => {
   const rows = db.prepare("SELECT * FROM packages WHERE delivered=0 ORDER BY created_at DESC").all();
-  res.json(rows);
+  res.json(rows.map(r => ({ ...r, photo_url: r.photo_entity ? `/api/packages/${r.id}/photo?mt=${MEDIA_TOKEN}` : '' })));
+});
+
+// HA-tracked packages delivered today, with their delivery photos (Packages screen only).
+app.get('/api/packages/delivered-today', requireAuth, (req, res) => {
+  const rows = db.prepare("SELECT * FROM packages WHERE source='ha' AND delivered=1 AND status='Delivered' AND expected_date=? ORDER BY id DESC").all(localDate());
+  res.json(rows.map(r => ({ ...r, photo_url: r.photo_entity ? `/api/packages/${r.id}/photo?mt=${MEDIA_TOKEN}` : '' })));
+});
+
+// Delivery photo from Home Assistant (Amazon parcel integration's image entity), proxied so the
+// HA token never reaches the browser. An <img> can't send a login header, hence the media token.
+app.get('/api/packages/:id/photo', async (req, res) => {
+  if (!safeCompare(req.query.mt || '', MEDIA_TOKEN)) return res.status(401).end();
+  const row = db.prepare('SELECT photo_entity FROM packages WHERE id=?').get(Number(req.params.id));
+  const haUrl = (gs('ha_url') || '').replace(/\/$/, ''); const haToken = gs('ha_token') || '';
+  if (!row?.photo_entity || !/^image\.[a-z0-9_]+$/.test(row.photo_entity) || !haUrl || !haToken) return res.status(404).end();
+  try {
+    const r = await fetch(`${haUrl}/api/image_proxy/${row.photo_entity}`, { headers: { Authorization: `Bearer ${haToken}` }, signal: AbortSignal.timeout(15000) });
+    if (!r.ok) return res.status(r.status).end();
+    res.set('Content-Type', r.headers.get('content-type') || 'image/jpeg');
+    res.set('Cache-Control', 'private, max-age=3600');
+    res.send(Buffer.from(await r.arrayBuffer()));
+  } catch { res.status(502).end(); }
 });
 
 app.post('/api/packages', requireAuth, (req, res) => {
@@ -5498,6 +5520,8 @@ function detectCarrierFromTracking(trackingNumber) {
 // Dedup helpers — called from webhook, pollImap, and scanImap30Days
 function upsertPackage(pkg, subject) {
   const carrier = (pkg.carrier && pkg.carrier !== 'other') ? pkg.carrier : (detectCarrierFromTracking(pkg.tracking_number) || pkg.carrier || '');
+  // Amazon and USPS come from Home Assistant while it's reporting them; their emails are skipped.
+  if (haCarrierLive(carrier)) return false;
   if (pkg.tracking_number) {
     const byTracking = db.prepare('SELECT id FROM packages WHERE tracking_number=?').get(pkg.tracking_number);
     if (byTracking) return false;
@@ -5539,7 +5563,56 @@ function insertBill(bill) {
   return true;
 }
 
-// Undelivered packages whose subject shares item text or an order number (see package-match.js)
+// ── Home Assistant parcels ───────────────────────────────────────────────────
+// Mike 2026-11-22: Amazon and USPS packages come from HA's parcel integrations (Amazon orders,
+// USPS Informed Delivery), not from reading emails. Every parcel sensor HA has is one row,
+// keyed by tracking number. FedEx/UPS and anything else still come from email.
+const HA_CARRIERS = ['Amazon', 'USPS'];
+const haCarrierSeen = {}; // carrier -> ms of the last sync where its HA summary sensor was working
+function haCarrierLive(carrier) {
+  const c = HA_CARRIERS.find(x => x.toLowerCase() === String(carrier || '').toLowerCase());
+  return !!c && Date.now() - (haCarrierSeen[c] || 0) < 2 * 3600 * 1000;
+}
+
+async function syncHaParcels() {
+  const haUrl = (gs('ha_url') || '').replace(/\/$/, ''); const haToken = gs('ha_token') || '';
+  if (!haUrl || !haToken) return;
+  const r = await fetch(`${haUrl}/api/states`, { headers: { Authorization: `Bearer ${haToken}` }, signal: AbortSignal.timeout(20000) });
+  if (!r.ok) throw new Error(`HA states HTTP ${r.status}`);
+  const states = await r.json();
+  for (const s of states) {
+    // Summary sensor per integration, e.g. sensor.amazon_..._incoming_parcels ("Data provided by Amazon")
+    if (!s.entity_id.startsWith('sensor.') || !s.entity_id.endsWith('_incoming_parcels') || isNaN(Number(s.state))) continue;
+    const c = HA_CARRIERS.find(x => String(s.attributes?.attribution || '').includes(x));
+    if (c) haCarrierSeen[c] = Date.now();
+  }
+  const parcels = states.filter(s => s.entity_id.startsWith('sensor.') && s.attributes?.barcode && s.attributes?.raw
+    && HA_CARRIERS.includes(s.attributes.carrier));
+  const find = db.prepare('SELECT id, delivered FROM packages WHERE tracking_number=? ORDER BY id DESC');
+  const upd = db.prepare("UPDATE packages SET carrier=?, description=?, expected_date=?, status=?, delivered=?, source='ha', track_url=?, photo_entity=? WHERE id=?");
+  const ins = db.prepare("INSERT INTO packages (carrier,tracking_number,description,expected_date,status,delivered,source_subject,source,track_url,photo_entity) VALUES (?,?,?,?,?,0,'','ha',?,?)");
+  let changed = 0;
+  db.transaction(() => {
+    for (const s of parcels) {
+      const a = s.attributes, raw = a.raw || {};
+      const items = Array.isArray(raw.items) ? raw.items.filter(Boolean) : [];
+      const desc = items.length ? items.join(', ') : (raw.shipperName || `${a.carrier} package`);
+      const delivered = a.delivered ? 1 : 0;
+      const date = String((delivered && a.delivered_at) || a.planned_from || raw.deliveryInfo?.deliveryDate || '').slice(0, 10);
+      const status = delivered ? 'Delivered' : (a.raw_status || a.status || '');
+      const photo = raw.delivery_photo_entity_id || '';
+      const row = find.get(a.barcode);
+      if (row) changed += upd.run(a.carrier, desc, date, status, delivered || row.delivered, a.url || '', photo, row.id).changes;
+      else if (!delivered) { ins.run(a.carrier, a.barcode, desc, date, status, a.url || '', photo); changed++; }
+    }
+    // Email rows for carriers HA now reports would show twice; close them.
+    for (const c of HA_CARRIERS) if (haCarrierLive(c))
+      changed += db.prepare("UPDATE packages SET delivered=1, status='Duplicate' WHERE delivered=0 AND source='email' AND lower(carrier)=lower(?)").run(c).changes;
+  })();
+  if (changed) broadcastSSE('packages', { action: 'reload' });
+}
+function runHaParcelSync() { syncHaParcels().catch(e => console.error('[packages] HA sync failed:', e.message)); }
+
 // `before` (optional, 'YYYY-MM-DD HH:MM:SS'): only packages added by then, so an old
 // delivery email can't close a newer order of the same item.
 function undeliveredMatching(subject, before) {
@@ -6002,6 +6075,7 @@ app.use((err, req, res, next) => {
 });
 
 try { reconcileDeliveredPackages(); } catch (err) { console.error('[packages] reconcile failed:', err.message); }
+runHaParcelSync(); setInterval(runHaParcelSync, 10 * 60 * 1000);
 try { reconcileBillPayments(); } catch (err) { console.error('[bills] reconcile failed:', err.message); }
 // Names saved from web pages and emails sometimes kept HTML codes ("Trap &amp; Bucket").
 try {

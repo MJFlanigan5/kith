@@ -6392,6 +6392,8 @@ function PackagesScreen({packages,setPackages,toastAdd}){
   const [drawerOpen,setDrawerOpen]=useState(false);
   const [editPkg,setEditPkg]=useState(null);
   const [form,setForm]=useState({carrier:'',tracking_number:'',description:'',expected_date:''});
+  const [deliveredToday,setDeliveredToday]=useState([]);
+  useEffect(()=>{api.get('/api/packages/delivered-today').then(d=>{if(Array.isArray(d))setDeliveredToday(d);}).catch(()=>{});},[packages]);
 
   const markDelivered=async id=>{
     const r=await api.put(`/api/packages/${id}/delivered`,{}).catch(()=>null);
@@ -6429,7 +6431,7 @@ function PackagesScreen({packages,setPackages,toastAdd}){
       <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:24}}>
         <div>
           <h1 style={{fontSize:isMobile?34:44,fontWeight:800,letterSpacing:'-.05em',lineHeight:1.05}}>Packages</h1>
-          <p style={{color:A.label4,fontSize:15,marginTop:6}}>Detected from shipping emails · shows on wall display</p>
+          <p style={{color:A.label4,fontSize:15,marginTop:6}}>Amazon and USPS from Home Assistant, others from shipping emails · shows on wall display</p>
         </div>
         <Btn onClick={openNew}>+ Add</Btn>
       </div>
@@ -6448,6 +6450,8 @@ function PackagesScreen({packages,setPackages,toastAdd}){
                   <div style={{fontSize:16,fontWeight:600,color:A.label1,lineHeight:1.3}}>{pkg.description||'Package'}</div>
                   {pkg.tracking_number&&<div style={{fontSize:12,color:A.label4,fontFamily:'monospace',marginTop:4}}>{pkg.tracking_number}</div>}
                   {pkg.expected_date&&<div style={{fontSize:13,color:A.label3,marginTop:4}}>Arriving {pkg.expected_date}</div>}
+                  {pkg.source==='ha'&&pkg.status&&<div style={{fontSize:13,color:A.label3,marginTop:4}}>{pkg.status}</div>}
+                  {pkg.track_url&&<a href={pkg.track_url} target="_blank" rel="noopener noreferrer" style={{display:'inline-block',fontSize:13,color:A.blue,marginTop:6,fontWeight:500}}>Track</a>}
                 </div>
                 <div style={{display:'flex',flexDirection:'column',gap:6,flexShrink:0}}>
                   <button onClick={()=>markDelivered(pkg.id)} style={{background:A.green,border:'none',color:'#fff',fontSize:12,fontWeight:600,borderRadius:A.rXs,padding:'6px 12px',cursor:'pointer'}}>Delivered</button>
@@ -6457,6 +6461,20 @@ function PackagesScreen({packages,setPackages,toastAdd}){
               </div>
             </Card>
           ))}
+        </div>
+      )}
+      {deliveredToday.length>0&&(
+        <div style={{marginTop:28}}>
+          <div style={{fontSize:13,fontWeight:700,color:A.label4,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:10}}>Delivered today</div>
+          <div style={{display:'flex',flexDirection:'column',gap:12}}>
+            {deliveredToday.map(pkg=>(
+              <Card key={pkg.id} style={{padding:'18px 20px'}}>
+                {pkg.carrier&&<div style={{fontSize:11,fontWeight:700,color:A.green,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:4}}>{pkg.carrier}</div>}
+                <div style={{fontSize:16,fontWeight:600,color:A.label1,lineHeight:1.3}}>{pkg.description||'Package'}</div>
+                {pkg.photo_url&&<img src={pkg.photo_url} alt="Delivery photo" style={{display:'block',marginTop:10,maxWidth:260,borderRadius:A.rXs}}/>}
+              </Card>
+            ))}
+          </div>
         </div>
       )}
       <Drawer open={drawerOpen} onClose={()=>{setDrawerOpen(false);setEditPkg(null);setForm({carrier:'',tracking_number:'',description:'',expected_date:''});}} title={editPkg?'Edit Package':'Add Package'}>

@@ -280,6 +280,10 @@ CREATE TABLE IF NOT EXISTS vehicle_services (
 
 // migrations — safe to run on every boot
 try { db.exec('ALTER TABLE events ADD COLUMN member_id INTEGER'); } catch {}
+// Packages synced from Home Assistant parcel integrations (Amazon, USPS) carry source 'ha'
+try { db.exec("ALTER TABLE packages ADD COLUMN source TEXT DEFAULT 'email'"); } catch {}
+try { db.exec("ALTER TABLE packages ADD COLUMN track_url TEXT DEFAULT ''"); } catch {}
+try { db.exec("ALTER TABLE packages ADD COLUMN photo_entity TEXT DEFAULT ''"); } catch {}
 try { db.exec('ALTER TABLE bills ADD COLUMN autopay INTEGER DEFAULT 0'); } catch {}
 try { db.exec("ALTER TABLE family_members ADD COLUMN birthday TEXT DEFAULT ''"); } catch {}
 try { db.exec(`ALTER TABLE events ADD COLUMN end_time TEXT DEFAULT ''`); } catch {}

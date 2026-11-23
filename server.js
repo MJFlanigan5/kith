@@ -406,6 +406,20 @@ function computeNextDue(recurrence, fromDate) {
   // advance from their scheduled date rather than from now.
   const d = new Date((fromDate || localDate()) + 'T12:00:00Z');
   const step = n => d.setUTCDate(d.getUTCDate() + n);
+  // "Every 3 months", "Every 4 months (Sat)", "Every 10 days", "Twice a year",
+  // "Quarterly": chores made through the API (calendar import, MCP) use these,
+  // and they used to fall through to +7 days (2026-11-23).
+  const every = /^Every (\d+) (day|week|month|year)s?\b/i.exec(recurrence);
+  const months = every && /month/i.test(every[2]) ? +every[1] : /^Twice a year/i.test(recurrence) ? 6 : /^Quarterly/i.test(recurrence) ? 3 : 0;
+  if (every || months) {
+    if (months) for (let i = 0; i < months; i++) addMonths(d);
+    else if (/year/i.test(every[2])) d.setUTCFullYear(d.getUTCFullYear() + +every[1]);
+    else step(+every[1] * (/week/i.test(every[2]) ? 7 : 1));
+    const wd = /\(([A-Za-z]{3})\)/.exec(recurrence);
+    const target = wd ? WEEKLY_DAY_INDEX[wd[1]] : undefined;
+    if (target !== undefined) while (d.getUTCDay() !== target) step(1);
+    return d.toISOString().slice(0, 10);
+  }
   if (recurrence.startsWith('Daily'))       step(1);
   else if (recurrence.startsWith('Bi-w'))   step(14);
   else if (recurrence.startsWith('Month'))  addMonths(d);

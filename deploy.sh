@@ -29,8 +29,8 @@ fi
 
 echo "==> Syncing secret to Cloudflare Worker..."
 cd "$SCRIPT_DIR/email-worker"
-echo "$SECRET" | npx wrangler secret put HEARTH_WEBHOOK_SECRET --non-interactive 2>/dev/null \
-  || printf '%s' "$SECRET" | npx wrangler secret put HEARTH_WEBHOOK_SECRET
+echo "$SECRET" | npx wrangler secret put KITH_WEBHOOK_SECRET --non-interactive 2>/dev/null \
+  || printf '%s' "$SECRET" | npx wrangler secret put KITH_WEBHOOK_SECRET
 
 echo "==> Deploying email worker..."
 npx wrangler deploy

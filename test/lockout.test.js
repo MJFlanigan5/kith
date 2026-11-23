@@ -33,7 +33,7 @@ async function newMember(name, pin) {
 }
 
 before(async () => {
-  server = spawn('node', ['server.js'], { env: { ...process.env, PORT, DATA_DIR }, cwd: path.join(__dirname, '..') });
+  server = spawn('node', ['server.js'], { env: { ...process.env, PORT, DATA_DIR, AUTH_SOCKET_LIMIT: '100000' /* tests fake many client IPs from one socket */ }, cwd: path.join(__dirname, '..') });
   server.stdout.on('data', d => log += d); server.stderr.on('data', d => log += d);
   for (let i = 0; i < 50; i++) { try { await fetch(BASE + '/api/auth/setup-status'); break; } catch { await new Promise(r => setTimeout(r, 200)); } }
   assert.equal((await api('POST', '/api/auth/setup', { pin: '1234' })).status, 400, 'admin PIN under 6 digits must be refused');

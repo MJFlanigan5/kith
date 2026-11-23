@@ -102,15 +102,23 @@ function getAdminPinVersion() {
   return v ? parseInt(v, 10) : 1;
 }
 
+// A login token (not a photo token) that is still current: an admin token
+// from before the last admin PIN change, or a member token for a member who
+// has since been deleted, no longer counts (2026-11-23 review).
+function verifyLogin(token) {
+  const user = jwt.verify(token, getJwtSecret());
+  if (user.typ === 'photo') throw new Error('photo token is not a login token');
+  if (user.role === 'admin' && (user.pv || 1) !== getAdminPinVersion()) throw new Error('old admin token');
+  if (user.role === 'member' && !db.prepare('SELECT 1 FROM family_members WHERE id=?').get(user.sub)) throw new Error('member removed');
+  return user;
+}
+
 function requireAuth(req, res, next) {
   const token = (req.headers.authorization || '').replace('Bearer ', '');
   if (!token) return res.status(401).json({ error: 'Authentication required' });
-  try {
-    const user = jwt.verify(token, getJwtSecret());
-    if (user.typ === 'photo') throw new Error('photo token is not a login token');
-    req.user = user; next();
-  }
-  catch { res.status(401).json({ error: 'Invalid or expired token' }); }
+  try { req.user = verifyLogin(token); }
+  catch { return res.status(401).json({ error: 'Invalid or expired token' }); }
+  next();
 }
 
 function requireAdmin(req, res, next) {
@@ -132,16 +140,27 @@ function safeCompare(a, b) {
   return timingSafeEqual(ha, hb);
 }
 
-// Rate limiter for PIN-based auth endpoints (10 attempts/ip/min, sliding window)
+// Rate limiter for PIN-based auth endpoints (10 attempts/ip/min, sliding window).
+// req.ip comes from X-Forwarded-For (trust proxy 1), which anyone reaching port
+// 7400 directly can make up, so the machine actually connecting is also capped
+// at 50/min (all tunnel visitors share that one). Old entries are pruned so the
+// map can't grow without bound (2026-11-23 review).
 const _authAttempts = new Map();
-function authRateLimit(req, res, next) {
-  const ip = req.ip || 'unknown';
-  const now = Date.now();
-  const window = 60_000;
-  const timestamps = (_authAttempts.get(ip) || []).filter(t => now - t < window);
+function _hit(key, limit, now) {
+  const timestamps = (_authAttempts.get(key) || []).filter(t => now - t < 60_000);
   timestamps.push(now);
-  _authAttempts.set(ip, timestamps);
-  if (timestamps.length > 10) return res.status(429).json({ error: 'Too many attempts' });
+  _authAttempts.set(key, timestamps);
+  return timestamps.length > limit;
+}
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, ts] of _authAttempts) if (!ts.some(t => now - t < 60_000)) _authAttempts.delete(k);
+}, 5 * 60_000).unref();
+function authRateLimit(req, res, next) {
+  const now = Date.now();
+  const overIp = _hit('ip:' + (req.ip || 'unknown'), 10, now);
+  const overSock = _hit('sock:' + (req.socket.remoteAddress || 'unknown'), Number(process.env.AUTH_SOCKET_LIMIT) || 50, now);
+  if (overIp || overSock) return res.status(429).json({ error: 'Too many attempts' });
   next();
 }
 
@@ -371,11 +390,13 @@ const _updateChoreStatusesTx = db.transaction(() => {
 function updateChoreStatuses() { _updateChoreStatusesTx(); }
 updateChoreStatuses();
 
+// Date math on calendar days at UTC noon, so the host clock's timezone (Docker
+// sets TZ, the LXC installer doesn't) can never shift a due date by a day.
 function addMonths(d) {
-  const day = d.getDate();
-  d.setDate(1);
-  d.setMonth(d.getMonth() + 1);
-  d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()));
+  const day = d.getUTCDate();
+  d.setUTCDate(1);
+  d.setUTCMonth(d.getUTCMonth() + 1);
+  d.setUTCDate(Math.min(day, new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate()));
 }
 
 const WEEKLY_DAY_INDEX = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
@@ -383,15 +404,15 @@ const WEEKLY_DAY_INDEX = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 
 function computeNextDue(recurrence, fromDate) {
   // Use fromDate (chore's current next_due) as base so missed chores
   // advance from their scheduled date rather than from now.
-  const base = fromDate ? new Date(fromDate + 'T00:00:00') : new Date();
-  const d = new Date(base.getTime());
-  if (recurrence.startsWith('Daily'))       d.setDate(d.getDate() + 1);
-  else if (recurrence.startsWith('Bi-w'))   d.setDate(d.getDate() + 14);
+  const d = new Date((fromDate || localDate()) + 'T12:00:00Z');
+  const step = n => d.setUTCDate(d.getUTCDate() + n);
+  if (recurrence.startsWith('Daily'))       step(1);
+  else if (recurrence.startsWith('Bi-w'))   step(14);
   else if (recurrence.startsWith('Month'))  addMonths(d);
-  else if (recurrence.startsWith('Annual')) d.setFullYear(d.getFullYear() + 1);
+  else if (recurrence.startsWith('Annual')) d.setUTCFullYear(d.getUTCFullYear() + 1);
   else if (recurrence.startsWith('Weekday')) {
-    d.setDate(d.getDate() + 1);
-    while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
+    step(1);
+    while (d.getUTCDay() === 0 || d.getUTCDay() === 6) step(1);
   } else if (recurrence === 'One-time') return '9999-12-31';
   else {
     // Weekly — advance to the next occurrence of the chore's intended weekday
@@ -400,13 +421,13 @@ function computeNextDue(recurrence, fromDate) {
     const m = recurrence.match(/Weekly \(([A-Za-z]{3})\)/);
     const targetDay = m ? WEEKLY_DAY_INDEX[m[1]] : undefined;
     if (targetDay !== undefined) {
-      d.setDate(d.getDate() + 1);
-      while (d.getDay() !== targetDay) d.setDate(d.getDate() + 1);
+      step(1);
+      while (d.getUTCDay() !== targetDay) step(1);
     } else {
-      d.setDate(d.getDate() + 7);
+      step(7);
     }
   }
-  return localDate(d);
+  return d.toISOString().slice(0, 10);
 }
 
 // ── Push helper ───────────────────────────────────────────────────────────────
@@ -874,6 +895,9 @@ app.put('/api/chores/:id/done', requireAuth, (req, res) => {
   const done = isRecurring ? 1 : (c.done ? 0 : 1);
   const todayISO = localDate();
   const todayDisplay = new Date().toLocaleDateString('en-US', { month:'short', day:'numeric', timeZone: getTimezone() });
+  // A recurring chore counts once a day: tapping Done again the same day used
+  // to log another completion (and points) and push the due date further out.
+  if (isRecurring && c.last_done === todayDisplay) return res.status(409).json({ error: 'Already done today' });
   const nextDue = done ? computeNextDue(c.recurrence, c.next_due) : todayISO;
   const lastDone = done ? todayDisplay : c.last_done;
   const newStreak = done ? (c.streak || 0) + 1 : Math.max(0, (c.streak || 0) - 1);
@@ -1366,9 +1390,12 @@ app.post('/api/push/pantry-photo-prompt', requireAuth, async (req, res) => {
 
 // ── Routes: Settings ──────────────────────────────────────────────────────────
 const SETTINGS_SENSITIVE = new Set(['email_webhook_secret','anthropic_api_key','ai_api_key','beehiiv_api_key','youtube_api_key','etsy_api_key','teslemetry_api_key','aviationstack_api_key','lastfm_api_key','nextdns_api_key','beszel_user','beszel_pass','jwt_secret','vapid_public','vapid_private','admin_pin_hash','resend_api_key','ha_webhook_secret','smart_home_token','ha_token','homey_token','plex_token','spotify_refresh_token','moen_pass','unifi_pass','wifi_password','smtp_pass','imap_pass','smtp_user','imap_user']);
+// Readable by the admin (shown on the admin page) but not by every member.
+const SETTINGS_ADMIN_ONLY = new Set(['ics_export_token', 'email_unsubscribe_token']);
 app.get('/api/settings', requireAuth, (req, res) => {
   const rows = db.prepare('SELECT key,value FROM settings').all();
-  res.json(Object.fromEntries(rows.filter(r=>!SETTINGS_SENSITIVE.has(r.key)).map(r=>[r.key,r.value])));
+  const admin = req.user.role === 'admin';
+  res.json(Object.fromEntries(rows.filter(r=>!SETTINGS_SENSITIVE.has(r.key) && (admin || !SETTINGS_ADMIN_ONLY.has(r.key))).map(r=>[r.key,r.value])));
 });
 
 app.put('/api/settings', requireAdmin, (req, res) => {
@@ -1817,7 +1844,8 @@ app.get('/api/members/public', (req, res) => {
 });
 
 app.get('/api/members', requireAuth, (req, res) => {
-  res.json(db.prepare('SELECT * FROM family_members ORDER BY created_at').all());
+  // Never send PIN hashes: a 4-digit PIN cracks offline in minutes.
+  res.json(db.prepare('SELECT * FROM family_members ORDER BY created_at').all().map(({ pin_hash, ...m }) => m));
 });
 
 app.put('/api/members/:id/pin', requireAdmin, async (req, res) => {
@@ -1879,7 +1907,8 @@ app.put('/api/members/:id', requireAdmin, (req, res) => {
       ins.run(`${name}'s Birthday`, localDate(d), 'All day', color, 'birthday', m.id, 'kith', '1h', 'Annually');
     }
   }
-  res.json(db.prepare('SELECT * FROM family_members WHERE id=?').get(m.id));
+  const { pin_hash, ...row } = db.prepare('SELECT * FROM family_members WHERE id=?').get(m.id);
+  res.json(row);
 });
 
 app.put('/api/members/:id/goal', requireAdmin, (req, res) => {
@@ -2027,7 +2056,7 @@ app.delete('/api/polls/:id', requireAdmin, (req, res) => {
 app.get('/api/events/stream', (req, res) => {
   const token = req.query.token || (req.headers.authorization || '').replace('Bearer ', '');
   if (!token) return res.status(401).end();
-  try { if (jwt.verify(token, getJwtSecret()).typ === 'photo') throw new Error('photo token'); }
+  try { verifyLogin(token); }
   catch { return res.status(401).end(); }
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -3426,7 +3455,7 @@ app.post('/api/documents', requireAdmin, async (req, res) => {
   if (!title?.trim() || !filename || !data?.startsWith('data:')) return res.status(400).json({ error: 'title, filename, and file data required' });
   const mime_type = data.slice(5, data.indexOf(';')) || 'application/octet-stream';
   const ext = (filename.split('.').pop() || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '') || 'bin';
-  const safe = `${Date.now()}.${ext}`;
+  const safe = `${require('crypto').randomUUID()}.${ext}`; // two uploads in the same ms used to collide
   try {
     await fs.promises.writeFile(path.join(DOCS_DIR, safe), Buffer.from(data.split(',')[1], 'base64'));
     const r = db.prepare('INSERT INTO documents (title, category, member_id, filename, mime_type) VALUES (?,?,?,?,?)')
@@ -3442,8 +3471,13 @@ app.get('/api/documents/:id/file', requireAuth, (req, res) => {
   if (!doc) return res.status(404).json({ error: 'not found' });
   const filePath = path.join(DOCS_DIR, doc.filename);
   if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'file missing' });
-  res.setHeader('Content-Type', doc.mime_type || 'application/octet-stream');
-  res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(doc.title)}"`);
+  // The type was whatever the uploader claimed, so only known-safe types open
+  // in the browser; anything else (HTML, SVG, scripts) downloads instead of
+  // running on the Kith site.
+  const inlineOk = /^(application\/pdf|image\/(png|jpeg|gif|webp|heic)|text\/plain)$/.test(doc.mime_type || '');
+  res.setHeader('Content-Type', inlineOk ? doc.mime_type : 'application/octet-stream');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Content-Disposition', `${inlineOk ? 'inline' : 'attachment'}; filename="${encodeURIComponent(doc.title)}"`);
   res.sendFile(filePath);
 });
 
@@ -3617,9 +3651,33 @@ async function callAiForPantryPhotos(imagesBase64, mimeType) {
   } catch (e) { console.warn('[ai] pantry photo parse failed:', e.message); return []; }
 }
 
+// Fetch a URL a member typed in, refusing anything that resolves to the home
+// network or the host itself (Home Assistant, the router, Docker). Redirects
+// are followed by hand so each hop is checked too (2026-11-23 review).
+const _blocked = new (require('net').BlockList)();
+for (const [a, n] of [['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8], ['169.254.0.0', 16], ['172.16.0.0', 12], ['192.168.0.0', 16], ['224.0.0.0', 3]]) _blocked.addSubnet(a, n, 'ipv4');
+for (const [a, n] of [['::', 128], ['::1', 128], ['fc00::', 7], ['fe80::', 10], ['ff00::', 8], ['64:ff9b::', 96]]) _blocked.addSubnet(a, n, 'ipv6');
+function _isBlockedIp(ip) {
+  const m = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(ip);
+  if (m) ip = m[1];
+  return _blocked.check(ip, require('net').isIPv6(ip) ? 'ipv6' : 'ipv4');
+}
+async function publicFetch(url, opts = {}, hops = 3) {
+  const u = new URL(url);
+  if (!/^https?:$/.test(u.protocol)) throw new Error('only http(s) URLs');
+  const addrs = await require('dns').promises.lookup(u.hostname.replace(/^\[|\]$/g, ''), { all: true });
+  if (!addrs.length || addrs.some(a => _isBlockedIp(a.address))) throw new Error('URL points at a private address');
+  const res = await fetch(u, { ...opts, redirect: 'manual' });
+  if (res.status >= 300 && res.status < 400 && res.headers.get('location')) {
+    if (hops <= 0) throw new Error('too many redirects');
+    return publicFetch(new URL(res.headers.get('location'), u).href, opts, hops - 1);
+  }
+  return res;
+}
+
 async function checkWishlistPrice(url) {
   try {
-    const res = await fetch(url, {
+    const res = await publicFetch(url, {
       headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36' },
       signal: AbortSignal.timeout(15000),
     });
@@ -4634,17 +4692,20 @@ app.post('/api/email/test', requireAdmin, async (req, res) => {
 
 app.get('/api/email/unsubscribe', (req, res) => {
   const stored = db.prepare("SELECT value FROM settings WHERE key='email_unsubscribe_token'").get()?.value;
-  if (!stored || req.query.t !== stored) {
+  if (!stored || !safeCompare(String(req.query.t || ''), stored)) {
     return res.status(400).send('<html><body style="font-family:sans-serif;padding:40px;text-align:center"><h2>Invalid link</h2><p>This unsubscribe link is not valid.</p></body></html>');
   }
   // Confirmation page — actual unsubscribe requires a POST to prevent link-scanner auto-trigger
   res.send(`<html><body style="font-family:-apple-system,sans-serif;padding:48px 24px;text-align:center;background:#f5f5f7"><div style="max-width:400px;margin:0 auto;background:#fff;border-radius:16px;padding:36px;box-shadow:0 2px 12px rgba(0,0,0,.08)"><h2 style="margin:0 0 12px;font-size:22px">Unsubscribe from Kith emails?</h2><p style="color:#666;margin:0 0 24px">You will no longer receive daily or weekly email reminders.</p><form method="POST" action="/api/email/unsubscribe"><input type="hidden" name="t" value="${req.query.t}"><button type="submit" style="background:#FF3B30;color:#fff;border:none;padding:12px 28px;border-radius:10px;font-size:15px;cursor:pointer">Yes, unsubscribe</button></form><p style="color:#999;font-size:13px;margin-top:16px">You can re-enable in Settings → Email Reminders.</p></div></body></html>`);
 });
 
-app.post('/api/email/unsubscribe', (req, res) => {
+// The confirmation page posts a plain HTML form, so this route needs the
+// urlencoded parser (only express.json() is global): without it every
+// "Yes, unsubscribe" click said "Invalid link".
+app.post('/api/email/unsubscribe', express.urlencoded({ extended: false, limit: '1kb' }), (req, res) => {
   const stored = db.prepare("SELECT value FROM settings WHERE key='email_unsubscribe_token'").get()?.value;
-  const t = req.body?.t || req.query.t;
-  if (!stored || t !== stored) {
+  const t = String(req.body?.t || req.query.t || '');
+  if (!stored || !safeCompare(t, stored)) {
     return res.status(400).send('<html><body style="font-family:sans-serif;padding:40px;text-align:center"><h2>Invalid link</h2><p>This unsubscribe link is not valid.</p></body></html>');
   }
   const upd = db.prepare('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)');

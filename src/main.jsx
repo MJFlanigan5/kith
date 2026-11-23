@@ -3039,7 +3039,7 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
     }
   };
   const deleteEvent=async(id,scope='one')=>{
-    const r=await api.del(`/api/events/${id}?scope=${scope}`).catch(()=>null);
+    const r=await api.del(`/api/events/${id}?scope=${scope}`).catch(e=>({error:e.message||'Failed'}));
     if(r?.error){toastAdd('Failed to delete event','red');return;}
     if(scope==='one') setEvents(p=>p.filter(e=>e.id!==id));
     else if(scope==='all'){ const ev=events.find(e=>e.id===id); const sid=String(ev?.external_id||id); setEvents(p=>p.filter(e=>String(e.id)!==sid&&String(e.external_id)!==sid)); }
@@ -3548,7 +3548,7 @@ function InboxScreen({toastAdd,events,setEvents,setInboxCount}){
     }catch(e){toastAdd('Failed to add event','red');}
   };
   const discard=async id=>{
-    const r=await api.del(`/api/inbox/${id}`).catch(()=>null);
+    const r=await api.del(`/api/inbox/${id}`).catch(e=>({error:e.message||'Failed'}));
     if(r?.error){toastAdd('Failed to discard','red');return;}
     setPending(p=>{const next=p.filter(i=>i.id!==id);setInboxCount(next.length);return next;});
     toastAdd('Discarded','blue');
@@ -3777,7 +3777,7 @@ function ChoresScreen({chores,setChores,goals=[],members=[],toastAdd}){
   };
 
   const deleteChore=async id=>{
-    const r=await api.del(`/api/chores/${id}`).catch(()=>null);
+    const r=await api.del(`/api/chores/${id}`).catch(e=>({error:e.message||'Failed'}));
     if(r?.error){toastAdd('Failed to delete','red');return;}
     setChores(p=>p.filter(c=>c.id!==id));
     toastAdd('Deleted','blue');
@@ -3797,7 +3797,7 @@ function ChoresScreen({chores,setChores,goals=[],members=[],toastAdd}){
         setPhotoChoreId(c.id);
         setPhotoFile(null);
       }
-    }catch{toastAdd('Failed to update','red');}
+    }catch(e){toastAdd(e.message||'Failed to update','red');}
     finally{_submitting.current.delete(c.id);}
   };
 
@@ -4784,14 +4784,14 @@ function SettingsScreen({pageList=[],hiddenPages,onTogglePage,toastAdd,icsSource
   };
 
   const removeIcsSource=async id=>{
-    const r=await api.del(`/api/ics/sources/${id}`).catch(()=>null);
+    const r=await api.del(`/api/ics/sources/${id}`).catch(e=>({error:e.message||'Failed'}));
     if(r?.error){toastAdd('Failed to remove','red');return;}
     setIcsSources(p=>p.filter(s=>s.id!==id));
     toastAdd('Calendar removed','blue');
   };
 
   const syncICS=async()=>{
-    const r=await api.post('/api/ics/sync').catch(()=>null);
+    const r=await api.post('/api/ics/sync').catch(e=>({error:e.message||'Failed'}));
     if(r?.error){toastAdd(r.error,'red');return;}
     toastAdd(`Synced ${r?.total_events??0} events`);
   };
@@ -5281,7 +5281,7 @@ function SettingsScreen({pageList=[],hiddenPages,onTogglePage,toastAdd,icsSource
               {photos.map(p=>(
                 <div key={p.id} style={{position:'relative',width:72,height:72,borderRadius:A.rXs,overflow:'hidden',flexShrink:0}}>
                   <PhotoImg filename={p.filename} style={{width:'100%',height:'100%',objectFit:'cover'}} alt=""/>
-                  <button onClick={async()=>{const r=await api.del(`/api/photos/${p.id}`).catch(()=>null);if(r?.error){toastAdd('Failed to remove','red');return;}setPhotos(pr=>pr.filter(x=>x.id!==p.id));toastAdd('Removed','blue');}} style={{position:'absolute',top:2,right:2,width:20,height:20,borderRadius:'50%',background:'rgba(0,0,0,0.55)',border:'none',color:'#fff',fontSize:13,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1}}>×</button>
+                  <button onClick={async()=>{const r=await api.del(`/api/photos/${p.id}`).catch(e=>({error:e.message||'Failed'}));if(r?.error){toastAdd('Failed to remove','red');return;}setPhotos(pr=>pr.filter(x=>x.id!==p.id));toastAdd('Removed','blue');}} style={{position:'absolute',top:2,right:2,width:20,height:20,borderRadius:'50%',background:'rgba(0,0,0,0.55)',border:'none',color:'#fff',fontSize:13,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1}}>×</button>
                 </div>
               ))}
             </div>
@@ -5346,7 +5346,7 @@ function SettingsScreen({pageList=[],hiddenPages,onTogglePage,toastAdd,icsSource
                     <div style={{fontSize:11,color:A.label5,fontFamily:'JetBrains Mono,monospace',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{action.method} {action.url}</div>
                   </div>
                   <button onClick={()=>{setQaEdit(action);setQaForm({label:action.label,icon:action.icon||'⚡',url:action.url,method:action.method||'POST',headers:action.headers||'',body:action.body||''});setQaDrawer(true);}} style={{background:'none',border:'none',color:A.blue,fontSize:13,cursor:'pointer',fontWeight:500}}>Edit</button>
-                  <button onClick={async()=>{const next=qaList.filter(a=>a.id!==action.id);const r=await api.put('/api/quick-actions',{actions:next}).catch(()=>null);if(r?.error){toastAdd('Failed to remove','red');return;}setQaList(next);if(setQuickActions)setQuickActions(next);toastAdd('Removed','blue');}} style={{background:'none',border:'none',color:A.red,fontSize:13,cursor:'pointer',fontWeight:500}}>Remove</button>
+                  <button onClick={async()=>{const next=qaList.filter(a=>a.id!==action.id);const r=await api.put('/api/quick-actions',{actions:next}).catch(e=>({error:e.message||'Failed'}));if(r?.error){toastAdd('Failed to remove','red');return;}setQaList(next);if(setQuickActions)setQuickActions(next);toastAdd('Removed','blue');}} style={{background:'none',border:'none',color:A.red,fontSize:13,cursor:'pointer',fontWeight:500}}>Remove</button>
                 </div>
               ))}
             </div>
@@ -5391,7 +5391,7 @@ function SettingsScreen({pageList=[],hiddenPages,onTogglePage,toastAdd,icsSource
               } else {
                 next=[...qaList,{id:Date.now().toString(36),...qaForm}];
               }
-              const r=await api.put('/api/quick-actions',{actions:next}).catch(()=>null);
+              const r=await api.put('/api/quick-actions',{actions:next}).catch(e=>({error:e.message||'Failed'}));
               if(r?.error){toastAdd(r.error||'Failed to save','red');return;}
               setQaList(next);
               if(setQuickActions) setQuickActions(next);
@@ -5917,7 +5917,7 @@ function BookmarksScreen({bookmarks,setBookmarks,toastAdd}){
     setDrawerOpen(false);setForm(blank);
   };
   const del=async id=>{
-    const r=await api.del(`/api/bookmarks/${id}`).catch(()=>null);
+    const r=await api.del(`/api/bookmarks/${id}`).catch(e=>({error:e.message||'Failed'}));
     if(r?.error){toastAdd('Failed to delete','red');return;}
     setBookmarks(p=>p.filter(b=>b.id!==id));
     toastAdd('Deleted','blue');
@@ -6030,7 +6030,7 @@ function NotesScreen({notes,setNotes,toastAdd}){
   };
 
   const del=async id=>{
-    const r=await api.del(`/api/notes/${id}`).catch(()=>null);
+    const r=await api.del(`/api/notes/${id}`).catch(e=>({error:e.message||'Failed'}));
     if(r?.error){toastAdd('Failed to delete','red');return;}
     setNotes(p=>p.filter(n=>n.id!==id));
     toastAdd('Deleted','blue');
@@ -6142,7 +6142,7 @@ function PollsScreen({polls,setPolls,toastAdd}){
   };
 
   const del=async id=>{
-    const r=await api.del(`/api/polls/${id}`).catch(()=>null);
+    const r=await api.del(`/api/polls/${id}`).catch(e=>({error:e.message||'Failed'}));
     if(r?.error){toastAdd('Failed to delete','red');return;}
     setPolls(p=>p.filter(x=>x.id!==id));
     toastAdd('Deleted','blue');
@@ -6260,7 +6260,7 @@ function GoalsScreen({goals,setGoals,toastAdd}){
   };
 
   const del=async id=>{
-    const r=await api.del(`/api/goals/${id}`).catch(()=>null);
+    const r=await api.del(`/api/goals/${id}`).catch(e=>({error:e.message||'Failed'}));
     if(r?.error){toastAdd('Failed to delete','red');return;}
     setGoals(p=>p.filter(g=>g.id!==id));
     toastAdd('Deleted','blue');
@@ -6396,14 +6396,14 @@ function PackagesScreen({packages,setPackages,toastAdd}){
   useEffect(()=>{api.get('/api/packages/delivered-today').then(d=>{if(Array.isArray(d))setDeliveredToday(d);}).catch(()=>{});},[packages]);
 
   const markDelivered=async id=>{
-    const r=await api.put(`/api/packages/${id}/delivered`,{}).catch(()=>null);
+    const r=await api.put(`/api/packages/${id}/delivered`,{}).catch(e=>({error:e.message||'Failed'}));
     if(r?.error){toastAdd(r.error,'red');return;}
     setPackages(p=>p.filter(x=>x.id!==id));
     toastAdd('Marked as delivered');
   };
 
   const del=async id=>{
-    const r=await api.del(`/api/packages/${id}`).catch(()=>null);
+    const r=await api.del(`/api/packages/${id}`).catch(e=>({error:e.message||'Failed'}));
     if(r?.error){toastAdd('Failed to delete','red');return;}
     setPackages(p=>p.filter(x=>x.id!==id));
     toastAdd('Removed','blue');
@@ -6414,7 +6414,7 @@ function PackagesScreen({packages,setPackages,toastAdd}){
     if(editPkg){
       const r=await api.put(`/api/packages/${editPkg.id}`,form).catch(()=>null);
       if(!r?.id){toastAdd(r?.error||'Failed to save','red');return;}
-      setPackages(p=>p.map(x=>x.id===r.id?r:x));
+      setPackages(p=>p.map(x=>x.id===r.id?{...x,...r,photo_url:x.photo_url}:x));
     }else{
       const r=await api.post('/api/packages',form).catch(()=>null);
       if(!r?.id){toastAdd(r?.error||'Failed to save','red');return;}
@@ -6514,7 +6514,7 @@ function MessagesScreen({messages,setMessages,members=[],toastAdd}){
   };
 
   const del=async id=>{
-    const r=await api.del(`/api/messages/${id}`).catch(()=>null);
+    const r=await api.del(`/api/messages/${id}`).catch(e=>({error:e.message||'Failed'}));
     if(r?.error){toastAdd('Failed to delete','red');return;}
     setMessages(p=>p.filter(m=>m.id!==id));
     toastAdd('Deleted','blue');
@@ -6643,7 +6643,7 @@ function VehiclesScreen({vehicles,setVehicles,toastAdd}){
   };
 
   const delMileage=async(vid,mid)=>{
-    const r=await api.del(`/api/vehicles/${vid}/mileage/${mid}`).catch(()=>null);
+    const r=await api.del(`/api/vehicles/${vid}/mileage/${mid}`).catch(e=>({error:e.message||'Failed'}));
     if(r?.error){toastAdd('Failed to delete','red');return;}
     setMileageLogs(p=>({...p,[vid]:(p[vid]||[]).filter(x=>x.id!==mid)}));
   };
@@ -7103,14 +7103,14 @@ function BillsScreen({bills,setBills,payments,setPayments,toastAdd}){
     const period=getPeriod(b);
     if(isPaid(b)){
       setPayments(p=>p.filter(x=>!(x.bill_id===b.id&&x.period===period)));
-      const r=await api.del(`/api/bills/${b.id}/pay/${period}`).catch(()=>null);
+      const r=await api.del(`/api/bills/${b.id}/pay/${period}`).catch(e=>({error:e.message||'Failed'}));
       if(r?.error){
         setPayments(p=>[...p,{bill_id:b.id,period,paid_at:new Date().toISOString()}]);
         toastAdd('Failed to update','red');
       }
     }else{
       setPayments(p=>[...p,{bill_id:b.id,period,paid_at:new Date().toISOString()}]);
-      const r=await api.post(`/api/bills/${b.id}/pay`,{period}).catch(()=>null);
+      const r=await api.post(`/api/bills/${b.id}/pay`,{period}).catch(e=>({error:e.message||'Failed'}));
       if(r?.error){
         setPayments(p=>p.filter(x=>!(x.bill_id===b.id&&x.period===period)));
         toastAdd('Failed to update','red');
@@ -7282,7 +7282,7 @@ function BudgetScreen({budget,setBudget,toastAdd}){
   };
 
   const delEntry=async id=>{
-    const r=await api.del(`/api/budget/entries/${id}`).catch(()=>null);
+    const r=await api.del(`/api/budget/entries/${id}`).catch(e=>({error:e.message||'Failed'}));
     if(r?.error){toastAdd('Failed','red');return;}
     setBudget(b=>({...b,entries:(b.entries||[]).filter(e=>e.id!==id)}));
   };
@@ -7303,7 +7303,7 @@ function BudgetScreen({budget,setBudget,toastAdd}){
   };
 
   const delCat=async id=>{
-    const r=await api.del(`/api/budget/categories/${id}`).catch(()=>null);
+    const r=await api.del(`/api/budget/categories/${id}`).catch(e=>({error:e.message||'Failed'}));
     if(r?.error){toastAdd('Failed','red');return;}
     setBudget(b=>({...b,categories:(b.categories||[]).filter(c=>c.id!==id),entries:(b.entries||[]).filter(e=>e.category_id!==id)}));
     setCatDrawer(false);setEditCat(null);
@@ -7548,7 +7548,7 @@ function RecipesScreen({recipes,setRecipes,toastAdd}){
   };
 
   const del=async id=>{
-    const r=await api.del(`/api/recipes/${id}`).catch(()=>null);
+    const r=await api.del(`/api/recipes/${id}`).catch(e=>({error:e.message||'Failed'}));
     if(r?.error){toastAdd('Delete failed','red');return;}
     setRecipes(p=>p.filter(x=>x.id!==id));
     setViewRecipe(null);
@@ -7703,7 +7703,7 @@ function ContactsScreen({contacts,setContacts,toastAdd}){
   };
 
   const del=async id=>{
-    const r=await api.del(`/api/contacts/${id}`).catch(()=>null);
+    const r=await api.del(`/api/contacts/${id}`).catch(e=>({error:e.message||'Failed'}));
     if(r?.error){toastAdd('Failed to remove','red');return;}
     setContacts(p=>p.filter(c=>c.id!==id));setDrawer(false);setEditContact(null);toastAdd('Removed','blue');
   };
@@ -7829,7 +7829,7 @@ function PetsScreen({pets,setPets,toastAdd}){
   };
 
   const delPet=async id=>{
-    const r=await api.del(`/api/pets/${id}`).catch(()=>null);
+    const r=await api.del(`/api/pets/${id}`).catch(e=>({error:e.message||'Failed'}));
     if(r?.error){toastAdd('Failed to remove','red');return;}
     setPets(p=>p.filter(v=>v.id!==id));
     setPDrawer(false);setEditPet(null);
@@ -7856,7 +7856,7 @@ function PetsScreen({pets,setPets,toastAdd}){
   };
 
   const delRec=async(pid,rid)=>{
-    const r=await api.del(`/api/pets/${pid}/records/${rid}`).catch(()=>null);
+    const r=await api.del(`/api/pets/${pid}/records/${rid}`).catch(e=>({error:e.message||'Failed'}));
     if(r?.error){toastAdd('Failed to remove','red');return;}
     setPets(p=>p.map(v=>v.id===pid?{...v,records:(v.records||[]).filter(x=>x.id!==rid)}:v));
     setRDrawer(false);setEditRec(null);
@@ -8019,7 +8019,7 @@ function HomeScreen({appliances,setAppliances,consumables,setConsumables,mainten
     toastAdd(editRepair?'Repair updated':'Repair added');
   };
   const delRepair=async id=>{
-    const r=await api.del(`/api/home/repairs/${id}`).catch(()=>null);
+    const r=await api.del(`/api/home/repairs/${id}`).catch(e=>({error:e.message||'Failed'}));
     if(r?.error){toastAdd('Failed to remove','red');return;}
     setRepairs(p=>p.filter(x=>x.id!==id));
     setRDrawer(false);setEditRepair(null);
@@ -8055,7 +8055,7 @@ function HomeScreen({appliances,setAppliances,consumables,setConsumables,mainten
   };
 
   const delAppl=async id=>{
-    const r=await api.del(`/api/home/appliances/${id}`).catch(()=>null);
+    const r=await api.del(`/api/home/appliances/${id}`).catch(e=>({error:e.message||'Failed'}));
     if(r?.error){toastAdd('Failed to remove','red');return;}
     setAppliances(p=>p.filter(a=>a.id!==id));
     setADrawer(false);setEditAppl(null);
@@ -8154,7 +8154,7 @@ function HomeScreen({appliances,setAppliances,consumables,setConsumables,mainten
       const r=await api.post(`/api/home/consumables/${c.id}/replaced`,{});
       if(r?.id) setConsumables(p=>p.map(x=>x.id===r.id?r:x).sort(consSort));
       else toastAdd('Failed to update','red');
-    }catch{toastAdd('Failed to update','red');}
+    }catch(e){toastAdd(e.message||'Failed to update','red');}
     setReplacing(s=>{const n=new Set(s);n.delete(c.id);return n;});
   };
 
@@ -8392,7 +8392,7 @@ function HomeScreen({appliances,setAppliances,consumables,setConsumables,mainten
             else{const r=await api.post('/api/home/maintenance',body).catch(()=>null);if(!r?.id){toastAdd('Failed to save','red');return;}setMaintenanceItems(p=>[...p,r].sort(maintSort));}
             setMaintDrawer(false);setMaintEdit(null);toastAdd(maintEdit?'Task updated':'Task added');
           }} full>{maintEdit?'Save Changes':'Add Task'}</Btn>
-          {maintEdit&&<Btn variant="ghost" onClick={async()=>{const r=await api.del(`/api/home/maintenance/${maintEdit.id}`).catch(()=>null);if(r?.error){toastAdd('Failed to remove','red');return;}setMaintenanceItems(p=>p.filter(x=>x.id!==maintEdit.id));setMaintDrawer(false);setMaintEdit(null);toastAdd('Removed','blue');}} full style={{color:A.red}}>Delete</Btn>}
+          {maintEdit&&<Btn variant="ghost" onClick={async()=>{const r=await api.del(`/api/home/maintenance/${maintEdit.id}`).catch(e=>({error:e.message||'Failed'}));if(r?.error){toastAdd('Failed to remove','red');return;}setMaintenanceItems(p=>p.filter(x=>x.id!==maintEdit.id));setMaintDrawer(false);setMaintEdit(null);toastAdd('Removed','blue');}} full style={{color:A.red}}>Delete</Btn>}
         </div>
         {!maintEdit&&<Btn variant="ghost" onClick={()=>setMaintDrawer(false)} full style={{marginTop:8}}>Cancel</Btn>}
       </Drawer>
@@ -8580,7 +8580,7 @@ function SubscriptionsScreen({subscriptions,setSubscriptions,toastAdd}){
     toastAdd(editSub?'Subscription updated':'Subscription added');
   };
   const del=async id=>{
-    const r=await api.del(`/api/subscriptions/${id}`).catch(()=>null);
+    const r=await api.del(`/api/subscriptions/${id}`).catch(e=>({error:e.message||'Failed'}));
     if(r?.error){toastAdd('Failed to remove','red');return;}
     setSubscriptions(p=>p.filter(s=>s.id!==id));setDrawer(false);setEditSub(null);toastAdd('Removed','blue');
   };
@@ -8734,7 +8734,7 @@ function ListsScreen({toastAdd}){
     toastAdd('List created');
   };
   const delList=async id=>{
-    const r=await api.del(`/api/lists/${id}`).catch(()=>null);
+    const r=await api.del(`/api/lists/${id}`).catch(e=>({error:e.message||'Failed'}));
     if(r?.error){toastAdd('Failed to remove','red');return;}
     setLists(p=>p.filter(l=>l.id!==id));setActiveList(null);toastAdd('List removed','blue');
   };
@@ -8767,14 +8767,14 @@ function ListsScreen({toastAdd}){
     }
   };
   const delItem=async id=>{
-    const r=await api.del(`/api/lists/${activeList.id}/items/${id}`).catch(()=>null);
+    const r=await api.del(`/api/lists/${activeList.id}/items/${id}`).catch(e=>({error:e.message||'Failed'}));
     if(r?.error){toastAdd('Failed to remove','red');return;}
     const removed=items.find(x=>x.id===id);
     setItems(p=>p.filter(x=>x.id!==id));
     setLists(p=>p.map(l=>l.id===activeList.id?{...l,item_count:Math.max(0,(l.item_count||0)-1),unchecked_count:Math.max(0,(l.unchecked_count||0)-(removed&&!removed.checked?1:0))}:l));
   };
   const clearChecked=async()=>{
-    const r=await api.del(`/api/lists/${activeList.id}/items/checked`).catch(()=>null);
+    const r=await api.del(`/api/lists/${activeList.id}/items/checked`).catch(e=>({error:e.message||'Failed'}));
     if(r?.error){toastAdd('Failed','red');return;}
     setItems(p=>p.filter(x=>!x.checked));
     const remaining=items.filter(x=>!x.checked).length;
@@ -8929,7 +8929,7 @@ function ProjectsScreen({projects,setProjects,toastAdd}){
     toastAdd(editProj?'Project updated':'Project added');
   };
   const del=async id=>{
-    const r=await api.del(`/api/projects/${id}`).catch(()=>null);
+    const r=await api.del(`/api/projects/${id}`).catch(e=>({error:e.message||'Failed'}));
     if(r?.error){toastAdd('Failed to remove','red');return;}
     setProjects(p=>p.filter(x=>x.id!==id));setDrawer(false);setEditProj(null);toastAdd('Removed','blue');
   };
@@ -9226,7 +9226,7 @@ function WishlistScreen({wishlist,setWishlist,toastAdd}){
     toastAdd(editItem?'Item updated':'Item added');
   };
   const del=async id=>{
-    const r=await api.del(`/api/wishlist/${id}`).catch(()=>null);
+    const r=await api.del(`/api/wishlist/${id}`).catch(e=>({error:e.message||'Failed'}));
     if(r?.error){toastAdd('Failed to remove','red');return;}
     setWishlist(w=>w.filter(x=>x.id!==id));setDrawer(false);setEditItem(null);toastAdd('Removed','blue');
   };
@@ -9335,7 +9335,7 @@ function ClaudeInboxScreen({claudeInbox,setClaudeInbox,toastAdd}){
     setClaudeInbox(p=>[...p,r]);
   };
   const del=async id=>{
-    const r=await api.del(`/api/claude-inbox/${id}`).catch(()=>null);
+    const r=await api.del(`/api/claude-inbox/${id}`).catch(e=>({error:e.message||'Failed'}));
     if(r?.error){toastAdd('Failed to delete','red');return;}
     setClaudeInbox(p=>p.filter(m=>m.id!==id));
   };
@@ -9458,7 +9458,7 @@ function PantryScreen({pantry,setPantry,grocery,setGrocery,toastAdd}){
     toastAdd(editItem?'Item updated':'Item added');
   };
   const del=async id=>{
-    const r=await api.del(`/api/pantry/${id}`).catch(()=>null);
+    const r=await api.del(`/api/pantry/${id}`).catch(e=>({error:e.message||'Failed'}));
     if(r?.error){toastAdd('Failed to remove','red');return;}
     setPantry(p=>p.filter(x=>x.id!==id));setDrawer(false);setEditItem(null);toastAdd('Removed','blue');
   };
@@ -9626,7 +9626,7 @@ function SchoolScreen({members=[],toastAdd}){
     toastAdd(editM?'School updated':'School added');
   };
   const delM=async id=>{
-    const r=await api.del(`/api/school/${id}`).catch(()=>null);
+    const r=await api.del(`/api/school/${id}`).catch(e=>({error:e.message||'Failed'}));
     if(r?.error){toastAdd('Failed to remove','red');return;}
     setSchoolMembers(p=>p.filter(x=>x.id!==id));setMDrawer(false);setEditM(null);toastAdd('Removed','blue');
   };
@@ -9651,7 +9651,7 @@ function SchoolScreen({members=[],toastAdd}){
     if(!cContext?.edit) return;
     const sid=cContext.schoolMemberId;
     const cid=cContext.edit.id;
-    const r=await api.del(`/api/school/${sid}/classes/${cid}`).catch(()=>null);
+    const r=await api.del(`/api/school/${sid}/classes/${cid}`).catch(e=>({error:e.message||'Failed'}));
     if(r?.error){toastAdd('Failed','red');return;}
     setSchoolMembers(p=>p.map(s=>s.id===sid?{...s,classes:(s.classes||[]).filter(c=>c.id!==cid)}:s));
     setCDrawer(false);setCContext(null);

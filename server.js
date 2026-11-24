@@ -1317,7 +1317,8 @@ app.post('/api/ics/sync', requireAdmin, async (req, res) => {
 app.get('/api/ics/export', (req, res) => {
   const storedToken = db.prepare("SELECT value FROM settings WHERE key='ics_export_token'").get()?.value || '';
   if (!storedToken || !safeCompare(req.query.token || '', storedToken)) return res.status(401).send('Unauthorized');
-  const events = db.prepare("SELECT * FROM events WHERE source != 'bill' ORDER BY date").all();
+  // Kith's own events only: imported calendars (ics-*) and holidays already exist on the subscriber's devices
+  const events = db.prepare("SELECT * FROM events WHERE COALESCE(source,'') NOT IN ('bill','holiday') AND COALESCE(source,'') NOT LIKE 'ics-%' ORDER BY date").all();
   const esc = s => (s || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
   // Times stored as "3:30 PM" — parse correctly before building ISO string
   const parseTime12 = timeStr => {

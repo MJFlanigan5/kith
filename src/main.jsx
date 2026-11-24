@@ -1086,7 +1086,7 @@ function DisplayMode({onManage,events,chores,setChores,meals=[],grocery,setGroce
     const label=offset===0?'Today':offset===1?'Tomorrow':DAYS[d.getDay()];
     return{label,date:localDate(d)};
   });
-  const displayEvents=useMemo(()=>(events||[]).filter(e=>e.source!=='bill'&&e.source!=='vehicle'),[events]);
+  const displayEvents=useMemo(()=>(events||[]).filter(e=>e.source!=='bill'&&e.source!=='vehicle'&&e.source!=='holiday'),[events]);
   const dueSoonVehicles=useMemo(()=>(events||[]).filter(e=>e.source==='vehicle'&&daysUntil(e.date)<=14).sort((a,b)=>a.date.localeCompare(b.date)),[events]);
   const dueC=useMemo(()=>chores.filter(c=>(c.status==='due'||c.status==='overdue')&&!c.done),[chores]);
   const upCD=useMemo(()=>(countdowns||[]).filter(c=>daysUntil(c.date)>=0),[countdowns]);
@@ -3104,7 +3104,7 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
                 {weekDays.map(d=>(
                   <div key={d.date} style={{padding:'3px 4px',borderLeft:`1px solid ${A.sep}`,background:d.today?'rgba(0,122,255,0.02)':'transparent'}}>
                     {filteredEvents.filter(e=>e.date===d.date&&(!e.time||e.time==='All day')).map(ev=>(
-                      <div key={ev.id} onClick={()=>setSelectedEvent(ev)} style={{background:ev.color+'22',borderLeft:`2.5px solid ${ev.color}`,borderRadius:'0 6px 6px 0',padding:'3px 7px',fontSize:11,color:ev.color,fontWeight:600,cursor:'pointer',marginBottom:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{displayEventTitle(ev)}</div>
+                      <div key={ev.id} onClick={()=>setSelectedEvent(ev)} style={{opacity:ev.source==='holiday'?0.5:1,background:ev.color+'22',borderLeft:`2.5px solid ${ev.color}`,borderRadius:'0 6px 6px 0',padding:'3px 7px',fontSize:11,color:ev.color,fontWeight:600,cursor:'pointer',marginBottom:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{displayEventTitle(ev)}</div>
                     ))}
                   </div>
                 ))}
@@ -3171,7 +3171,7 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
               <div key={i} style={{background:A.cardBg,minHeight:76,padding:'4px 5px'}}>
                 <div style={{width:24,height:24,borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',marginBottom:3,background:isToday?A.blue:'transparent',fontSize:13,fontWeight:isToday?700:400,color:isToday?'#fff':A.label1}}>{d}</div>
                 {dayEvs.slice(0,3).map(ev=>(
-                  <div key={ev.id} onClick={()=>setSelectedEvent(ev)} style={{background:ev.color+'18',borderLeft:`2px solid ${ev.color}`,borderRadius:'0 4px 4px 0',padding:'2px 5px',fontSize:11,color:ev.color,fontWeight:600,marginBottom:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',cursor:'pointer'}}>{displayEventTitle(ev)}</div>
+                  <div key={ev.id} onClick={()=>setSelectedEvent(ev)} style={{opacity:ev.source==='holiday'?0.5:1,background:ev.color+'18',borderLeft:`2px solid ${ev.color}`,borderRadius:'0 4px 4px 0',padding:'2px 5px',fontSize:11,color:ev.color,fontWeight:600,marginBottom:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',cursor:'pointer'}}>{displayEventTitle(ev)}</div>
                 ))}
                 {dayEvs.length>3&&<div style={{fontSize:10,color:A.label5,paddingLeft:4}}>+{dayEvs.length-3} more</div>}
               </div>
@@ -3200,7 +3200,7 @@ function CalendarScreen({events,setEvents,icsSources,toastAdd,members,clockForma
               <div key={date} style={{marginBottom:20}}>
                 <div style={{fontSize:12,fontWeight:700,color:A.label4,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:8}}>{label}</div>
                 {evs.map(ev=>(
-                  <div key={ev.id} onClick={()=>setSelectedEvent(ev)} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 16px',background:A.cardBg,borderRadius:A.rSm,marginBottom:6,cursor:'pointer',boxShadow:A.shadowSm,borderLeft:`3px solid ${ev.color}`}}
+                  <div key={ev.id} onClick={()=>setSelectedEvent(ev)} style={{opacity:ev.source==='holiday'?0.5:1,display:'flex',alignItems:'center',gap:12,padding:'12px 16px',background:A.cardBg,borderRadius:A.rSm,marginBottom:6,cursor:'pointer',boxShadow:A.shadowSm,borderLeft:`3px solid ${ev.color}`}}
                     onMouseEnter={e=>e.currentTarget.style.background=A.systemBg}
                     onMouseLeave={e=>e.currentTarget.style.background=A.cardBg}
                   >

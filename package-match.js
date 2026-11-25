@@ -25,4 +25,18 @@ function samePackage(a, b) {
   return !!((ka && ka === packageKey(b)) || (oa && oa === orderNumber(b)));
 }
 
-module.exports = { packageKey, orderNumber, samePackage, DELIVERED_RE };
+// A later email about a package Kith already has (same tracking number): which fields it changes.
+// Status comes from the subject; the date and description from the email's AI read. A real
+// description is never replaced, only a generic one like "USPS package". null = nothing new.
+function emailUpdate(row, pkg, subject) {
+  const out = {};
+  const status = /out for delivery/i.test(subject) ? 'Out for delivery'
+    : /\b(delay(ed)?|exception)\b/i.test(subject) ? 'Delayed' : '';
+  if (status && status !== row.status) out.status = status;
+  if (pkg.expected_date && pkg.expected_date !== row.expected_date) out.expected_date = pkg.expected_date;
+  const generic = !row.description || /^\S+ package$/i.test(row.description);
+  if (generic && pkg.description && pkg.description !== row.description) out.description = pkg.description;
+  return Object.keys(out).length ? out : null;
+}
+
+module.exports = { packageKey, orderNumber, samePackage, DELIVERED_RE, emailUpdate };

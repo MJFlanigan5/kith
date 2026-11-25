@@ -5596,11 +5596,19 @@ function detectCarrierFromTracking(trackingNumber) {
 // Dedup helpers — called from webhook, pollImap, and scanImap30Days
 function upsertPackage(pkg, subject) {
   const carrier = (pkg.carrier && pkg.carrier !== 'other') ? pkg.carrier : (detectCarrierFromTracking(pkg.tracking_number) || pkg.carrier || '');
-  // Amazon and USPS come from Home Assistant while it's reporting them; their emails are skipped.
+  // Amazon comes from Home Assistant while it is reporting it; its emails are skipped.
   if (haCarrierLive(carrier)) return false;
   if (pkg.tracking_number) {
-    const byTracking = db.prepare('SELECT id FROM packages WHERE tracking_number=?').get(pkg.tracking_number);
-    if (byTracking) return false;
+    const byTracking = db.prepare('SELECT * FROM packages WHERE tracking_number=? ORDER BY id DESC').get(pkg.tracking_number);
+    if (byTracking) {
+      // Later emails for the same package (new date, out for delivery, delay) update the row.
+      const ch = byTracking.delivered ? null : emailUpdate(byTracking, pkg, subject);
+      if (ch) {
+        db.prepare(`UPDATE packages SET ${Object.keys(ch).map(k => `${k}=?`).join(',')} WHERE id=?`).run(...Object.values(ch), byTracking.id);
+        broadcastSSE('packages', { action: 'reload' });
+      }
+      return false;
+    }
     // Upgrade a subject-only entry to include the tracking number
     const bySubject = db.prepare(`SELECT id FROM packages WHERE source_subject=? AND (tracking_number IS NULL OR tracking_number='')`).get(subject);
     if (bySubject) {
@@ -5640,10 +5648,10 @@ function insertBill(bill) {
 }
 
 // ── Home Assistant parcels ───────────────────────────────────────────────────
-// Mike 2026-11-22: Amazon and USPS packages come from HA's parcel integrations (Amazon orders,
-// USPS Informed Delivery), not from reading emails. Every parcel sensor HA has is one row,
-// keyed by tracking number. FedEx/UPS and anything else still come from email.
-const HA_CARRIERS = ['Amazon', 'USPS'];
+// Mike 2026-11-22: Amazon packages come from HA's Amazon parcel integration, not from reading
+// emails. Every parcel sensor HA has is one row, keyed by tracking number. USPS moved back to
+// email 2026-11-25 (the HA USPS integration kept losing its login); FedEx/UPS and the rest too.
+const HA_CARRIERS = ['Amazon'];
 const haCarrierSeen = {}; // carrier -> ms of the last sync where its HA summary sensor was working
 function haCarrierLive(carrier) {
   const c = HA_CARRIERS.find(x => x.toLowerCase() === String(carrier || '').toLowerCase());
@@ -5811,7 +5819,7 @@ function logUnmatched(type, subject, detail) {
   db.prepare('INSERT INTO unmatched_confirmations (type,subject,detail) VALUES (?,?,?)').run(type, subject || '', detail || '');
   broadcastSSE('unmatched', { action: 'reload' });
 }
-const { samePackage, DELIVERED_RE } = require('./package-match');
+const { samePackage, DELIVERED_RE, emailUpdate } = require('./package-match');
 const PAID_RE = /\b(payment received|payment confirmed|payment processed|payment accepted|payment successful|we received your payment|your payment.*processed|autopay.*confirmed|auto.?payment.*processed|thank you for your payment)\b/i;
 const SHIPPING_RE = /\b(ship(?:ped|ping|ment)?|track(?:ing)?|deliver(?:y|ed|ing)?|package|dispatch(?:ed)?|arrival|in transit|out for delivery)\b/i;
 const BILL_RE = /\b(bill|statement|invoice|payment due|amount due|minimum payment|your balance|autopay|auto-pay|past due|balance due)\b/i;

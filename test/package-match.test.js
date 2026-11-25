@@ -32,3 +32,16 @@ test('subjects without a status prefix get no key', () => {
   assert.equal(packageKey('USPS® Expected Delivery on Friday, November 13, 2026'), '');
   assert.equal(packageKey(''), '');
 });
+
+test('a later email for a known tracking number updates status, date and a generic description', () => {
+  const { emailUpdate } = require('../package-match');
+  const row = { carrier: 'USPS', description: 'USPS package', expected_date: '2026-11-30', status: 'in_transit' };
+  assert.deepEqual(
+    emailUpdate(row, { description: 'Walnut samples', expected_date: '2026-11-28' }, 'USPS® Expected Delivery Changed for 9449008106245809217908'),
+    { description: 'Walnut samples', expected_date: '2026-11-28' });
+  assert.equal(emailUpdate(row, {}, 'Out for Delivery: UPS Update for package 1Z0X0R000310726624').status, 'Out for delivery');
+  assert.equal(emailUpdate(row, {}, 'Delay: your FedEx package').status, 'Delayed');
+  // a real description is kept; a repeat email with nothing new changes nothing
+  assert.equal(emailUpdate({ ...row, description: 'Popcorn bowl' }, { description: 'Your order' }, 'Shipped'), null);
+  assert.equal(emailUpdate(row, { expected_date: '2026-11-30' }, 'USPS® Expected Delivery on Monday'), null);
+});
